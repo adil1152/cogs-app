@@ -3,20 +3,33 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: COGS (Cost of Goods Sold) Management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: Auth
+    description: Browser and mobile authentication endpoints.
+  - name: Users
+    description: User and role management
+  - name: Projects
+    description: Projects and contract metadata
+  - name: Services
+    description: Project-level service lines
+  - name: Access
+    description: Per-project security and report visibility
+  - name: Entries
+    description: Daily mandays and service cost entries
+  - name: Reports
+    description: Dashboards, summaries and aggregations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +37,1041 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/user:
+    get:
+      tags: [Auth]
+      operationId: getCurrentAuthUser
+      summary: Get the currently authenticated user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Auth status resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserEnvelope'
+  /login:
+    get:
+      tags: [Auth]
+      operationId: beginBrowserLogin
+      summary: Start the browser OIDC login flow
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to the OIDC authorization endpoint.
+  /callback:
+    get:
+      tags: [Auth]
+      operationId: handleBrowserLoginCallback
+      summary: Complete the browser OIDC login flow
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: iss
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        '302':
+          description: Redirect to returnTo or login on failure.
+  /logout:
+    get:
+      tags: [Auth]
+      operationId: logoutBrowserSession
+      summary: Clear the session and begin OIDC logout
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '302':
+          description: Redirect to OIDC logout URL.
+  /mobile-auth/token-exchange:
+    post:
+      tags: [Auth]
+      operationId: exchangeMobileAuthorizationCode
+      summary: Exchange a mobile OIDC code for a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileTokenExchangeRequest'
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTokenExchangeSuccess'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /mobile-auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutMobileSession
+      summary: Delete a mobile session token
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+      responses:
+        '200':
+          description: Logout processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutSuccess'
+
+  /users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: List all users (for admin role and access management)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppUser'
+  /users/{id}/role:
+    patch:
+      tags: [Users]
+      operationId: updateUserRole
+      summary: Promote or demote a user (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRoleBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppUser'
+
+  /projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: List projects visible to the current user
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: Create a new project (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+  /projects/{id}:
+    get:
+      tags: [Projects]
+      operationId: getProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDetail'
+    patch:
+      tags: [Projects]
+      operationId: updateProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+    delete:
+      tags: [Projects]
+      operationId: deleteProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /projects/{id}/services:
+    get:
+      tags: [Services]
+      operationId: listProjectServices
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectService'
+    post:
+      tags: [Services]
+      operationId: createProjectService
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectServiceBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectService'
+  /services/{id}:
+    patch:
+      tags: [Services]
+      operationId: updateProjectService
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectServiceBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectService'
+    delete:
+      tags: [Services]
+      operationId: deleteProjectService
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /projects/{id}/access:
+    get:
+      tags: [Access]
+      operationId: listProjectAccess
+      summary: List users with security access to this project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectAccess'
+    post:
+      tags: [Access]
+      operationId: grantProjectAccess
+      summary: Grant a user permission to view summary reports for this project (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantAccessBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectAccess'
+  /access/{id}:
+    patch:
+      tags: [Access]
+      operationId: updateProjectAccess
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAccessBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectAccess'
+    delete:
+      tags: [Access]
+      operationId: revokeProjectAccess
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /projects/{id}/entries:
+    get:
+      tags: [Entries]
+      operationId: listProjectEntries
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailyEntrySummary'
+    post:
+      tags: [Entries]
+      operationId: createDailyEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDailyEntryBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+  /entries/{id}:
+    get:
+      tags: [Entries]
+      operationId: getDailyEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+    patch:
+      tags: [Entries]
+      operationId: updateDailyEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDailyEntryBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+    delete:
+      tags: [Entries]
+      operationId: deleteDailyEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /reports/dashboard:
+    get:
+      tags: [Reports]
+      operationId: getDashboard
+      summary: Headline numbers for today, week, month
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardReport'
+  /reports/recent-activity:
+    get:
+      tags: [Reports]
+      operationId: getRecentActivity
+      summary: Most recent daily entries across all visible projects
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecentActivityItem'
+  /reports/projects/{id}/summary:
+    get:
+      tags: [Reports]
+      operationId: getProjectSummary
+      summary: Per-project summary report (requires summary access)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectSummaryReport'
+        '403':
+          description: Forbidden — user lacks summary access for this project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /reports/aggregate:
+    get:
+      tags: [Reports]
+      operationId: getAggregateReport
+      summary: Cross-project aggregate breakdown by service
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: projectId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AggregateReport'
+  /reports/trends:
+    get:
+      tags: [Reports]
+      operationId: getTrendsReport
+      summary: Daily trend series of total cost and cost per manday
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: projectId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendsReport'
 components:
+  parameters:
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      description: Opaque session token — `Bearer <sid>`.
+      schema:
+        type: string
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      description: Browser session cookie.
+      schema:
+        type: string
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl, role]
+      properties:
+        id:
+          type: string
+        email:
+          type: [string, 'null']
+          format: email
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+        profileImageUrl:
+          type: [string, 'null']
+        role:
+          type: string
+          enum: [admin, user]
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/AuthUser'
+            - type: 'null'
+    MobileTokenExchangeRequest:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code: { type: string, minLength: 1 }
+        code_verifier: { type: string, minLength: 1 }
+        redirect_uri: { type: string, minLength: 1, format: uri }
+        state: { type: string, minLength: 1 }
+        nonce: { type: string, minLength: 1 }
+    MobileTokenExchangeSuccess:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+    LogoutSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    AppUser:
+      $ref: '#/components/schemas/AuthUser'
+    UpdateUserRoleBody:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, user]
+
+    Project:
+      type: object
+      required: [id, name, location, contractStart, contractEnd, createdAt, isAdminOwned, currentUserCanViewSummary, currentUserCanEditEntries]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        location: { type: string }
+        contractStart: { type: string, format: date }
+        contractEnd: { type: string, format: date }
+        notes:
+          type: [string, 'null']
+        createdAt: { type: string, format: date-time }
+        isAdminOwned: { type: boolean }
+        currentUserCanViewSummary: { type: boolean }
+        currentUserCanEditEntries: { type: boolean }
+    ProjectDetail:
+      allOf:
+        - $ref: '#/components/schemas/Project'
+        - type: object
+          required: [services]
+          properties:
+            services:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectService'
+    CreateProjectBody:
+      type: object
+      required: [name, location, contractStart, contractEnd]
+      properties:
+        name: { type: string, minLength: 1 }
+        location: { type: string, minLength: 1 }
+        contractStart: { type: string, format: date }
+        contractEnd: { type: string, format: date }
+        notes: { type: string }
+    UpdateProjectBody:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        location: { type: string, minLength: 1 }
+        contractStart: { type: string, format: date }
+        contractEnd: { type: string, format: date }
+        notes: { type: string }
+
+    ProjectService:
+      type: object
+      required: [id, projectId, name, kind, sortOrder]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        name: { type: string }
+        kind:
+          type: string
+          enum: [food, standard]
+        sortOrder: { type: integer }
+    CreateProjectServiceBody:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string, minLength: 1 }
+        kind:
+          type: string
+          enum: [food, standard]
+        sortOrder: { type: integer }
+    UpdateProjectServiceBody:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        kind:
+          type: string
+          enum: [food, standard]
+        sortOrder: { type: integer }
+
+    ProjectAccess:
+      type: object
+      required: [id, projectId, userId, canViewSummary, canEditEntries, grantedAt, user]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        userId: { type: string }
+        canViewSummary: { type: boolean }
+        canEditEntries: { type: boolean }
+        grantedAt: { type: string, format: date-time }
+        user:
+          $ref: '#/components/schemas/AppUser'
+    GrantAccessBody:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: string }
+        canViewSummary:
+          type: boolean
+          default: true
+        canEditEntries:
+          type: boolean
+          default: false
+    UpdateAccessBody:
+      type: object
+      properties:
+        canViewSummary: { type: boolean }
+        canEditEntries: { type: boolean }
+
+    ServiceCostInput:
+      type: object
+      required: [projectServiceId, kind]
+      properties:
+        projectServiceId: { type: string }
+        kind:
+          type: string
+          enum: [food, standard]
+        cost:
+          type: number
+          description: Total daily cost for a standard service line
+        breakfastQty:
+          type: integer
+          minimum: 0
+        lunchQty:
+          type: integer
+          minimum: 0
+        dinnerQty:
+          type: integer
+          minimum: 0
+        midnightQty:
+          type: integer
+          minimum: 0
+        mealBoxQty:
+          type: integer
+          minimum: 0
+    ServiceCostBreakdown:
+      type: object
+      required: [id, projectServiceId, serviceName, kind, cost, mandayContribution, costPerManday]
+      properties:
+        id: { type: string }
+        projectServiceId: { type: string }
+        serviceName: { type: string }
+        kind:
+          type: string
+          enum: [food, standard]
+        cost: { type: number }
+        mandayContribution: { type: number }
+        costPerManday: { type: number }
+        breakfastQty:
+          type: [integer, 'null']
+        lunchQty:
+          type: [integer, 'null']
+        dinnerQty:
+          type: [integer, 'null']
+        midnightQty:
+          type: [integer, 'null']
+        mealBoxQty:
+          type: [integer, 'null']
+
+    DailyEntrySummary:
+      type: object
+      required: [id, projectId, projectName, entryDate, location, totalMandays, totalCost, costPerManday]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        projectName: { type: string }
+        entryDate: { type: string, format: date }
+        location: { type: string }
+        totalMandays: { type: number }
+        totalCost: { type: number }
+        costPerManday: { type: number }
+        notes:
+          type: [string, 'null']
+    DailyEntryDetail:
+      allOf:
+        - $ref: '#/components/schemas/DailyEntrySummary'
+        - type: object
+          required: [serviceCosts]
+          properties:
+            serviceCosts:
+              type: array
+              items:
+                $ref: '#/components/schemas/ServiceCostBreakdown'
+    CreateDailyEntryBody:
+      type: object
+      required: [entryDate, location, totalMandays, serviceCosts]
+      properties:
+        entryDate: { type: string, format: date }
+        location: { type: string, minLength: 1 }
+        totalMandays:
+          type: number
+          minimum: 0
+        notes: { type: string }
+        serviceCosts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceCostInput'
+    UpdateDailyEntryBody:
+      type: object
+      properties:
+        entryDate: { type: string, format: date }
+        location: { type: string, minLength: 1 }
+        totalMandays:
+          type: number
+          minimum: 0
+        notes: { type: string }
+        serviceCosts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceCostInput'
+
+    DashboardKpi:
+      type: object
+      required: [totalCost, totalMandays, costPerManday, entryCount]
+      properties:
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        costPerManday: { type: number }
+        entryCount: { type: integer }
+    ServiceTotal:
+      type: object
+      required: [serviceName, kind, totalCost, totalMandayContribution]
+      properties:
+        serviceName: { type: string }
+        kind:
+          type: string
+          enum: [food, standard]
+        totalCost: { type: number }
+        totalMandayContribution: { type: number }
+    ProjectTotal:
+      type: object
+      required: [projectId, projectName, location, totalCost, totalMandays, costPerManday]
+      properties:
+        projectId: { type: string }
+        projectName: { type: string }
+        location: { type: string }
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        costPerManday: { type: number }
+    DashboardReport:
+      type: object
+      required: [today, weekToDate, monthToDate, serviceBreakdown, projectBreakdown]
+      properties:
+        today:
+          $ref: '#/components/schemas/DashboardKpi'
+        weekToDate:
+          $ref: '#/components/schemas/DashboardKpi'
+        monthToDate:
+          $ref: '#/components/schemas/DashboardKpi'
+        serviceBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceTotal'
+        projectBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectTotal'
+    RecentActivityItem:
+      type: object
+      required: [id, projectId, projectName, entryDate, totalCost, totalMandays, createdAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        projectName: { type: string }
+        entryDate: { type: string, format: date }
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        createdAt: { type: string, format: date-time }
+        createdByName:
+          type: [string, 'null']
+
+    ProjectSummaryReport:
+      type: object
+      required: [project, range, kpi, serviceBreakdown, dailyEntries]
+      properties:
+        project:
+          $ref: '#/components/schemas/Project'
+        range:
+          type: object
+          required: [from, to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        kpi:
+          $ref: '#/components/schemas/DashboardKpi'
+        serviceBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceTotal'
+        dailyEntries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyEntrySummary'
+
+    AggregateReport:
+      type: object
+      required: [range, kpi, serviceBreakdown, projectBreakdown]
+      properties:
+        range:
+          type: object
+          required: [from, to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        kpi:
+          $ref: '#/components/schemas/DashboardKpi'
+        serviceBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceTotal'
+        projectBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectTotal'
+
+    TrendPoint:
+      type: object
+      required: [date, totalCost, totalMandays, costPerManday]
+      properties:
+        date: { type: string, format: date }
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        costPerManday: { type: number }
+    TrendsReport:
+      type: object
+      required: [range, points]
+      properties:
+        range:
+          type: object
+          required: [from, to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendPoint'

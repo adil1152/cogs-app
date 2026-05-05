@@ -1,0 +1,177 @@
+Build a **web-based COGS (Cost of Goods Sold) Management Application** for tracking daily operational costs per project based on mandays and service consumption.
+
+---
+
+## 🔹 Objective
+
+Create a system where users can:
+
+* Input **daily mandays (workforce count)**
+* Track **daily costs per service**
+* Calculate **cost per manday**
+* Manage **multiple services per project contract**
+* Generate **daily and aggregated cost reports**
+
+---
+
+## 🔹 Core Modules
+
+### 1. Project Management
+
+* Create and manage projects
+* Each project has:
+
+  * Name
+  * Location
+  * Contract start/end dates
+  * Configurable service lines (dynamic)
+
+---
+
+### 2. Contract Services (Dynamic)
+
+Each project can define its own services:
+
+* Food Services
+* Laundry Services
+* Housekeeping
+* Snacks
+* Refreshments
+* QNC Staff Meals
+* Additional services (user-defined)
+
+Users must be able to:
+
+* Add / remove services per project
+* Assign cost structure per service
+
+---
+
+### 3. Daily Entry Module
+
+Users input per project:
+
+* Date
+* Location
+* Total Mandays
+* Daily Issue Cost per Service
+
+---
+
+## 🔹 Food Service Logic (Critical Feature)
+
+Food Services must support:
+
+| Meal Type     | Weight |
+| ------------- | ------ |
+| Breakfast     | 20%    |
+| Lunch         | 40%    |
+| Dinner        | 40%    |
+| Midnight Meal | 40%    |
+| Meal Box      | 40%    |
+
+### Manday Calculation Rule:
+
+* Total meal contribution = 100% → equals **1 manday**
+* User inputs quantity of each meal type
+* System converts to equivalent mandays
+
+### Formula:
+
+```
+Total Manday (Food) =
+(Breakfast × 0.2) +
+(Lunch × 0.4) +
+(Dinner × 0.4) +
+(Midnight × 0.4) +
+(Meal Box × 0.4)
+```
+
+---
+
+## 🔹 Cost Calculation Logic
+
+For each service:
+
+```
+Cost per Manday = Daily Service Cost ÷ Total Mandays
+```
+
+For food:
+
+* Convert meals → mandays
+* Then apply cost per manday
+
+---
+
+## 🔹 Outputs
+
+### Daily Summary (per project)
+
+* Total mandays
+* Cost per service
+* Cost per manday
+* Total daily cost
+
+### Aggregated Reports
+
+* Total cost across projects
+* Service-wise cost breakdown
+* Trends over time
+
+---
+
+## 🔹 Filters & Reporting
+
+Allow filtering by:
+
+* Date range
+* Project
+* Location
+* Service type
+
+---
+
+## 🔹 Dashboard
+
+Display:
+
+* Total cost (today / weekly / monthly)
+* Cost per manday
+* Service-wise cost distribution (charts)
+* Project comparison
+
+---
+
+## 🔹 Features
+
+* Role-based access (Admin / User)
+* Export reports (Excel / PDF)
+* Responsive UI (mobile + desktop)
+* Clean dashboard with charts
+* Ability to scale for multiple projects
+
+---
+
+## 🔹 Tech Expectations
+
+* Frontend: React / Vue (modern UI)
+* Backend: Node.js / Django / FastAPI
+* Database: PostgreSQL
+* REST or GraphQL API
+* Secure authentication (JWT / OAuth)
+
+---
+
+## 🔹 Expected Outcome
+
+The system should:
+
+* Provide accurate **daily COGS per project**
+* Help track **cost drivers (food, services, etc.)**
+* Enable better cost control and decision-making
+* Be flexible for different contracts and services
+
+---
+
+Design the system with modular architecture, scalability, and performance in mind.

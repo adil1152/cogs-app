@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "COGS Tracker"
+version = "1.0.0"
+id = "artifacts/cogs-tracker"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 26060
+
+[services.development]
+run = "pnpm --filter @workspace/cogs-tracker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cogs-tracker", "run", "build" ]
+publicDir = "artifacts/cogs-tracker/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26060"
+BASE_PATH = "/"

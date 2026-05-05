@@ -698,12 +698,12 @@ function formatAuditValue(v: string | null | undefined): string {
 }
 
 const AUDIT_ACTION_STYLES: Record<string, string> = {
-  CREATE: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
-  UPDATE: "bg-amber-500/15 text-amber-700 border-amber-500/30",
+  CREATE: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  UPDATE: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30",
   DELETE: "bg-destructive/15 text-destructive border-destructive/30",
-  APPROVE: "bg-accent/20 text-accent-foreground border-accent/40",
-  REJECT: "bg-rose-500/15 text-rose-700 border-rose-500/30",
-  RESET: "bg-sky-500/15 text-sky-700 border-sky-500/30",
+  APPROVE: "bg-primary/15 text-primary border-primary/30",
+  REJECT: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
+  RESET: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
 };
 
 function AuditPanel({ events }: { events: Array<any> }) {

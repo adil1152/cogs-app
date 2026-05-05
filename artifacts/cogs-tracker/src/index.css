@@ -66,6 +66,11 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ---------- QNC brand palette ---------- */
+/* Blue   #2D8DC8  → 202 64% 48%   (primary brand) */
+/* Purple #8B5CA5  → 285 28% 50%   (secondary accent) */
+/* Green  #5BAE48  → 110 41% 48%   (success / approved) */
+
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
@@ -77,28 +82,30 @@
 
   --background: 210 40% 98%;
   --foreground: 222 47% 11%;
-  
+
   --border: 214 32% 91%;
-  
+
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
   --card-border: 214 32% 91%;
 
-  --sidebar: 222 47% 11%;
+  /* Sidebar — deep navy with a hint of QNC blue. Stays dark in both modes. */
+  --sidebar: 215 45% 13%;
   --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 222 47% 11%;
-  --sidebar-primary: 38 92% 50%;
+  --sidebar-border: 215 40% 18%;
+  --sidebar-primary: 202 64% 52%;        /* QNC blue */
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 217 33% 17%;
+  --sidebar-accent: 215 35% 20%;
   --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 217 33% 17%;
+  --sidebar-ring: 202 64% 52%;
 
   --popover: 0 0% 100%;
   --popover-foreground: 222 47% 11%;
   --popover-border: 214 32% 91%;
 
-  --primary: 222 47% 11%;
-  --primary-foreground: 210 40% 98%;
+  /* Primary — QNC blue */
+  --primary: 202 64% 47%;
+  --primary-foreground: 0 0% 100%;
 
   --secondary: 210 40% 96%;
   --secondary-foreground: 222 47% 11%;
@@ -106,25 +113,27 @@
   --muted: 210 40% 96%;
   --muted-foreground: 215 16% 47%;
 
-  --accent: 38 92% 50%;
-  --accent-foreground: 222 47% 11%;
+  /* Accent — QNC blue (used for highlights, active states) */
+  --accent: 202 64% 47%;
+  --accent-foreground: 0 0% 100%;
 
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 75% 52%;
+  --destructive-foreground: 0 0% 100%;
 
   --input: 214 32% 91%;
-  --ring: 222 47% 11%;
-  
-  --chart-1: 222 47% 11%;
-  --chart-2: 38 92% 50%;
-  --chart-3: 199 89% 48%;
-  --chart-4: 160 84% 39%;
-  --chart-5: 340 82% 52%;
+  --ring: 202 64% 47%;
+
+  /* Charts: QNC blue → green → purple → teal → amber */
+  --chart-1: 202 64% 47%;
+  --chart-2: 110 41% 47%;
+  --chart-3: 285 28% 50%;
+  --chart-4: 175 60% 40%;
+  --chart-5: 38 92% 50%;
 
   --app-font-sans: 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
-  --radius: 0.3rem; 
+  --radius: 0.4rem;
   --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0, 0.05);
   --shadow-xs: 0px 1px 3px 0px rgba(0,0,0, 0.1);
   --shadow-sm: 0px 2px 4px 0px rgba(0,0,0, 0.05);
@@ -146,40 +155,56 @@
 }
 
 .dark {
-  --background: 222 47% 11%;
+  --button-outline: rgba(255,255,255, .08);
+  --badge-outline: rgba(255,255,255, .05);
+
+  --elevate-1: rgba(255,255,255, .03);
+  --elevate-2: rgba(255,255,255, .08);
+
+  --background: 215 45% 9%;
   --foreground: 210 40% 98%;
-  --border: 217 33% 17%;
-  --card: 222 47% 11%;
+  --border: 215 35% 20%;
+
+  --card: 215 45% 12%;
   --card-foreground: 210 40% 98%;
-  --card-border: 217 33% 17%;
-  --sidebar: 222 47% 11%;
+  --card-border: 215 35% 20%;
+
+  --sidebar: 215 50% 8%;
   --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  --sidebar-primary: 38 92% 50%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 217 33% 17%;
+  --sidebar-border: 215 40% 16%;
+  --sidebar-primary: 202 70% 58%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 215 35% 18%;
   --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 217 33% 17%;
-  --popover: 222 47% 11%;
+  --sidebar-ring: 202 70% 58%;
+
+  --popover: 215 45% 12%;
   --popover-foreground: 210 40% 98%;
-  --popover-border: 217 33% 17%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222 47% 11%;
-  --secondary: 217 33% 17%;
+  --popover-border: 215 35% 20%;
+
+  --primary: 202 70% 56%;
+  --primary-foreground: 215 50% 8%;
+
+  --secondary: 215 35% 18%;
   --secondary-foreground: 210 40% 98%;
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 38 92% 50%;
-  --accent-foreground: 222 47% 11%;
-  --destructive: 0 62.8% 30.6%;
+
+  --muted: 215 35% 18%;
+  --muted-foreground: 215 20% 70%;
+
+  --accent: 202 70% 56%;
+  --accent-foreground: 215 50% 8%;
+
+  --destructive: 0 70% 55%;
   --destructive-foreground: 210 40% 98%;
-  --input: 217 33% 17%;
-  --ring: 212.7 26.8% 83.9%;
-  --chart-1: 210 40% 98%;
-  --chart-2: 38 92% 50%;
-  --chart-3: 199 89% 48%;
-  --chart-4: 160 84% 39%;
-  --chart-5: 340 82% 52%;
+
+  --input: 215 35% 20%;
+  --ring: 202 70% 56%;
+
+  --chart-1: 202 70% 58%;
+  --chart-2: 110 50% 55%;
+  --chart-3: 285 45% 65%;
+  --chart-4: 175 60% 50%;
+  --chart-5: 38 92% 60%;
 }
 
 @layer base {

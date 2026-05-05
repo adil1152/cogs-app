@@ -1,21 +1,28 @@
 import { useAuth } from "@workspace/replit-auth-web";
 import { Button } from "@/components/ui/button";
 import { Activity, BarChart3, Lock, Utensils } from "lucide-react";
+import { QncLogo } from "@/components/QncLogo";
+import { ThemeToggle } from "@/components/ThemeProvider";
 
 export default function Login() {
   const { login } = useAuth();
 
   return (
-    <div className="min-h-screen bg-sidebar text-sidebar-foreground grid lg:grid-cols-2">
+    <div className="min-h-screen bg-sidebar text-sidebar-foreground grid lg:grid-cols-2 relative">
+      <div className="absolute top-4 right-4 z-10">
+        <ThemeToggle className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40" />
+      </div>
       <div className="flex flex-col justify-between p-10 lg:p-14">
-        <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-md bg-sidebar-primary text-sidebar-primary-foreground grid place-items-center">
-            <Activity className="h-5 w-5" strokeWidth={2.5} />
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-md bg-white grid place-items-center shrink-0 p-1.5">
+            <QncLogo className="h-full w-full" />
           </div>
-          <div>
-            <div className="font-semibold tracking-tight text-lg leading-tight">COGS Tracker</div>
+          <div className="leading-tight">
+            <div className="font-semibold tracking-tight text-lg">
+              Qudrat National Company
+            </div>
             <div className="text-[11px] uppercase tracking-[0.2em] text-sidebar-foreground/60">
-              Operations Cockpit
+              Full facility management
             </div>
           </div>
         </div>
@@ -48,7 +55,7 @@ export default function Login() {
         </div>
 
         <div className="text-xs text-sidebar-foreground/40">
-          © {new Date().getFullYear()} COGS Tracker
+          © {new Date().getFullYear()} Qudrat National Company
         </div>
       </div>
       <div className="hidden lg:flex flex-col gap-6 p-14 bg-sidebar-accent/40 border-l border-sidebar-border">

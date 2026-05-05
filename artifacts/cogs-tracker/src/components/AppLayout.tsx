@@ -6,11 +6,12 @@ import {
   BarChart3,
   Users,
   LogOut,
-  Activity,
 } from "lucide-react";
 import { useAuth } from "@workspace/replit-auth-web";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { QncLogo } from "@/components/QncLogo";
+import { ThemeToggle } from "@/components/ThemeProvider";
 
 interface NavItem {
   label: string;
@@ -35,15 +36,17 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background text-foreground flex">
       <aside className="w-60 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col">
-        <div className="px-5 py-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-md bg-sidebar-primary text-sidebar-primary-foreground grid place-items-center">
-              <Activity className="h-4 w-4" strokeWidth={2.5} />
+        <div className="px-5 py-5 border-b border-sidebar-border">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-md bg-white/95 grid place-items-center shrink-0 p-1">
+              <QncLogo className="h-full w-full" />
             </div>
-            <div className="leading-tight">
-              <div className="font-semibold tracking-tight">COGS Tracker</div>
-              <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60">
-                Operations Cockpit
+            <div className="leading-tight min-w-0">
+              <div className="font-semibold tracking-tight text-[15px] truncate">
+                Qudrat National Company
+              </div>
+              <div className="text-[10.5px] uppercase tracking-wider text-sidebar-foreground/60 truncate">
+                Full facility management
               </div>
             </div>
           </div>
@@ -83,6 +86,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                 {user?.role ?? "user"}
               </div>
             </div>
+            <ThemeToggle className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40" />
             <Button
               size="icon"
               variant="ghost"

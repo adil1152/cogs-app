@@ -7,13 +7,15 @@
  */
 import type { AuthUser } from "./authUser";
 
-export interface ProjectAccess {
+export interface ApproverAssignment {
   id: string;
   projectId: string;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  level: number;
+  levelName: string;
   userId: string;
-  canViewSummary: boolean;
-  canEditEntries: boolean;
-  canResetApproval: boolean;
-  grantedAt: Date;
   user: AuthUser;
 }

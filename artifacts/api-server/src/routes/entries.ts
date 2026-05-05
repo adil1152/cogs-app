@@ -2,9 +2,11 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import {
   db,
   dailyEntriesTable,
+  entryApprovalsTable,
+  projectsTable,
   serviceCostEntriesTable,
 } from "@workspace/db";
-import { and, eq, gte, lte, desc, isNull } from "drizzle-orm";
+import { and, eq, gte, lte, desc, isNull, sql } from "drizzle-orm";
 import {
   CreateDailyEntryBody,
   UpdateDailyEntryBody,
@@ -15,13 +17,19 @@ import {
   buildEntryDetail,
   buildEntrySummary,
   computeTotalMandays,
+  slugifyForSequence,
   type ServiceCostInputItem,
 } from "../lib/entries";
+import { diffSnapshots, listEntryAudit, recordAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
 function asDateString(d: Date | string): string {
   return d instanceof Date ? d.toISOString().slice(0, 10) : d;
+}
+
+function pad4(n: number): string {
+  return n.toString().padStart(4, "0");
 }
 
 router.get(
@@ -62,10 +70,11 @@ router.post(
   "/projects/:id/entries",
   requireAuth,
   async (req: Request, res: Response): Promise<void> => {
+    const projectId = req.params.id as string;
     const v = await getProjectVisibility(
       req.user!.id,
       req.user!.role,
-      req.params.id as string,
+      projectId,
     );
     if (!v.project) {
       res.status(404).json({ error: "Project not found" });
@@ -92,40 +101,89 @@ router.post(
       parsed.data.totalMandays,
     );
 
-    const created = await db.transaction(async (tx) => {
-      const [entry] = await tx
-        .insert(dailyEntriesTable)
-        .values({
-          projectId: req.params.id as string,
-          entryDate: asDateString(parsed.data.entryDate),
-          location: parsed.data.location,
-          totalMandays: String(totalMandays),
-          totalMandaysOverride: override,
-          notes: parsed.data.notes ?? null,
-          createdById: req.user!.id,
-        })
-        .returning();
+    const prefix = v.project.code ?? slugifyForSequence(v.project.name);
 
-      if (serviceCosts.length > 0) {
-        await tx.insert(serviceCostEntriesTable).values(
-          serviceCosts.map((sc) => ({
-            dailyEntryId: entry.id,
-            projectServiceId: sc.projectServiceId,
-            kind: sc.kind,
-            cost: String(sc.cost ?? 0),
-            mandays: sc.mandays != null ? String(sc.mandays) : null,
-            breakfastQty: sc.breakfastQty ?? null,
-            lunchQty: sc.lunchQty ?? null,
-            dinnerQty: sc.dinnerQty ?? null,
-            midnightQty: sc.midnightQty ?? null,
-            mealBoxQty: sc.mealBoxQty ?? null,
-          })),
-        );
+    // Race-safe sequence allocation: try MAX+1 inside the same transaction; if
+    // a concurrent insert beat us to that number the unique index throws 23505
+    // and we retry with a fresh MAX.
+    const MAX_RETRIES = 5;
+    let createdId: string | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < MAX_RETRIES && !createdId; attempt++) {
+      try {
+        await db.transaction(async (tx) => {
+          const [maxRow] = await tx
+            .select({
+              max: sql<number | null>`MAX(${dailyEntriesTable.sequenceNumber})`,
+            })
+            .from(dailyEntriesTable)
+            .where(eq(dailyEntriesTable.projectId, projectId));
+          const nextSeq = (maxRow?.max ?? 0) + 1;
+          const sequenceCode = `${prefix}-${pad4(nextSeq)}`;
+
+          const [entry] = await tx
+            .insert(dailyEntriesTable)
+            .values({
+              projectId,
+              entryDate: asDateString(parsed.data.entryDate),
+              location: parsed.data.location,
+              totalMandays: String(totalMandays),
+              totalMandaysOverride: override,
+              notes: parsed.data.notes ?? null,
+              sequenceNumber: nextSeq,
+              sequenceCode,
+              createdById: req.user!.id,
+            })
+            .returning();
+
+          if (serviceCosts.length > 0) {
+            await tx.insert(serviceCostEntriesTable).values(
+              serviceCosts.map((sc) => ({
+                dailyEntryId: entry.id,
+                projectServiceId: sc.projectServiceId,
+                kind: sc.kind,
+                cost: String(sc.cost ?? 0),
+                mandays: sc.mandays != null ? String(sc.mandays) : null,
+                breakfastQty: sc.breakfastQty ?? null,
+                lunchQty: sc.lunchQty ?? null,
+                dinnerQty: sc.dinnerQty ?? null,
+                midnightQty: sc.midnightQty ?? null,
+                mealBoxQty: sc.mealBoxQty ?? null,
+              })),
+            );
+          }
+
+          await recordAudit(
+            {
+              dailyEntryId: entry.id,
+              projectId,
+              action: "CREATE",
+              actorId: req.user!.id,
+              field: "sequenceCode",
+              newValue: sequenceCode,
+            },
+            tx,
+          );
+          createdId = entry.id;
+        });
+      } catch (e) {
+        lastErr = e;
+        if ((e as { code?: string }).code === "23505") continue; // sequence collision — retry
+        throw e;
       }
-      return entry;
-    });
+    }
+    if (!createdId) {
+      req.log.error(
+        { err: lastErr, projectId },
+        "Failed to allocate entry sequence after retries",
+      );
+      res
+        .status(503)
+        .json({ error: "Could not allocate sequence — please retry" });
+      return;
+    }
 
-    res.status(201).json(await buildEntryDetail(created.id));
+    res.status(201).json(await buildEntryDetail(createdId));
   },
 );
 
@@ -187,75 +245,156 @@ router.patch(
       return;
     }
 
+    // Snapshot of cost rows for audit diff (compared as JSON strings).
+    const beforeCosts = await db
+      .select()
+      .from(serviceCostEntriesTable)
+      .where(eq(serviceCostEntriesTable.dailyEntryId, id))
+      .orderBy(serviceCostEntriesTable.projectServiceId);
+
     try {
-    await db.transaction(async (tx) => {
-      const data: Record<string, unknown> = {};
-      if (parsed.data.entryDate !== undefined)
-        data.entryDate = asDateString(parsed.data.entryDate);
-      if (parsed.data.location !== undefined)
-        data.location = parsed.data.location;
-      if (parsed.data.notes !== undefined) data.notes = parsed.data.notes;
+      await db.transaction(async (tx) => {
+        const data: Record<string, unknown> = {};
+        if (parsed.data.entryDate !== undefined)
+          data.entryDate = asDateString(parsed.data.entryDate);
+        if (parsed.data.location !== undefined)
+          data.location = parsed.data.location;
+        if (parsed.data.notes !== undefined) data.notes = parsed.data.notes;
 
-      const overrideAfter =
-        parsed.data.totalMandaysOverride ?? entry.totalMandaysOverride;
-      if (parsed.data.totalMandaysOverride !== undefined) {
-        data.totalMandaysOverride = overrideAfter;
-      }
-
-      if (parsed.data.serviceCosts !== undefined) {
-        const tm = computeTotalMandays(
-          parsed.data.serviceCosts as ServiceCostInputItem[],
-          overrideAfter,
-          parsed.data.totalMandays,
-        );
-        data.totalMandays = String(tm);
-      } else if (overrideAfter && parsed.data.totalMandays !== undefined) {
-        data.totalMandays = String(parsed.data.totalMandays);
-      }
-
-      data.updatedAt = new Date();
-
-      // Lock-aware update: re-check lockedAt inside the transaction so a
-      // concurrent approval that locks between our check and our write cannot
-      // mutate a now-locked record.
-      if (Object.keys(data).length > 0) {
-        const updated = await tx
-          .update(dailyEntriesTable)
-          .set(data)
-          .where(
-            and(
-              eq(dailyEntriesTable.id, id),
-              isNull(dailyEntriesTable.lockedAt),
-            ),
-          )
-          .returning({ id: dailyEntriesTable.id });
-        if (updated.length === 0) {
-          throw new LockedConflict("Entry was locked — refresh to see changes");
+        const overrideAfter =
+          parsed.data.totalMandaysOverride ?? entry.totalMandaysOverride;
+        if (parsed.data.totalMandaysOverride !== undefined) {
+          data.totalMandaysOverride = overrideAfter;
         }
-      }
 
-      if (parsed.data.serviceCosts !== undefined) {
-        await tx
-          .delete(serviceCostEntriesTable)
-          .where(eq(serviceCostEntriesTable.dailyEntryId, id));
-        if (parsed.data.serviceCosts.length > 0) {
-          await tx.insert(serviceCostEntriesTable).values(
-            (parsed.data.serviceCosts as ServiceCostInputItem[]).map((sc) => ({
-              dailyEntryId: id,
-              projectServiceId: sc.projectServiceId,
-              kind: sc.kind,
-              cost: String(sc.cost ?? 0),
-              mandays: sc.mandays != null ? String(sc.mandays) : null,
-              breakfastQty: sc.breakfastQty ?? null,
-              lunchQty: sc.lunchQty ?? null,
-              dinnerQty: sc.dinnerQty ?? null,
-              midnightQty: sc.midnightQty ?? null,
-              mealBoxQty: sc.mealBoxQty ?? null,
+        if (parsed.data.serviceCosts !== undefined) {
+          const tm = computeTotalMandays(
+            parsed.data.serviceCosts as ServiceCostInputItem[],
+            overrideAfter,
+            parsed.data.totalMandays,
+          );
+          data.totalMandays = String(tm);
+        } else if (overrideAfter && parsed.data.totalMandays !== undefined) {
+          data.totalMandays = String(parsed.data.totalMandays);
+        }
+
+        const beforeSnap: Record<string, unknown> = {
+          entryDate: entry.entryDate,
+          location: entry.location,
+          notes: entry.notes,
+          totalMandaysOverride: entry.totalMandaysOverride,
+          totalMandays: Number(entry.totalMandays),
+        };
+        const afterSnap: Record<string, unknown> = {
+          ...beforeSnap,
+          ...(data.entryDate !== undefined ? { entryDate: data.entryDate } : {}),
+          ...(data.location !== undefined ? { location: data.location } : {}),
+          ...(data.notes !== undefined ? { notes: data.notes } : {}),
+          ...(data.totalMandaysOverride !== undefined
+            ? { totalMandaysOverride: data.totalMandaysOverride }
+            : {}),
+          ...(data.totalMandays !== undefined
+            ? { totalMandays: Number(data.totalMandays) }
+            : {}),
+        };
+
+        data.updatedAt = new Date();
+
+        if (Object.keys(data).length > 0) {
+          const updated = await tx
+            .update(dailyEntriesTable)
+            .set(data)
+            .where(
+              and(
+                eq(dailyEntriesTable.id, id),
+                isNull(dailyEntriesTable.lockedAt),
+              ),
+            )
+            .returning({ id: dailyEntriesTable.id });
+          if (updated.length === 0) {
+            throw new LockedConflict(
+              "Entry was locked — refresh to see changes",
+            );
+          }
+        }
+
+        if (parsed.data.serviceCosts !== undefined) {
+          await tx
+            .delete(serviceCostEntriesTable)
+            .where(eq(serviceCostEntriesTable.dailyEntryId, id));
+          if (parsed.data.serviceCosts.length > 0) {
+            await tx.insert(serviceCostEntriesTable).values(
+              (parsed.data.serviceCosts as ServiceCostInputItem[]).map(
+                (sc) => ({
+                  dailyEntryId: id,
+                  projectServiceId: sc.projectServiceId,
+                  kind: sc.kind,
+                  cost: String(sc.cost ?? 0),
+                  mandays: sc.mandays != null ? String(sc.mandays) : null,
+                  breakfastQty: sc.breakfastQty ?? null,
+                  lunchQty: sc.lunchQty ?? null,
+                  dinnerQty: sc.dinnerQty ?? null,
+                  midnightQty: sc.midnightQty ?? null,
+                  mealBoxQty: sc.mealBoxQty ?? null,
+                }),
+              ),
+            );
+          }
+        }
+
+        const events = diffSnapshots(beforeSnap, afterSnap, {
+          dailyEntryId: id,
+          projectId: entry.projectId,
+          actorId: req.user!.id,
+        });
+
+        if (parsed.data.serviceCosts !== undefined) {
+          const beforeJson = JSON.stringify(
+            beforeCosts.map((c) => ({
+              projectServiceId: c.projectServiceId,
+              kind: c.kind,
+              cost: Number(c.cost ?? 0),
+              mandays: c.mandays != null ? Number(c.mandays) : null,
+              breakfastQty: c.breakfastQty,
+              lunchQty: c.lunchQty,
+              dinnerQty: c.dinnerQty,
+              midnightQty: c.midnightQty,
+              mealBoxQty: c.mealBoxQty,
             })),
           );
+          const afterJson = JSON.stringify(
+            (parsed.data.serviceCosts as ServiceCostInputItem[])
+              .slice()
+              .sort((a, b) =>
+                a.projectServiceId.localeCompare(b.projectServiceId),
+              )
+              .map((c) => ({
+                projectServiceId: c.projectServiceId,
+                kind: c.kind,
+                cost: Number(c.cost ?? 0),
+                mandays: c.mandays != null ? Number(c.mandays) : null,
+                breakfastQty: c.breakfastQty ?? null,
+                lunchQty: c.lunchQty ?? null,
+                dinnerQty: c.dinnerQty ?? null,
+                midnightQty: c.midnightQty ?? null,
+                mealBoxQty: c.mealBoxQty ?? null,
+              })),
+          );
+          if (beforeJson !== afterJson) {
+            events.push({
+              dailyEntryId: id,
+              projectId: entry.projectId,
+              action: "UPDATE",
+              actorId: req.user!.id,
+              field: "serviceCosts",
+              oldValue: beforeJson,
+              newValue: afterJson,
+            });
+          }
         }
-      }
-    });
+
+        await recordAudit(events, tx);
+      });
     } catch (e) {
       if (e instanceof LockedConflict) {
         res.status(409).json({ error: e.message });
@@ -294,18 +433,43 @@ router.delete(
       res.status(403).json({ error: "Edit access required" });
       return;
     }
-    // Lock-aware delete: refuses to remove a record locked between our pre-check
-    // and the delete itself.
-    const deleted = await db
-      .delete(dailyEntriesTable)
-      .where(
-        and(
-          eq(dailyEntriesTable.id, id),
-          isNull(dailyEntriesTable.lockedAt),
-        ),
-      )
-      .returning({ id: dailyEntriesTable.id });
-    if (deleted.length === 0) {
+    let conflicted = false;
+    await db.transaction(async (tx) => {
+      // Audit row remains via ON DELETE SET NULL on dailyEntryId. Recording
+      // BEFORE the delete keeps both writes inside one transaction so they
+      // commit or roll back atomically.
+      await recordAudit(
+        {
+          dailyEntryId: null,
+          projectId: entry.projectId,
+          action: "DELETE",
+          actorId: req.user!.id,
+          field: "sequenceCode",
+          oldValue: entry.sequenceCode,
+        },
+        tx,
+      );
+      const deleted = await tx
+        .delete(dailyEntriesTable)
+        .where(
+          and(
+            eq(dailyEntriesTable.id, id),
+            isNull(dailyEntriesTable.lockedAt),
+          ),
+        )
+        .returning({ id: dailyEntriesTable.id });
+      if (deleted.length === 0) {
+        conflicted = true;
+        // Roll back the audit insert by throwing — caught below.
+        throw new LockedConflict(
+          "Entry was locked concurrently — refresh and retry",
+        );
+      }
+    }).catch((e) => {
+      if (e instanceof LockedConflict) return;
+      throw e;
+    });
+    if (conflicted) {
       res
         .status(409)
         .json({ error: "Entry was locked concurrently — refresh and retry" });
@@ -315,6 +479,98 @@ router.delete(
   },
 );
 
+router.post(
+  "/entries/:id/reset",
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const id = req.params.id as string;
+    const [entry] = await db
+      .select()
+      .from(dailyEntriesTable)
+      .where(eq(dailyEntriesTable.id, id));
+    if (!entry) {
+      res.status(404).json({ error: "Entry not found" });
+      return;
+    }
+    const v = await getProjectVisibility(
+      req.user!.id,
+      req.user!.role,
+      entry.projectId,
+    );
+    if (req.user!.role !== "admin" && !v.canResetApproval) {
+      res
+        .status(403)
+        .json({ error: "Reset-to-draft permission required" });
+      return;
+    }
+    const previousLevel = entry.currentApprovalLevel;
+    if (previousLevel === 0 && !entry.lockedAt) {
+      res.json(await buildEntryDetail(id));
+      return;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(dailyEntriesTable)
+        .set({
+          currentApprovalLevel: 0,
+          lockedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(dailyEntriesTable.id, id));
+      await tx
+        .delete(entryApprovalsTable)
+        .where(eq(entryApprovalsTable.dailyEntryId, id));
+      await recordAudit(
+        {
+          dailyEntryId: id,
+          projectId: entry.projectId,
+          action: "RESET",
+          actorId: req.user!.id,
+          level: previousLevel,
+          oldValue: String(previousLevel),
+          newValue: "0",
+        },
+        tx,
+      );
+    });
+
+    res.json(await buildEntryDetail(id));
+  },
+);
+
+router.get(
+  "/entries/:id/audit",
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const id = req.params.id as string;
+    const [entry] = await db
+      .select({
+        id: dailyEntriesTable.id,
+        projectId: dailyEntriesTable.projectId,
+      })
+      .from(dailyEntriesTable)
+      .where(eq(dailyEntriesTable.id, id));
+    if (!entry) {
+      res.status(404).json({ error: "Entry not found" });
+      return;
+    }
+    const v = await getProjectVisibility(
+      req.user!.id,
+      req.user!.role,
+      entry.projectId,
+    );
+    if (req.user!.role !== "admin" && !v.canViewSummary && !v.canEditEntries) {
+      res.status(403).json({ error: "No access" });
+      return;
+    }
+    res.json(await listEntryAudit(id));
+  },
+);
+
 class LockedConflict extends Error {}
+
+// Suppress lingering reference for plain projectsTable import (kept tree-shakeable).
+void projectsTable;
 
 export default router;

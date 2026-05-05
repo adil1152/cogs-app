@@ -133,6 +133,7 @@ export const UpdateUserRoleResponse = zod.object({
 export const ListProjectsResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
+  code: zod.string().nullish(),
   location: zod.string(),
   contractStart: zod.coerce.date(),
   contractEnd: zod.coerce.date(),
@@ -141,6 +142,7 @@ export const ListProjectsResponseItem = zod.object({
   isAdminOwned: zod.boolean(),
   currentUserCanViewSummary: zod.boolean(),
   currentUserCanEditEntries: zod.boolean(),
+  currentUserCanResetApproval: zod.boolean(),
 });
 export const ListProjectsResponse = zod.array(ListProjectsResponseItem);
 
@@ -148,8 +150,17 @@ export const ListProjectsResponse = zod.array(ListProjectsResponseItem);
  * @summary Create a new project (admin only)
  */
 
+export const createProjectBodyCodeMax = 32;
+
 export const CreateProjectBody = zod.object({
   name: zod.string().min(1),
+  code: zod
+    .string()
+    .max(createProjectBodyCodeMax)
+    .optional()
+    .describe(
+      "Optional short code used as the prefix for entry sequence numbers (e.g. ACME → ACME-0001).",
+    ),
   location: zod.string().min(1),
   contractStart: zod.coerce.date(),
   contractEnd: zod.coerce.date(),
@@ -164,6 +175,7 @@ export const GetProjectResponse = zod
   .object({
     id: zod.string(),
     name: zod.string(),
+    code: zod.string().nullish(),
     location: zod.string(),
     contractStart: zod.coerce.date(),
     contractEnd: zod.coerce.date(),
@@ -172,6 +184,7 @@ export const GetProjectResponse = zod
     isAdminOwned: zod.boolean(),
     currentUserCanViewSummary: zod.boolean(),
     currentUserCanEditEntries: zod.boolean(),
+    currentUserCanResetApproval: zod.boolean(),
   })
   .and(
     zod.object({
@@ -191,8 +204,11 @@ export const UpdateProjectParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const updateProjectBodyCodeMax = 32;
+
 export const UpdateProjectBody = zod.object({
   name: zod.string().min(1).optional(),
+  code: zod.string().max(updateProjectBodyCodeMax).nullish(),
   location: zod.string().min(1).optional(),
   contractStart: zod.coerce.date().optional(),
   contractEnd: zod.coerce.date().optional(),
@@ -202,6 +218,7 @@ export const UpdateProjectBody = zod.object({
 export const UpdateProjectResponse = zod.object({
   id: zod.string(),
   name: zod.string(),
+  code: zod.string().nullish(),
   location: zod.string(),
   contractStart: zod.coerce.date(),
   contractEnd: zod.coerce.date(),
@@ -210,6 +227,7 @@ export const UpdateProjectResponse = zod.object({
   isAdminOwned: zod.boolean(),
   currentUserCanViewSummary: zod.boolean(),
   currentUserCanEditEntries: zod.boolean(),
+  currentUserCanResetApproval: zod.boolean(),
 });
 
 export const DeleteProjectParams = zod.object({
@@ -303,6 +321,7 @@ export const ListProjectAccessResponseItem = zod.object({
   userId: zod.string(),
   canViewSummary: zod.boolean(),
   canEditEntries: zod.boolean(),
+  canResetApproval: zod.boolean(),
   grantedAt: zod.coerce.date(),
   user: zod.object({
     id: zod.string(),
@@ -326,6 +345,7 @@ export const GrantProjectAccessParams = zod.object({
 
 export const grantProjectAccessBodyCanViewSummaryDefault = true;
 export const grantProjectAccessBodyCanEditEntriesDefault = false;
+export const grantProjectAccessBodyCanResetApprovalDefault = false;
 
 export const GrantProjectAccessBody = zod.object({
   userId: zod.string(),
@@ -335,6 +355,9 @@ export const GrantProjectAccessBody = zod.object({
   canEditEntries: zod
     .boolean()
     .default(grantProjectAccessBodyCanEditEntriesDefault),
+  canResetApproval: zod
+    .boolean()
+    .default(grantProjectAccessBodyCanResetApprovalDefault),
 });
 
 export const UpdateProjectAccessParams = zod.object({
@@ -344,6 +367,7 @@ export const UpdateProjectAccessParams = zod.object({
 export const UpdateProjectAccessBody = zod.object({
   canViewSummary: zod.boolean().optional(),
   canEditEntries: zod.boolean().optional(),
+  canResetApproval: zod.boolean().optional(),
 });
 
 export const UpdateProjectAccessResponse = zod.object({
@@ -352,6 +376,7 @@ export const UpdateProjectAccessResponse = zod.object({
   userId: zod.string(),
   canViewSummary: zod.boolean(),
   canEditEntries: zod.boolean(),
+  canResetApproval: zod.boolean(),
   grantedAt: zod.coerce.date(),
   user: zod.object({
     id: zod.string(),
@@ -390,6 +415,8 @@ export const ListProjectEntriesResponseItem = zod.object({
   isLocked: zod.boolean(),
   lockedAt: zod.coerce.date().nullish(),
   notes: zod.string().nullish(),
+  sequenceNumber: zod.number().nullish(),
+  sequenceCode: zod.string().nullish(),
 });
 export const ListProjectEntriesResponse = zod.array(
   ListProjectEntriesResponseItem,
@@ -484,6 +511,8 @@ export const GetDailyEntryResponse = zod
     isLocked: zod.boolean(),
     lockedAt: zod.coerce.date().nullish(),
     notes: zod.string().nullish(),
+    sequenceNumber: zod.number().nullish(),
+    sequenceCode: zod.string().nullish(),
   })
   .and(
     zod.object({
@@ -588,6 +617,8 @@ export const UpdateDailyEntryResponse = zod
     isLocked: zod.boolean(),
     lockedAt: zod.coerce.date().nullish(),
     notes: zod.string().nullish(),
+    sequenceNumber: zod.number().nullish(),
+    sequenceCode: zod.string().nullish(),
   })
   .and(
     zod.object({
@@ -616,7 +647,7 @@ export const DeleteDailyEntryParams = zod.object({
 });
 
 /**
- * @summary Advance the entry one approval level (admin only). Locks at final level.
+ * @summary Advance the entry one approval level. Allowed for admins or the user assigned as the next-level approver on this project. Locks at final level.
  */
 export const ApproveDailyEntryParams = zod.object({
   id: zod.coerce.string(),
@@ -637,6 +668,8 @@ export const ApproveDailyEntryResponse = zod
     isLocked: zod.boolean(),
     lockedAt: zod.coerce.date().nullish(),
     notes: zod.string().nullish(),
+    sequenceNumber: zod.number().nullish(),
+    sequenceCode: zod.string().nullish(),
   })
   .and(
     zod.object({
@@ -661,7 +694,7 @@ export const ApproveDailyEntryResponse = zod
   );
 
 /**
- * @summary Reset the entry to draft (level 0, unlock) (admin only)
+ * @summary Revoke the most recent approval and return the entry to draft. Allowed for admins or the user assigned at the current approval level.
  */
 export const RejectDailyEntryParams = zod.object({
   id: zod.coerce.string(),
@@ -682,6 +715,8 @@ export const RejectDailyEntryResponse = zod
     isLocked: zod.boolean(),
     lockedAt: zod.coerce.date().nullish(),
     notes: zod.string().nullish(),
+    sequenceNumber: zod.number().nullish(),
+    sequenceCode: zod.string().nullish(),
   })
   .and(
     zod.object({
@@ -723,6 +758,148 @@ export const ListEntryApprovalsResponseItem = zod.object({
 });
 export const ListEntryApprovalsResponse = zod.array(
   ListEntryApprovalsResponseItem,
+);
+
+/**
+ * @summary Reset entry to draft (clears all approvals). Allowed for admins or users with canResetApproval on the project.
+ */
+export const ResetDailyEntryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ResetDailyEntryResponse = zod
+  .object({
+    id: zod.string(),
+    projectId: zod.string(),
+    projectName: zod.string(),
+    entryDate: zod.coerce.date(),
+    location: zod.string(),
+    totalMandays: zod.number(),
+    totalCost: zod.number(),
+    costPerManday: zod.number(),
+    totalMandaysOverride: zod.boolean(),
+    currentApprovalLevel: zod.number(),
+    isLocked: zod.boolean(),
+    lockedAt: zod.coerce.date().nullish(),
+    notes: zod.string().nullish(),
+    sequenceNumber: zod.number().nullish(),
+    sequenceCode: zod.string().nullish(),
+  })
+  .and(
+    zod.object({
+      serviceCosts: zod.array(
+        zod.object({
+          id: zod.string(),
+          projectServiceId: zod.string(),
+          serviceName: zod.string(),
+          kind: zod.enum(["food", "standard"]),
+          cost: zod.number(),
+          mandays: zod.number().nullish(),
+          mandayContribution: zod.number(),
+          costPerManday: zod.number(),
+          breakfastQty: zod.number().nullish(),
+          lunchQty: zod.number().nullish(),
+          dinnerQty: zod.number().nullish(),
+          midnightQty: zod.number().nullish(),
+          mealBoxQty: zod.number().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Chronological audit log for an entry (creation, edits, approvals, rejects, resets)
+ */
+export const ListEntryAuditParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListEntryAuditResponseItem = zod.object({
+  id: zod.string(),
+  dailyEntryId: zod.string().nullable(),
+  projectId: zod.string(),
+  action: zod
+    .string()
+    .describe("CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET"),
+  level: zod.number().nullish(),
+  levelName: zod.string().nullish(),
+  field: zod.string().nullish(),
+  oldValue: zod.string().nullish(),
+  newValue: zod.string().nullish(),
+  actorId: zod.string().nullish(),
+  actorName: zod.string().nullish(),
+  occurredAt: zod.coerce.date(),
+});
+export const ListEntryAuditResponse = zod.array(ListEntryAuditResponseItem);
+
+/**
+ * @summary List per-level approver assignments for this project
+ */
+export const ListProjectApproversParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const listProjectApproversResponseLevelMax = 5;
+
+export const ListProjectApproversResponseItem = zod.object({
+  id: zod.string(),
+  projectId: zod.string(),
+  level: zod.number().min(1).max(listProjectApproversResponseLevelMax),
+  levelName: zod.string(),
+  userId: zod.string(),
+  user: zod.object({
+    id: zod.string(),
+    email: zod.string().email().nullable(),
+    firstName: zod.string().nullable(),
+    lastName: zod.string().nullable(),
+    profileImageUrl: zod.string().nullable(),
+    role: zod.enum(["admin", "user"]),
+  }),
+});
+export const ListProjectApproversResponse = zod.array(
+  ListProjectApproversResponseItem,
+);
+
+/**
+ * @summary Replace the full set of approver assignments for this project (admin only)
+ */
+export const SetProjectApproversParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const setProjectApproversBodyAssignmentsItemLevelMax = 5;
+
+export const SetProjectApproversBody = zod.object({
+  assignments: zod.array(
+    zod.object({
+      level: zod
+        .number()
+        .min(1)
+        .max(setProjectApproversBodyAssignmentsItemLevelMax),
+      userId: zod.string(),
+    }),
+  ),
+});
+
+export const setProjectApproversResponseLevelMax = 5;
+
+export const SetProjectApproversResponseItem = zod.object({
+  id: zod.string(),
+  projectId: zod.string(),
+  level: zod.number().min(1).max(setProjectApproversResponseLevelMax),
+  levelName: zod.string(),
+  userId: zod.string(),
+  user: zod.object({
+    id: zod.string(),
+    email: zod.string().email().nullable(),
+    firstName: zod.string().nullable(),
+    lastName: zod.string().nullable(),
+    profileImageUrl: zod.string().nullable(),
+    role: zod.enum(["admin", "user"]),
+  }),
+});
+export const SetProjectApproversResponse = zod.array(
+  SetProjectApproversResponseItem,
 );
 
 /**
@@ -800,6 +977,7 @@ export const GetProjectSummaryResponse = zod.object({
   project: zod.object({
     id: zod.string(),
     name: zod.string(),
+    code: zod.string().nullish(),
     location: zod.string(),
     contractStart: zod.coerce.date(),
     contractEnd: zod.coerce.date(),
@@ -808,6 +986,7 @@ export const GetProjectSummaryResponse = zod.object({
     isAdminOwned: zod.boolean(),
     currentUserCanViewSummary: zod.boolean(),
     currentUserCanEditEntries: zod.boolean(),
+    currentUserCanResetApproval: zod.boolean(),
   }),
   range: zod.object({
     from: zod.coerce.date(),
@@ -842,6 +1021,8 @@ export const GetProjectSummaryResponse = zod.object({
       isLocked: zod.boolean(),
       lockedAt: zod.coerce.date().nullish(),
       notes: zod.string().nullish(),
+      sequenceNumber: zod.number().nullish(),
+      sequenceCode: zod.string().nullish(),
     }),
   ),
 });

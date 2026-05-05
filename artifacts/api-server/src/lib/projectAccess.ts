@@ -9,6 +9,7 @@ export interface VisibleProject {
   project: typeof projectsTable.$inferSelect;
   canViewSummary: boolean;
   canEditEntries: boolean;
+  canResetApproval: boolean;
   isAdminOwned: boolean;
 }
 
@@ -27,6 +28,7 @@ export async function listVisibleProjects(
       project: p,
       canViewSummary: true,
       canEditEntries: true,
+      canResetApproval: true,
       isAdminOwned: true,
     }));
   }
@@ -51,6 +53,7 @@ export async function listVisibleProjects(
       project: p,
       canViewSummary: a?.canViewSummary ?? false,
       canEditEntries: a?.canEditEntries ?? false,
+      canResetApproval: a?.canResetApproval ?? false,
       isAdminOwned: false,
     };
   });
@@ -64,6 +67,7 @@ export async function getProjectVisibility(
   project: typeof projectsTable.$inferSelect | null;
   canViewSummary: boolean;
   canEditEntries: boolean;
+  canResetApproval: boolean;
   isAdminOwned: boolean;
 }> {
   const [project] = await db
@@ -72,7 +76,13 @@ export async function getProjectVisibility(
     .where(eq(projectsTable.id, projectId));
 
   if (!project) {
-    return { project: null, canViewSummary: false, canEditEntries: false, isAdminOwned: false };
+    return {
+      project: null,
+      canViewSummary: false,
+      canEditEntries: false,
+      canResetApproval: false,
+      isAdminOwned: false,
+    };
   }
 
   if (role === "admin") {
@@ -80,6 +90,7 @@ export async function getProjectVisibility(
       project,
       canViewSummary: true,
       canEditEntries: true,
+      canResetApproval: true,
       isAdminOwned: true,
     };
   }
@@ -98,6 +109,7 @@ export async function getProjectVisibility(
     project,
     canViewSummary: access?.canViewSummary ?? false,
     canEditEntries: access?.canEditEntries ?? false,
+    canResetApproval: access?.canResetApproval ?? false,
     isAdminOwned: false,
   };
 }
@@ -107,6 +119,7 @@ export function serializeProject(v: VisibleProject) {
   return {
     id: p.id,
     name: p.name,
+    code: p.code,
     location: p.location,
     contractStart: p.contractStart,
     contractEnd: p.contractEnd,
@@ -115,5 +128,6 @@ export function serializeProject(v: VisibleProject) {
     isAdminOwned: v.isAdminOwned,
     currentUserCanViewSummary: v.canViewSummary,
     currentUserCanEditEntries: v.canEditEntries,
+    currentUserCanResetApproval: v.canResetApproval,
   };
 }

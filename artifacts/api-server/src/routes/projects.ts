@@ -29,33 +29,46 @@ router.post(
       res.status(400).json({ error: "Invalid body" });
       return;
     }
-    const { name, location, contractStart, contractEnd, notes } = parsed.data;
-    const [created] = await db
-      .insert(projectsTable)
-      .values({
-        name,
-        location,
-        contractStart:
-          contractStart instanceof Date
-            ? contractStart.toISOString().slice(0, 10)
-            : contractStart,
-        contractEnd:
-          contractEnd instanceof Date
-            ? contractEnd.toISOString().slice(0, 10)
-            : contractEnd,
-        notes: notes ?? null,
-        createdById: req.user!.id,
-      })
-      .returning();
+    const { name, code, location, contractStart, contractEnd, notes } =
+      parsed.data;
+    try {
+      const [created] = await db
+        .insert(projectsTable)
+        .values({
+          name,
+          code: code && code.length > 0 ? code : null,
+          location,
+          contractStart:
+            contractStart instanceof Date
+              ? contractStart.toISOString().slice(0, 10)
+              : contractStart,
+          contractEnd:
+            contractEnd instanceof Date
+              ? contractEnd.toISOString().slice(0, 10)
+              : contractEnd,
+          notes: notes ?? null,
+          createdById: req.user!.id,
+        })
+        .returning();
 
-    res.status(201).json(
-      serializeProject({
-        project: created,
-        canViewSummary: true,
-        canEditEntries: true,
-        isAdminOwned: true,
-      }),
-    );
+      res.status(201).json(
+        serializeProject({
+          project: created,
+          canViewSummary: true,
+          canEditEntries: true,
+          canResetApproval: true,
+          isAdminOwned: true,
+        }),
+      );
+    } catch (e) {
+      if ((e as { code?: string }).code === "23505") {
+        res
+          .status(409)
+          .json({ error: "Project code already in use — pick another" });
+        return;
+      }
+      throw e;
+    }
   },
 );
 
@@ -92,6 +105,7 @@ router.get(
         project: v.project,
         canViewSummary: v.canViewSummary,
         canEditEntries: v.canEditEntries,
+        canResetApproval: v.canResetApproval,
         isAdminOwned: v.isAdminOwned,
       }),
       services: services.map((s) => ({
@@ -116,6 +130,12 @@ router.patch(
     }
     const data: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
+    if (parsed.data.code !== undefined) {
+      data.code =
+        parsed.data.code == null || parsed.data.code === ""
+          ? null
+          : parsed.data.code;
+    }
     if (parsed.data.location !== undefined) data.location = parsed.data.location;
     if (parsed.data.contractStart !== undefined) {
       data.contractStart =
@@ -132,11 +152,22 @@ router.patch(
     if (parsed.data.notes !== undefined) data.notes = parsed.data.notes;
     data.updatedAt = new Date();
 
-    const [updated] = await db
-      .update(projectsTable)
-      .set(data)
-      .where(eq(projectsTable.id, (req.params.id as string)))
-      .returning();
+    let updated;
+    try {
+      [updated] = await db
+        .update(projectsTable)
+        .set(data)
+        .where(eq(projectsTable.id, (req.params.id as string)))
+        .returning();
+    } catch (e) {
+      if ((e as { code?: string }).code === "23505") {
+        res
+          .status(409)
+          .json({ error: "Project code already in use — pick another" });
+        return;
+      }
+      throw e;
+    }
     if (!updated) {
       res.status(404).json({ error: "Project not found" });
       return;
@@ -146,6 +177,7 @@ router.patch(
         project: updated,
         canViewSummary: true,
         canEditEntries: true,
+        canResetApproval: true,
         isAdminOwned: true,
       }),
     );

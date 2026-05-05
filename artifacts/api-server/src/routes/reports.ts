@@ -330,6 +330,7 @@ router.get(
         project: v.project,
         canViewSummary: v.canViewSummary,
         canEditEntries: v.canEditEntries,
+        canResetApproval: v.canResetApproval,
         isAdminOwned: v.isAdminOwned,
       }),
       range: { from, to },

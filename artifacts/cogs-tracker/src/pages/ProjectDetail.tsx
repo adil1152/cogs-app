@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
@@ -17,12 +17,15 @@ import {
   useRevokeProjectAccess,
   useUpdateProject,
   useDeleteProject,
+  useListProjectApprovers,
+  useSetProjectApprovers,
   getGetProjectQueryKey,
   getListProjectServicesQueryKey,
   getListProjectAccessQueryKey,
   getListProjectEntriesQueryKey,
   getListProjectsQueryKey,
   getListUsersQueryKey,
+  getListProjectApproversQueryKey,
   type CreateProjectServiceBody,
   type GrantAccessBody,
   type UpdateProjectBody,
@@ -75,6 +78,11 @@ export default function ProjectDetail() {
         subtitle={
           project ? (
             <span className="inline-flex items-center gap-3 text-sm text-muted-foreground">
+              {project.code && (
+                <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider text-foreground">
+                  {project.code}
+                </span>
+              )}
               <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{project.location}</span>
               <span className="inline-flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />{formatDate(project.contractStart)} → {formatDate(project.contractEnd)}</span>
             </span>
@@ -100,6 +108,11 @@ export default function ProjectDetail() {
             <TabsTrigger value="security" data-testid="tab-security">
               <Lock className="mr-1.5 h-3.5 w-3.5" /> Security
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="approvers" data-testid="tab-approvers">
+                Approvers
+              </TabsTrigger>
+            )}
             {isAdmin && <TabsTrigger value="settings" data-testid="tab-settings">Settings</TabsTrigger>}
           </TabsList>
 
@@ -114,6 +127,12 @@ export default function ProjectDetail() {
           <TabsContent value="security" className="mt-4">
             <SecurityPanel projectId={id} canEdit={isAdmin} />
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="approvers" className="mt-4">
+              <ApproversPanel projectId={id} />
+            </TabsContent>
+          )}
 
           {isAdmin && project && (
             <TabsContent value="settings" className="mt-4">
@@ -142,6 +161,7 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-28">#</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Location</TableHead>
               <TableHead className="text-right">Mandays</TableHead>
@@ -154,6 +174,9 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
           <TableBody>
             {entries.map((e) => (
               <TableRow key={e.id} data-testid={`entry-row-${e.id}`}>
+                <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
+                  {e.sequenceCode ?? "—"}
+                </TableCell>
                 <TableCell className="font-medium">{formatDate(e.entryDate)}</TableCell>
                 <TableCell>{e.location}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatNumber(e.totalMandays, 1)}</TableCell>
@@ -448,6 +471,7 @@ function SecurityPanel({ projectId, canEdit }: { projectId: string; canEdit: boo
                   <TableHead>User</TableHead>
                   <TableHead className="text-center">View summary</TableHead>
                   <TableHead className="text-center">Edit entries</TableHead>
+                  <TableHead className="text-center">Reset to draft</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -506,6 +530,15 @@ function AccessRow({ projectId, access, onChange }: { projectId: string; access:
           data-testid={`access-edit-${access.userId}`}
         />
       </TableCell>
+      <TableCell className="text-center">
+        <Checkbox
+          checked={access.canResetApproval}
+          onCheckedChange={(v) =>
+            update.mutate({ id: access.id, data: { canResetApproval: !!v } })
+          }
+          data-testid={`access-reset-${access.userId}`}
+        />
+      </TableCell>
       <TableCell className="text-right">
         <Button
           variant="ghost"
@@ -525,6 +558,7 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
   const [userId, setUserId] = useState<string>("");
   const [canViewSummary, setCanViewSummary] = useState(true);
   const [canEditEntries, setCanEditEntries] = useState(false);
+  const [canResetApproval, setCanResetApproval] = useState(false);
   const grant = useGrantProjectAccess({
     mutation: {
       onSuccess: () => {
@@ -532,6 +566,7 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
         setUserId("");
         setCanEditEntries(false);
         setCanViewSummary(true);
+        setCanResetApproval(false);
         onGranted();
       },
       onError: (err: any) => toast({ title: "Could not grant access", description: err.message, variant: "destructive" }),
@@ -545,7 +580,7 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
         {users.length === 0 ? (
           <div className="text-sm text-muted-foreground">All users already have access.</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-3 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-end">
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">User</Label>
               <Select value={userId} onValueChange={setUserId}>
@@ -565,9 +600,27 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
               <Checkbox checked={canEditEntries} onCheckedChange={(v) => setCanEditEntries(!!v)} data-testid="checkbox-grant-edit" />
               Edit entries
             </label>
+            <label className="flex items-center gap-2 text-xs">
+              <Checkbox
+                checked={canResetApproval}
+                onCheckedChange={(v) => setCanResetApproval(!!v)}
+                data-testid="checkbox-grant-reset"
+              />
+              Reset to draft
+            </label>
             <Button
               disabled={!userId || grant.isPending}
-              onClick={() => grant.mutate({ id: projectId, data: { userId, canViewSummary, canEditEntries } as GrantAccessBody })}
+              onClick={() =>
+                grant.mutate({
+                  id: projectId,
+                  data: {
+                    userId,
+                    canViewSummary,
+                    canEditEntries,
+                    canResetApproval,
+                  } as GrantAccessBody,
+                })
+              }
               data-testid="button-grant"
             >
               Grant
@@ -579,12 +632,211 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
   );
 }
 
+const APPROVAL_LEVELS = ["OP", "SOP", "COO", "CC", "Additional"] as const;
+
+function ApproversPanel({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: assignments } = useListProjectApprovers(projectId, {
+    query: {
+      enabled: !!projectId,
+      queryKey: getListProjectApproversQueryKey(projectId),
+    },
+  });
+  const { data: users } = useListUsers({
+    query: { queryKey: getListUsersQueryKey() },
+  });
+  const { data: access } = useListProjectAccess(projectId, {
+    query: { queryKey: getListProjectAccessQueryKey(projectId) },
+  });
+
+  // Eligible users: anyone with project access OR admins.
+  const eligible = useMemo(() => {
+    const accessIds = new Set((access ?? []).map((a) => a.userId));
+    return (users ?? []).filter(
+      (u) => u.role === "admin" || accessIds.has(u.id),
+    );
+  }, [users, access]);
+
+  // Local edit state, seeded from server. Each level: list of user IDs.
+  const [draft, setDraft] = useState<Record<number, string[]> | null>(null);
+  useEffect(() => {
+    if (assignments && draft === null) {
+      const seed: Record<number, string[]> = {};
+      for (let l = 1; l <= APPROVAL_LEVELS.length; l++) seed[l] = [];
+      for (const a of assignments) {
+        if (!seed[a.level]) seed[a.level] = [];
+        if (!seed[a.level].includes(a.userId)) seed[a.level].push(a.userId);
+      }
+      setDraft(seed);
+    }
+  }, [assignments, draft]);
+
+  const set = useSetProjectApprovers({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Approvers saved" });
+        queryClient.invalidateQueries({
+          queryKey: getListProjectApproversQueryKey(projectId),
+        });
+        setDraft(null);
+      },
+      onError: (err: any) =>
+        toast({
+          title: "Save failed",
+          description: err.message,
+          variant: "destructive",
+        }),
+    },
+  });
+
+  function addUser(level: number, userId: string) {
+    setDraft((prev) => {
+      const base = prev ?? {};
+      const cur = base[level] ?? [];
+      if (cur.includes(userId)) return base;
+      return { ...base, [level]: [...cur, userId] };
+    });
+  }
+  function removeUser(level: number, userId: string) {
+    setDraft((prev) => {
+      const base = prev ?? {};
+      const cur = base[level] ?? [];
+      return { ...base, [level]: cur.filter((u) => u !== userId) };
+    });
+  }
+  function save() {
+    if (!draft) return;
+    const payload = {
+      assignments: Object.entries(draft).flatMap(([lvl, ids]) =>
+        ids.map((userId) => ({ level: Number(lvl), userId })),
+      ),
+    };
+    set.mutate({ id: projectId, data: payload });
+  }
+
+  if (!draft) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">
+          Loading approvers…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Approvers per level</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Each daily entry is approved sequentially OP → SOP → COO → CC →
+            Additional. Only the users you list at a level may approve at that
+            level (admins always can). Eligible picks are admins plus users
+            with any project access.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {APPROVAL_LEVELS.map((name, i) => {
+            const level = i + 1;
+            const selectedIds = draft[level] ?? [];
+            const remaining = eligible.filter((u) => !selectedIds.includes(u.id));
+            return (
+              <div
+                key={name}
+                className="rounded-md border border-border bg-card p-4"
+                data-testid={`approver-level-${name}`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{level}</Badge>
+                    <span className="font-medium text-sm">{name}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {selectedIds.length} assigned
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-2 min-h-7">
+                  {selectedIds.length === 0 && (
+                    <span className="text-xs text-muted-foreground italic">
+                      No approver assigned — non-admins cannot approve at this
+                      level.
+                    </span>
+                  )}
+                  {selectedIds.map((uid) => {
+                    const u = (users ?? []).find((x) => x.id === uid);
+                    return (
+                      <span
+                        key={uid}
+                        className="inline-flex items-center gap-1 rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-xs"
+                      >
+                        {u?.firstName ?? u?.email ?? uid}
+                        <button
+                          type="button"
+                          className="hover:text-destructive"
+                          onClick={() => removeUser(level, uid)}
+                          data-testid={`remove-approver-${name}-${uid}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+                {remaining.length > 0 && (
+                  <Select
+                    value=""
+                    onValueChange={(v) => v && addUser(level, v)}
+                  >
+                    <SelectTrigger
+                      className="h-8 max-w-sm"
+                      data-testid={`add-approver-${name}`}
+                    >
+                      <SelectValue placeholder="Add approver…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {remaining.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.firstName ?? u.email} — {u.email}
+                          {u.role === "admin" ? " (admin)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setDraft(null)}
+          data-testid="button-cancel-approvers"
+        >
+          Reset
+        </Button>
+        <Button
+          onClick={save}
+          disabled={set.isPending}
+          data-testid="button-save-approvers"
+        >
+          Save approvers
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function SettingsPanel({ project }: { project: any }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { register, handleSubmit } = useForm<UpdateProjectBody>({
     defaultValues: {
       name: project.name,
+      code: project.code ?? "",
       location: project.location,
       contractStart: project.contractStart,
       contractEnd: project.contractEnd,
@@ -621,6 +873,14 @@ function SettingsPanel({ project }: { project: any }) {
             className="space-y-3"
           >
             <Field label="Name"><Input {...register("name")} data-testid="input-edit-name" /></Field>
+            <Field label="Project code (sequence prefix)">
+              <Input
+                {...register("code")}
+                placeholder="e.g. ACME — leave blank to use the project name"
+                maxLength={32}
+                data-testid="input-edit-code"
+              />
+            </Field>
             <Field label="Location"><Input {...register("location")} data-testid="input-edit-location" /></Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Start"><Input type="date" {...register("contractStart")} /></Field>

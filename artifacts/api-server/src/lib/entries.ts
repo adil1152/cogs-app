@@ -132,6 +132,8 @@ export async function buildEntryDetail(entryId: string) {
     isLocked: !!entry.lockedAt,
     lockedAt: entry.lockedAt ? entry.lockedAt.toISOString() : null,
     notes: entry.notes,
+    sequenceNumber: entry.sequenceNumber,
+    sequenceCode: entry.sequenceCode,
     serviceCosts,
   };
 }
@@ -166,5 +168,19 @@ export async function buildEntrySummary(
     isLocked: !!entry.lockedAt,
     lockedAt: entry.lockedAt ? entry.lockedAt.toISOString() : null,
     notes: entry.notes,
+    sequenceNumber: entry.sequenceNumber,
+    sequenceCode: entry.sequenceCode,
   };
+}
+
+/**
+ * Slugify a project name to a max-12-char uppercase sequence prefix.
+ * Used as a fallback when the admin hasn't set an explicit project code.
+ */
+export function slugifyForSequence(name: string): string {
+  const slug = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "")
+    .slice(0, 12);
+  return slug || "PROJ";
 }

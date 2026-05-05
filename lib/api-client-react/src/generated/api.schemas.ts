@@ -76,6 +76,8 @@ export interface UpdateUserRoleBody {
 export interface Project {
   id: string;
   name: string;
+  /** @nullable */
+  code?: string | null;
   location: string;
   contractStart: string;
   contractEnd: string;
@@ -85,6 +87,7 @@ export interface Project {
   isAdminOwned: boolean;
   currentUserCanViewSummary: boolean;
   currentUserCanEditEntries: boolean;
+  currentUserCanResetApproval: boolean;
 }
 
 export type ProjectServiceKind =
@@ -110,6 +113,11 @@ export type ProjectDetail = Project & {
 export interface CreateProjectBody {
   /** @minLength 1 */
   name: string;
+  /**
+   * Optional short code used as the prefix for entry sequence numbers (e.g. ACME → ACME-0001).
+   * @maxLength 32
+   */
+  code?: string;
   /** @minLength 1 */
   location: string;
   contractStart: string;
@@ -120,6 +128,11 @@ export interface CreateProjectBody {
 export interface UpdateProjectBody {
   /** @minLength 1 */
   name?: string;
+  /**
+   * @maxLength 32
+   * @nullable
+   */
+  code?: string | null;
   /** @minLength 1 */
   location?: string;
   contractStart?: string;
@@ -172,6 +185,7 @@ export interface ProjectAccess {
   userId: string;
   canViewSummary: boolean;
   canEditEntries: boolean;
+  canResetApproval: boolean;
   grantedAt: string;
   user: AuthUser;
 }
@@ -180,11 +194,63 @@ export interface GrantAccessBody {
   userId: string;
   canViewSummary?: boolean;
   canEditEntries?: boolean;
+  canResetApproval?: boolean;
 }
 
 export interface UpdateAccessBody {
   canViewSummary?: boolean;
   canEditEntries?: boolean;
+  canResetApproval?: boolean;
+}
+
+export interface ApproverAssignment {
+  id: string;
+  projectId: string;
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  level: number;
+  levelName: string;
+  userId: string;
+  user: AuthUser;
+}
+
+export type SetProjectApproversBodyAssignmentsItem = {
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  level: number;
+  userId: string;
+};
+
+export interface SetProjectApproversBody {
+  assignments: SetProjectApproversBodyAssignmentsItem[];
+}
+
+export interface AuditLogEntry {
+  id: string;
+  /** @nullable */
+  dailyEntryId: string | null;
+  projectId: string;
+  /** CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET */
+  action: string;
+  /** @nullable */
+  level?: number | null;
+  /** @nullable */
+  levelName?: string | null;
+  /** @nullable */
+  field?: string | null;
+  /** @nullable */
+  oldValue?: string | null;
+  /** @nullable */
+  newValue?: string | null;
+  /** @nullable */
+  actorId?: string | null;
+  /** @nullable */
+  actorName?: string | null;
+  occurredAt: string;
 }
 
 export type ServiceCostInputKind =
@@ -275,6 +341,10 @@ export interface DailyEntrySummary {
   lockedAt?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  sequenceNumber?: number | null;
+  /** @nullable */
+  sequenceCode?: string | null;
 }
 
 export type DailyEntryDetail = DailyEntrySummary & {

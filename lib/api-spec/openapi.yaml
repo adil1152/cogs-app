@@ -567,7 +567,7 @@ paths:
     post:
       tags: [Entries]
       operationId: approveDailyEntry
-      summary: Advance the entry one approval level (admin only). Locks at final level.
+      summary: Advance the entry one approval level. Allowed for admins or the user assigned as the next-level approver on this project. Locks at final level.
       parameters:
         - name: id
           in: path
@@ -591,7 +591,7 @@ paths:
     post:
       tags: [Entries]
       operationId: rejectDailyEntry
-      summary: Reset the entry to draft (level 0, unlock) (admin only)
+      summary: Revoke the most recent approval and return the entry to draft. Allowed for admins or the user assigned at the current approval level.
       parameters:
         - name: id
           in: path
@@ -625,6 +625,96 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/EntryApproval'
+  /entries/{id}/reset:
+    post:
+      tags: [Entries]
+      operationId: resetDailyEntry
+      summary: Reset entry to draft (clears all approvals). Allowed for admins or users with canResetApproval on the project.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /entries/{id}/audit:
+    get:
+      tags: [Entries]
+      operationId: listEntryAudit
+      summary: Chronological audit log for an entry (creation, edits, approvals, rejects, resets)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLogEntry'
+
+  /projects/{id}/approvers:
+    get:
+      tags: [Projects]
+      operationId: listProjectApprovers
+      summary: List per-level approver assignments for this project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApproverAssignment'
+    put:
+      tags: [Projects]
+      operationId: setProjectApprovers
+      summary: Replace the full set of approver assignments for this project (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetProjectApproversBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApproverAssignment'
 
   /reports/dashboard:
     get:
@@ -837,10 +927,12 @@ components:
 
     Project:
       type: object
-      required: [id, name, location, contractStart, contractEnd, createdAt, isAdminOwned, currentUserCanViewSummary, currentUserCanEditEntries]
+      required: [id, name, location, contractStart, contractEnd, createdAt, isAdminOwned, currentUserCanViewSummary, currentUserCanEditEntries, currentUserCanResetApproval]
       properties:
         id: { type: string }
         name: { type: string }
+        code:
+          type: [string, 'null']
         location: { type: string }
         contractStart: { type: string, format: date }
         contractEnd: { type: string, format: date }
@@ -850,6 +942,7 @@ components:
         isAdminOwned: { type: boolean }
         currentUserCanViewSummary: { type: boolean }
         currentUserCanEditEntries: { type: boolean }
+        currentUserCanResetApproval: { type: boolean }
     ProjectDetail:
       allOf:
         - $ref: '#/components/schemas/Project'
@@ -865,6 +958,10 @@ components:
       required: [name, location, contractStart, contractEnd]
       properties:
         name: { type: string, minLength: 1 }
+        code:
+          type: string
+          maxLength: 32
+          description: Optional short code used as the prefix for entry sequence numbers (e.g. ACME → ACME-0001).
         location: { type: string, minLength: 1 }
         contractStart: { type: string, format: date }
         contractEnd: { type: string, format: date }
@@ -873,6 +970,9 @@ components:
       type: object
       properties:
         name: { type: string, minLength: 1 }
+        code:
+          type: [string, 'null']
+          maxLength: 32
         location: { type: string, minLength: 1 }
         contractStart: { type: string, format: date }
         contractEnd: { type: string, format: date }
@@ -923,13 +1023,14 @@ components:
 
     ProjectAccess:
       type: object
-      required: [id, projectId, userId, canViewSummary, canEditEntries, grantedAt, user]
+      required: [id, projectId, userId, canViewSummary, canEditEntries, canResetApproval, grantedAt, user]
       properties:
         id: { type: string }
         projectId: { type: string }
         userId: { type: string }
         canViewSummary: { type: boolean }
         canEditEntries: { type: boolean }
+        canResetApproval: { type: boolean }
         grantedAt: { type: string, format: date-time }
         user:
           $ref: '#/components/schemas/AppUser'
@@ -944,11 +1045,72 @@ components:
         canEditEntries:
           type: boolean
           default: false
+        canResetApproval:
+          type: boolean
+          default: false
     UpdateAccessBody:
       type: object
       properties:
         canViewSummary: { type: boolean }
         canEditEntries: { type: boolean }
+        canResetApproval: { type: boolean }
+
+    ApproverAssignment:
+      type: object
+      required: [id, projectId, level, levelName, userId, user]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        level:
+          type: integer
+          minimum: 1
+          maximum: 5
+        levelName: { type: string }
+        userId: { type: string }
+        user:
+          $ref: '#/components/schemas/AppUser'
+    SetProjectApproversBody:
+      type: object
+      required: [assignments]
+      properties:
+        assignments:
+          type: array
+          items:
+            type: object
+            required: [level, userId]
+            properties:
+              level:
+                type: integer
+                minimum: 1
+                maximum: 5
+              userId: { type: string }
+
+    AuditLogEntry:
+      type: object
+      required: [id, dailyEntryId, projectId, action, occurredAt]
+      properties:
+        id: { type: string }
+        dailyEntryId:
+          type: [string, 'null']
+        projectId: { type: string }
+        action:
+          type: string
+          description: 'CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET'
+        level:
+          type: [integer, 'null']
+        levelName:
+          type: [string, 'null']
+        field:
+          type: [string, 'null']
+        oldValue:
+          type: [string, 'null']
+        newValue:
+          type: [string, 'null']
+        actorId:
+          type: [string, 'null']
+        actorName:
+          type: [string, 'null']
+        occurredAt: { type: string, format: date-time }
 
     ServiceCostInput:
       type: object
@@ -1039,6 +1201,10 @@ components:
           type: [string, 'null']
           format: date-time
         notes:
+          type: [string, 'null']
+        sequenceNumber:
+          type: [integer, 'null']
+        sequenceCode:
           type: [string, 'null']
     DailyEntryDetail:
       allOf:

@@ -16,7 +16,20 @@ service contracts (catering, cleaning, security, transport, etc.).
 - Admin / User roles. Admins see everything; users see only projects they're explicitly granted
   access to.
 - **Security field** (key feature): each project has a per-user access list. Admins decide who
-  can view that project's summary report and who can edit its daily entries.
+  can view that project's summary report, who can edit its daily entries, and who can reset an
+  entry to draft.
+- **Sequential approval** (OP → SOP → COO → CC → Additional). Each level can be assigned to one
+  or more users in the project's *Approvers* tab; only assigned users (or admins) can approve
+  at that level. Final approval locks the entry.
+- **Reset to draft**: admins, or users with the per-project `canResetApproval` permission, can
+  unlock and clear all approvals on any entry. The action is fully audited.
+- **Audit log**: every entry create / update / delete / approve / reject / reset is recorded in
+  `entry_audit_log` and surfaced in the entry's *History* panel. Audit rows are never deleted —
+  the FK to `daily_entries` is `ON DELETE SET NULL` so history outlives the entry.
+- **Project sequence numbers**: every daily entry gets a per-project sequence like
+  `ACME-0001`. The prefix is `projects.code` (admin-set on the Settings tab) or a slug of the
+  project name when blank. Allocation is race-safe via `MAX(seq)+1` retried on the
+  `(project_id, sequence_number)` unique-index conflict.
 
 ## Architecture
 
@@ -52,6 +65,10 @@ Shared libs:
 - `PATCH /api/access/:id` (admin), `DELETE /api/access/:id` (admin)
 - `GET /api/projects/:id/entries`, `POST /api/projects/:id/entries`
 - `GET /api/entries/:id`, `PATCH /api/entries/:id`, `DELETE /api/entries/:id`
+- `POST /api/entries/:id/approve`, `POST /api/entries/:id/reject` (assigned approver or admin)
+- `POST /api/entries/:id/reset` (admin or `canResetApproval`)
+- `GET /api/entries/:id/audit`
+- `GET /api/projects/:id/approvers`, `PUT /api/projects/:id/approvers` (admin)
 - `GET /api/dashboard`, `GET /api/recent-activity`
 - `GET /api/projects/:id/summary` (requires `canViewSummary` for non-admins)
 - `GET /api/reports/aggregate`, `GET /api/reports/trends`

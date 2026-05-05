@@ -18,6 +18,8 @@ import type {
 
 import type {
   AggregateReport,
+  ApproverAssignment,
+  AuditLogEntry,
   AuthUser,
   AuthUserEnvelope,
   BeginBrowserLoginParams,
@@ -46,6 +48,7 @@ import type {
   ProjectSummaryReport,
   RecentActivityItem,
   ReorderProjectServicesBody,
+  SetProjectApproversBody,
   TrendsReport,
   UpdateAccessBody,
   UpdateDailyEntryBody,
@@ -2384,7 +2387,7 @@ export const useDeleteDailyEntry = <
 };
 
 /**
- * @summary Advance the entry one approval level (admin only). Locks at final level.
+ * @summary Advance the entry one approval level. Allowed for admins or the user assigned as the next-level approver on this project. Locks at final level.
  */
 export const getApproveDailyEntryUrl = (id: string) => {
   return `/api/entries/${id}/approve`;
@@ -2445,7 +2448,7 @@ export type ApproveDailyEntryMutationResult = NonNullable<
 export type ApproveDailyEntryMutationError = ErrorType<ErrorEnvelope>;
 
 /**
- * @summary Advance the entry one approval level (admin only). Locks at final level.
+ * @summary Advance the entry one approval level. Allowed for admins or the user assigned as the next-level approver on this project. Locks at final level.
  */
 export const useApproveDailyEntry = <
   TError = ErrorType<ErrorEnvelope>,
@@ -2468,7 +2471,7 @@ export const useApproveDailyEntry = <
 };
 
 /**
- * @summary Reset the entry to draft (level 0, unlock) (admin only)
+ * @summary Revoke the most recent approval and return the entry to draft. Allowed for admins or the user assigned at the current approval level.
  */
 export const getRejectDailyEntryUrl = (id: string) => {
   return `/api/entries/${id}/reject`;
@@ -2529,7 +2532,7 @@ export type RejectDailyEntryMutationResult = NonNullable<
 export type RejectDailyEntryMutationError = ErrorType<unknown>;
 
 /**
- * @summary Reset the entry to draft (level 0, unlock) (admin only)
+ * @summary Revoke the most recent approval and return the entry to draft. Allowed for admins or the user assigned at the current approval level.
  */
 export const useRejectDailyEntry = <
   TError = ErrorType<unknown>,
@@ -2637,6 +2640,352 @@ export function useListEntryApprovals<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Reset entry to draft (clears all approvals). Allowed for admins or users with canResetApproval on the project.
+ */
+export const getResetDailyEntryUrl = (id: string) => {
+  return `/api/entries/${id}/reset`;
+};
+
+export const resetDailyEntry = async (
+  id: string,
+  options?: RequestInit,
+): Promise<DailyEntryDetail> => {
+  return customFetch<DailyEntryDetail>(getResetDailyEntryUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResetDailyEntryMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetDailyEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetDailyEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["resetDailyEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetDailyEntry>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return resetDailyEntry(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetDailyEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetDailyEntry>>
+>;
+
+export type ResetDailyEntryMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Reset entry to draft (clears all approvals). Allowed for admins or users with canResetApproval on the project.
+ */
+export const useResetDailyEntry = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetDailyEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetDailyEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getResetDailyEntryMutationOptions(options));
+};
+
+/**
+ * @summary Chronological audit log for an entry (creation, edits, approvals, rejects, resets)
+ */
+export const getListEntryAuditUrl = (id: string) => {
+  return `/api/entries/${id}/audit`;
+};
+
+export const listEntryAudit = async (
+  id: string,
+  options?: RequestInit,
+): Promise<AuditLogEntry[]> => {
+  return customFetch<AuditLogEntry[]>(getListEntryAuditUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListEntryAuditQueryKey = (id: string) => {
+  return [`/api/entries/${id}/audit`] as const;
+};
+
+export const getListEntryAuditQueryOptions = <
+  TData = Awaited<ReturnType<typeof listEntryAudit>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEntryAudit>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListEntryAuditQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listEntryAudit>>> = ({
+    signal,
+  }) => listEntryAudit(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listEntryAudit>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListEntryAuditQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listEntryAudit>>
+>;
+export type ListEntryAuditQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Chronological audit log for an entry (creation, edits, approvals, rejects, resets)
+ */
+
+export function useListEntryAudit<
+  TData = Awaited<ReturnType<typeof listEntryAudit>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEntryAudit>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListEntryAuditQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List per-level approver assignments for this project
+ */
+export const getListProjectApproversUrl = (id: string) => {
+  return `/api/projects/${id}/approvers`;
+};
+
+export const listProjectApprovers = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ApproverAssignment[]> => {
+  return customFetch<ApproverAssignment[]>(getListProjectApproversUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListProjectApproversQueryKey = (id: string) => {
+  return [`/api/projects/${id}/approvers`] as const;
+};
+
+export const getListProjectApproversQueryOptions = <
+  TData = Awaited<ReturnType<typeof listProjectApprovers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listProjectApprovers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListProjectApproversQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listProjectApprovers>>
+  > = ({ signal }) => listProjectApprovers(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listProjectApprovers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListProjectApproversQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listProjectApprovers>>
+>;
+export type ListProjectApproversQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List per-level approver assignments for this project
+ */
+
+export function useListProjectApprovers<
+  TData = Awaited<ReturnType<typeof listProjectApprovers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listProjectApprovers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListProjectApproversQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace the full set of approver assignments for this project (admin only)
+ */
+export const getSetProjectApproversUrl = (id: string) => {
+  return `/api/projects/${id}/approvers`;
+};
+
+export const setProjectApprovers = async (
+  id: string,
+  setProjectApproversBody: SetProjectApproversBody,
+  options?: RequestInit,
+): Promise<ApproverAssignment[]> => {
+  return customFetch<ApproverAssignment[]>(getSetProjectApproversUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setProjectApproversBody),
+  });
+};
+
+export const getSetProjectApproversMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setProjectApprovers>>,
+    TError,
+    { id: string; data: BodyType<SetProjectApproversBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setProjectApprovers>>,
+  TError,
+  { id: string; data: BodyType<SetProjectApproversBody> },
+  TContext
+> => {
+  const mutationKey = ["setProjectApprovers"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setProjectApprovers>>,
+    { id: string; data: BodyType<SetProjectApproversBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setProjectApprovers(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetProjectApproversMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setProjectApprovers>>
+>;
+export type SetProjectApproversMutationBody = BodyType<SetProjectApproversBody>;
+export type SetProjectApproversMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Replace the full set of approver assignments for this project (admin only)
+ */
+export const useSetProjectApprovers = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setProjectApprovers>>,
+    TError,
+    { id: string; data: BodyType<SetProjectApproversBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setProjectApprovers>>,
+  TError,
+  { id: string; data: BodyType<SetProjectApproversBody> },
+  TContext
+> => {
+  return useMutation(getSetProjectApproversMutationOptions(options));
+};
 
 /**
  * @summary Headline numbers for today, week, month

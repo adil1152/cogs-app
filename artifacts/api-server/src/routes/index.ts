@@ -7,6 +7,7 @@ import servicesRouter from "./services";
 import accessRouter from "./access";
 import entriesRouter from "./entries";
 import approvalsRouter from "./approvals";
+import approversRouter from "./approvers";
 import reportsRouter from "./reports";
 
 const router: IRouter = Router();
@@ -19,6 +20,7 @@ router.use(servicesRouter);
 router.use(accessRouter);
 router.use(entriesRouter);
 router.use(approvalsRouter);
+router.use(approversRouter);
 router.use(reportsRouter);
 
 export default router;

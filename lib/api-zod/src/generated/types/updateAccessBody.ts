@@ -9,4 +9,5 @@
 export interface UpdateAccessBody {
   canViewSummary?: boolean;
   canEditEntries?: boolean;
+  canResetApproval?: boolean;
 }

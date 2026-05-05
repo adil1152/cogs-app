@@ -9,6 +9,8 @@
 export interface Project {
   id: string;
   name: string;
+  /** @nullable */
+  code?: string | null;
   location: string;
   contractStart: Date;
   contractEnd: Date;
@@ -18,4 +20,5 @@ export interface Project {
   isAdminOwned: boolean;
   currentUserCanViewSummary: boolean;
   currentUserCanEditEntries: boolean;
+  currentUserCanResetApproval: boolean;
 }

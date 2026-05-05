@@ -10,7 +10,10 @@ import {
   useDeleteDailyEntry,
   useApproveDailyEntry,
   useRejectDailyEntry,
+  useResetDailyEntry,
   useListEntryApprovals,
+  useListEntryAudit,
+  useListProjectApprovers,
   getGetProjectQueryKey,
   getListProjectServicesQueryKey,
   getGetDailyEntryQueryKey,
@@ -18,6 +21,8 @@ import {
   getGetDashboardQueryKey,
   getGetRecentActivityQueryKey,
   getListEntryApprovalsQueryKey,
+  getListEntryAuditQueryKey,
+  getListProjectApproversQueryKey,
   type ServiceCostInput,
 } from "@workspace/api-client-react";
 import { useAuth } from "@workspace/replit-auth-web";
@@ -31,7 +36,15 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatNumber, todayISO } from "@/lib/format";
 import { MEAL_WEIGHTS, computeMealMandays } from "@/lib/cogs-formula";
-import { ArrowLeft, Trash2, Lock, CheckCircle2, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Trash2,
+  Lock,
+  CheckCircle2,
+  XCircle,
+  RotateCcw,
+  History,
+} from "lucide-react";
 
 const APPROVAL_LEVELS = ["OP", "SOP", "COO", "CC", "Additional"] as const;
 
@@ -102,9 +115,33 @@ export default function EntryForm() {
   const { data: approvals } = useListEntryApprovals(entryId ?? "", {
     query: { enabled: !!entryId, queryKey: getListEntryApprovalsQueryKey(entryId ?? "") },
   });
+  const { data: assignments } = useListProjectApprovers(projectId, {
+    query: {
+      enabled: !!projectId,
+      queryKey: getListProjectApproversQueryKey(projectId),
+    },
+  });
+  const { data: audit } = useListEntryAudit(entryId ?? "", {
+    query: {
+      enabled: !!entryId,
+      queryKey: getListEntryAuditQueryKey(entryId ?? ""),
+    },
+  });
 
   const isLocked = !!existingEntry?.isLocked;
   const currentLevel = existingEntry?.currentApprovalLevel ?? 0;
+  const canResetApproval = !!project?.currentUserCanResetApproval;
+  const nextLevel = currentLevel + 1;
+  const isNextApprover =
+    isAdmin ||
+    !!(assignments ?? []).find(
+      (a) => a.level === nextLevel && a.userId === user?.id,
+    );
+  const isCurrentApprover =
+    isAdmin ||
+    !!(assignments ?? []).find(
+      (a) => a.level === currentLevel && a.userId === user?.id,
+    );
 
   const [entryDate, setEntryDate] = useState(todayISO());
   const [location, setLocation] = useState("");
@@ -170,6 +207,7 @@ export default function EntryForm() {
     if (entryId) {
       queryClient.invalidateQueries({ queryKey: getGetDailyEntryQueryKey(entryId) });
       queryClient.invalidateQueries({ queryKey: getListEntryApprovalsQueryKey(entryId) });
+      queryClient.invalidateQueries({ queryKey: getListEntryAuditQueryKey(entryId) });
     }
   };
 
@@ -219,6 +257,20 @@ export default function EntryForm() {
         invalidateAll();
       },
       onError: (err: any) => toast({ title: "Reject failed", description: err.message, variant: "destructive" }),
+    },
+  });
+  const reset = useResetDailyEntry({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Entry reset to draft" });
+        invalidateAll();
+      },
+      onError: (err: any) =>
+        toast({
+          title: "Reset failed",
+          description: err.message,
+          variant: "destructive",
+        }),
     },
   });
 
@@ -291,7 +343,22 @@ export default function EntryForm() {
     <AppLayout>
       <PageHeader
         title={isEdit ? "Edit daily entry" : "New daily entry"}
-        subtitle={project ? project.name : ""}
+        subtitle={
+          project ? (
+            (
+              <span className="inline-flex items-center gap-2">
+                {existingEntry?.sequenceCode && (
+                  <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider text-foreground">
+                    {existingEntry.sequenceCode}
+                  </span>
+                )}
+                <span>{project.name}</span>
+              </span>
+            ) as any
+          ) : (
+            ""
+          )
+        }
         actions={
           <Link href={`/projects/${projectId}`}>
             <Button variant="outline" data-testid="button-back"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
@@ -304,11 +371,14 @@ export default function EntryForm() {
           <ApprovalStrip
             currentLevel={currentLevel}
             isLocked={isLocked}
-            isAdmin={isAdmin}
+            canApprove={isNextApprover && !isLocked && nextLevel <= APPROVAL_LEVELS.length}
+            canReject={isCurrentApprover && currentLevel > 0 && !isLocked}
+            canReset={canResetApproval && (currentLevel > 0 || isLocked)}
             approvals={approvals ?? []}
             onApprove={() => approve.mutate({ id: entryId! })}
             onReject={() => reject.mutate({ id: entryId! })}
-            pending={approve.isPending || reject.isPending}
+            onReset={() => reset.mutate({ id: entryId! })}
+            pending={approve.isPending || reject.isPending || reset.isPending}
           />
         </div>
       )}
@@ -495,6 +565,12 @@ export default function EntryForm() {
           </div>
         </fieldset>
       </form>
+
+      {isEdit && (
+        <div className="px-8 pb-8">
+          <AuditPanel events={audit ?? []} />
+        </div>
+      )}
     </AppLayout>
   );
 }
@@ -502,18 +578,24 @@ export default function EntryForm() {
 function ApprovalStrip({
   currentLevel,
   isLocked,
-  isAdmin,
+  canApprove,
+  canReject,
+  canReset,
   approvals,
   onApprove,
   onReject,
+  onReset,
   pending,
 }: {
   currentLevel: number;
   isLocked: boolean;
-  isAdmin: boolean;
+  canApprove: boolean;
+  canReject: boolean;
+  canReset: boolean;
   approvals: Array<any>;
   onApprove: () => void;
   onReject: () => void;
+  onReset: () => void;
   pending: boolean;
 }) {
   const nextLevelName = APPROVAL_LEVELS[currentLevel];
@@ -555,36 +637,150 @@ function ApprovalStrip({
               })}
             </div>
           </div>
-          {isAdmin && (
-            <div className="flex items-center gap-2">
-              {!isLocked && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={onApprove}
-                  disabled={pending}
-                  data-testid="button-approve"
-                >
-                  <CheckCircle2 className="mr-1.5 h-4 w-4" />
-                  Approve as {nextLevelName}
-                </Button>
-              )}
-              {currentLevel > 0 && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={onReject}
-                  disabled={pending}
-                  data-testid="button-reject"
-                >
-                  <XCircle className="mr-1.5 h-4 w-4" />
-                  Reject to draft
-                </Button>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {canApprove && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={onApprove}
+                disabled={pending}
+                data-testid="button-approve"
+              >
+                <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                Approve as {nextLevelName}
+              </Button>
+            )}
+            {canReject && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onReject}
+                disabled={pending}
+                data-testid="button-reject"
+              >
+                <XCircle className="mr-1.5 h-4 w-4" />
+                Reject to draft
+              </Button>
+            )}
+            {canReset && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onReset}
+                disabled={pending}
+                data-testid="button-reset"
+                title="Clears all approvals and unlocks the entry. Audited."
+              >
+                <RotateCcw className="mr-1.5 h-4 w-4" />
+                Reset to draft
+              </Button>
+            )}
+          </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function formatAuditField(field: string | null | undefined): string {
+  if (!field) return "—";
+  return field
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+function formatAuditValue(v: string | null | undefined): string {
+  if (v == null || v === "") return "—";
+  if (v.length > 80) return v.slice(0, 77) + "…";
+  return v;
+}
+
+const AUDIT_ACTION_STYLES: Record<string, string> = {
+  CREATE: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30",
+  UPDATE: "bg-amber-500/15 text-amber-700 border-amber-500/30",
+  DELETE: "bg-destructive/15 text-destructive border-destructive/30",
+  APPROVE: "bg-accent/20 text-accent-foreground border-accent/40",
+  REJECT: "bg-rose-500/15 text-rose-700 border-rose-500/30",
+  RESET: "bg-sky-500/15 text-sky-700 border-sky-500/30",
+};
+
+function AuditPanel({ events }: { events: Array<any> }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
+        <History className="h-4 w-4 text-muted-foreground" />
+        <CardTitle className="text-base">History</CardTitle>
+        <span className="text-xs text-muted-foreground ml-1">
+          ({events.length} event{events.length === 1 ? "" : "s"})
+        </span>
+      </CardHeader>
+      <CardContent className="p-0">
+        {events.length === 0 ? (
+          <div className="px-6 py-8 text-sm text-muted-foreground text-center">
+            No history yet.
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {events.map((e) => {
+              const style =
+                AUDIT_ACTION_STYLES[e.action] ??
+                "bg-muted text-muted-foreground border-border";
+              return (
+                <div
+                  key={e.id}
+                  className="px-6 py-3 flex flex-col md:flex-row md:items-center gap-2 md:gap-4"
+                  data-testid={`audit-row-${e.id}`}
+                >
+                  <div
+                    className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded border px-1.5 py-0.5 w-20 justify-center ${style}`}
+                  >
+                    {e.action}
+                  </div>
+                  <div className="flex-1 text-sm">
+                    {e.action === "APPROVE" || e.action === "REJECT" ? (
+                      <span>
+                        Level{" "}
+                        <span className="font-medium">
+                          {e.levelName ?? e.level ?? "?"}
+                        </span>
+                      </span>
+                    ) : e.action === "RESET" ? (
+                      <span>
+                        Reset from level{" "}
+                        <span className="font-medium">{e.oldValue}</span> back
+                        to draft
+                      </span>
+                    ) : e.action === "CREATE" || e.action === "DELETE" ? (
+                      <span>
+                        {e.action === "CREATE" ? "Created entry " : "Deleted entry "}
+                        <span className="font-mono">
+                          {e.newValue ?? e.oldValue}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="space-x-2">
+                        <span className="font-medium">
+                          {formatAuditField(e.field)}
+                        </span>
+                        <span className="text-muted-foreground line-through">
+                          {formatAuditValue(e.oldValue)}
+                        </span>
+                        <span className="text-muted-foreground">→</span>
+                        <span>{formatAuditValue(e.newValue)}</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    {e.actorName ?? "System"} ·{" "}
+                    {new Date(e.occurredAt).toLocaleString()}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

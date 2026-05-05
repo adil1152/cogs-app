@@ -9,6 +9,11 @@
 export interface UpdateProjectBody {
   /** @minLength 1 */
   name?: string;
+  /**
+   * @maxLength 32
+   * @nullable
+   */
+  code?: string | null;
   /** @minLength 1 */
   location?: string;
   contractStart?: Date;

@@ -6,9 +6,11 @@ import {
   usersTable,
 } from "@workspace/db";
 import { and, eq, asc, isNull } from "drizzle-orm";
-import { requireAdmin, requireAuth } from "../middlewares/requireAuth";
+import { requireAuth } from "../middlewares/requireAuth";
 import { getProjectVisibility } from "../lib/projectAccess";
 import { buildEntryDetail } from "../lib/entries";
+import { isApproverFor } from "../lib/approvers";
+import { recordAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -17,7 +19,7 @@ export const FINAL_LEVEL = APPROVAL_LEVELS.length;
 
 router.post(
   "/entries/:id/approve",
-  requireAdmin,
+  requireAuth,
   async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
     const [entry] = await db
@@ -40,9 +42,22 @@ router.post(
     }
     const levelName = APPROVAL_LEVELS[nextLevel - 1];
 
+    if (req.user!.role !== "admin") {
+      const allowed = await isApproverFor(
+        entry.projectId,
+        nextLevel,
+        req.user!.id,
+      );
+      if (!allowed) {
+        res
+          .status(403)
+          .json({ error: `Only the assigned ${levelName} approver can approve this level` });
+        return;
+      }
+    }
+
     try {
       await db.transaction(async (tx) => {
-        // Atomic conditional update: only advances if state unchanged.
         const updated = await tx
           .update(dailyEntriesTable)
           .set({
@@ -63,20 +78,31 @@ router.post(
             "Entry state changed concurrently — please refresh and try again",
           );
         }
-        // Unique (dailyEntryId, level) prevents duplicate level rows under races.
         await tx.insert(entryApprovalsTable).values({
           dailyEntryId: id,
           level: nextLevel,
           levelName,
           approverId: req.user!.id,
         });
+        await recordAudit(
+          {
+            dailyEntryId: id,
+            projectId: entry.projectId,
+            action: "APPROVE",
+            actorId: req.user!.id,
+            level: nextLevel,
+            levelName,
+            oldValue: String(expectedLevel),
+            newValue: String(nextLevel),
+          },
+          tx,
+        );
       });
     } catch (e) {
       if (e instanceof ConflictError) {
         res.status(409).json({ error: e.message });
         return;
       }
-      // Unique violation (race or duplicate) — surface 409.
       const code = (e as { code?: string }).code;
       if (code === "23505") {
         res
@@ -93,7 +119,7 @@ router.post(
 
 router.post(
   "/entries/:id/reject",
-  requireAdmin,
+  requireAuth,
   async (req: Request, res: Response): Promise<void> => {
     const id = req.params.id as string;
     const [entry] = await db
@@ -115,10 +141,24 @@ router.post(
       res.status(400).json({ error: "Entry is already in draft" });
       return;
     }
+
+    if (req.user!.role !== "admin") {
+      // The most-recent approver (current level) can revoke their own approval.
+      const allowed = await isApproverFor(
+        entry.projectId,
+        expectedLevel,
+        req.user!.id,
+      );
+      if (!allowed) {
+        res.status(403).json({
+          error: "Only the current-level approver or an admin can reject",
+        });
+        return;
+      }
+    }
+
     try {
       await db.transaction(async (tx) => {
-        // Compare-and-swap on currentApprovalLevel prevents a stale reject
-        // from overwriting a concurrent approve that advanced the level.
         const updated = await tx
           .update(dailyEntriesTable)
           .set({
@@ -142,6 +182,18 @@ router.post(
         await tx
           .delete(entryApprovalsTable)
           .where(eq(entryApprovalsTable.dailyEntryId, id));
+        await recordAudit(
+          {
+            dailyEntryId: id,
+            projectId: entry.projectId,
+            action: "REJECT",
+            actorId: req.user!.id,
+            level: expectedLevel,
+            oldValue: String(expectedLevel),
+            newValue: "0",
+          },
+          tx,
+        );
       });
     } catch (e) {
       if (e instanceof ConflictError) {

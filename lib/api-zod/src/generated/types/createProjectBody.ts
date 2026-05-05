@@ -9,6 +9,11 @@
 export interface CreateProjectBody {
   /** @minLength 1 */
   name: string;
+  /**
+   * Optional short code used as the prefix for entry sequence numbers (e.g. ACME → ACME-0001).
+   * @maxLength 32
+   */
+  code?: string;
   /** @minLength 1 */
   location: string;
   contractStart: Date;

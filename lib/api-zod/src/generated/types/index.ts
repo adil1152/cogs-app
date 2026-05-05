@@ -8,7 +8,9 @@
 
 export * from "./aggregateReport";
 export * from "./aggregateReportRange";
+export * from "./approverAssignment";
 export * from "./appUser";
+export * from "./auditLogEntry";
 export * from "./authorizationSessionHeaderParameter";
 export * from "./authUser";
 export * from "./authUserEnvelope";
@@ -51,6 +53,8 @@ export * from "./serviceCostInput";
 export * from "./serviceCostInputKind";
 export * from "./serviceTotal";
 export * from "./serviceTotalKind";
+export * from "./setProjectApproversBody";
+export * from "./setProjectApproversBodyAssignmentsItem";
 export * from "./trendPoint";
 export * from "./trendsReport";
 export * from "./trendsReportRange";

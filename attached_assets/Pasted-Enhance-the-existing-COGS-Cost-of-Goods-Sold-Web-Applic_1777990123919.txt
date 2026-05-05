@@ -1,0 +1,162 @@
+Enhance the existing **COGS (Cost of Goods Sold) Web Application** by adding advanced approval configuration, reset controls, audit tracking, and project-based sequence numbering.
+
+---
+
+# 🔹 1. Project-Level Approver Configuration
+
+Add approval user assignment at the **Project Settings / Security Tab**:
+
+* Each project must allow configuration of approvers for each level:
+
+  * OP
+  * SOP
+  * COO
+  * CC
+  * Additional Approval (configurable)
+
+### Behavior:
+
+* Only **assigned users** can approve at their respective level
+* Approval buttons should only be visible to:
+
+  * Users assigned to that specific approval stage
+* Prevent unauthorized users from approving
+
+---
+
+# 🔹 2. Reset to Draft (Controlled Access)
+
+Introduce a **“Reset to Draft”** feature:
+
+### Rules:
+
+* Visible only to:
+
+  * **Admin users**, OR
+  * Users with **special permission (Reset Approval Access)**
+
+### Behavior:
+
+* Allows reverting an approved record back to **Draft**
+* Once reset:
+
+  * Record becomes editable again
+  * Approval workflow restarts from first level
+
+---
+
+# 🔹 3. Approval Workflow Control
+
+* Approval must be **strictly sequential**
+* Only the assigned approver can act at each stage
+* Optionally support rejection if needed
+
+---
+
+# 🔹 4. Audit Log / Change History
+
+Implement a **complete audit trail system** for each daily entry.
+
+### Track:
+
+#### Approval Actions:
+
+* Approved by (user)
+* Approval level
+* Date & time
+
+#### Data Changes:
+
+* Field modified (manday, cost, services, etc.)
+* Old value
+* New value
+* User who made the change
+* Timestamp
+
+---
+
+### UI Requirement:
+
+* Add a **“History / Audit Log” section** in each record
+* Display all actions in chronological order
+
+---
+
+# 🔹 5. Data Integrity Rules
+
+* After final approval:
+
+  * Record becomes **read-only**
+* After reset:
+
+  * Editing is allowed again
+* Audit logs must:
+
+  * **Never be deleted**
+  * Always remain traceable
+
+---
+
+# 🔹 6. Security & Permissions
+
+* Only assigned users can approve
+* Only admin / special users can reset to draft
+* Admin has full visibility of all records and logs
+
+---
+
+# 🔹 7. Project-Based Sequence Numbering (NEW)
+
+Add an automatic **sequence number** for each daily entry.
+
+### Requirements:
+
+* Sequence should be **generated per project**
+* Format example:
+
+  ```
+  PROJECTCODE-0001
+  PROJECTCODE-0002
+  ```
+
+  OR
+
+  ```
+  ProjectName/YYYY/0001
+  ```
+
+### Rules:
+
+* Each project maintains its **own independent sequence**
+* Sequence should:
+
+  * Auto-increment on each new entry
+  * Be unique within the project
+* Should be visible in:
+
+  * List view
+  * Detail view
+  * Reports
+
+---
+
+# 🔹 8. Expected Outcome
+
+The system should:
+
+* Provide **controlled, role-based approvals**
+* Enable **secure reset and re-approval process**
+* Maintain **full audit transparency**
+* Generate **clear and structured sequence tracking per project**
+* Improve traceability, accountability, and reporting accuracy
+
+---
+
+# 🔹 Technical Requirements
+
+* Ensure **backward compatibility**
+* Do not break existing records
+* Optimize for performance with large datasets
+* Ensure sequence generation is **race-condition safe** (no duplicates)
+
+---

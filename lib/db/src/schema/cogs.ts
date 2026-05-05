@@ -13,24 +13,29 @@ import {
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./auth";
 
-export const projectsTable = pgTable("projects", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: varchar("name", { length: 255 }).notNull(),
-  location: varchar("location", { length: 255 }).notNull(),
-  contractStart: date("contract_start").notNull(),
-  contractEnd: date("contract_end").notNull(),
-  notes: text("notes"),
-  createdById: varchar("created_by_id").references(() => usersTable.id, {
-    onDelete: "set null",
-  }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
+export const projectsTable = pgTable(
+  "projects",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar("name", { length: 255 }).notNull(),
+    code: varchar("code", { length: 32 }),
+    location: varchar("location", { length: 255 }).notNull(),
+    contractStart: date("contract_start").notNull(),
+    contractEnd: date("contract_end").notNull(),
+    notes: text("notes"),
+    createdById: varchar("created_by_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [uniqueIndex("UQ_projects_code").on(t.code)],
+);
 
 export const projectServicesTable = pgTable(
   "project_services",
@@ -61,6 +66,7 @@ export const projectAccessTable = pgTable(
       .references(() => usersTable.id, { onDelete: "cascade" }),
     canViewSummary: boolean("can_view_summary").notNull().default(true),
     canEditEntries: boolean("can_edit_entries").notNull().default(false),
+    canResetApproval: boolean("can_reset_approval").notNull().default(false),
     grantedById: varchar("granted_by_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
@@ -93,6 +99,8 @@ export const dailyEntriesTable = pgTable(
       .notNull()
       .default(0),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    sequenceNumber: integer("sequence_number"),
+    sequenceCode: varchar("sequence_code", { length: 64 }),
     notes: text("notes"),
     createdById: varchar("created_by_id").references(() => usersTable.id, {
       onDelete: "set null",
@@ -107,6 +115,7 @@ export const dailyEntriesTable = pgTable(
   },
   (t) => [
     index("IDX_daily_entries_project_date").on(t.projectId, t.entryDate),
+    uniqueIndex("UQ_daily_entries_project_seq").on(t.projectId, t.sequenceNumber),
   ],
 );
 
@@ -171,3 +180,64 @@ export type InsertServiceCostEntry = typeof serviceCostEntriesTable.$inferInsert
 
 export type EntryApproval = typeof entryApprovalsTable.$inferSelect;
 export type InsertEntryApproval = typeof entryApprovalsTable.$inferInsert;
+
+export const projectApproverAssignmentsTable = pgTable(
+  "project_approver_assignments",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    projectId: varchar("project_id")
+      .notNull()
+      .references(() => projectsTable.id, { onDelete: "cascade" }),
+    level: integer("level").notNull(),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("IDX_approver_assignments_project_level").on(t.projectId, t.level),
+    uniqueIndex("UQ_approver_assignments_project_level_user").on(
+      t.projectId,
+      t.level,
+      t.userId,
+    ),
+  ],
+);
+
+export const entryAuditLogTable = pgTable(
+  "entry_audit_log",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    dailyEntryId: varchar("daily_entry_id").references(
+      () => dailyEntriesTable.id,
+      { onDelete: "set null" },
+    ),
+    projectId: varchar("project_id").notNull(),
+    action: varchar("action", { length: 32 }).notNull(),
+    level: integer("level"),
+    levelName: varchar("level_name", { length: 32 }),
+    field: varchar("field", { length: 64 }),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    actorId: varchar("actor_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("IDX_entry_audit_entry").on(t.dailyEntryId),
+    index("IDX_entry_audit_project").on(t.projectId),
+  ],
+);
+
+export type ProjectApproverAssignment =
+  typeof projectApproverAssignmentsTable.$inferSelect;
+export type InsertProjectApproverAssignment =
+  typeof projectApproverAssignmentsTable.$inferInsert;
+
+export type EntryAuditLog = typeof entryAuditLogTable.$inferSelect;
+export type InsertEntryAuditLog = typeof entryAuditLogTable.$inferInsert;

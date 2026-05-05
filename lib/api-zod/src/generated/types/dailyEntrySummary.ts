@@ -22,4 +22,8 @@ export interface DailyEntrySummary {
   lockedAt?: Date | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  sequenceNumber?: number | null;
+  /** @nullable */
+  sequenceCode?: string | null;
 }

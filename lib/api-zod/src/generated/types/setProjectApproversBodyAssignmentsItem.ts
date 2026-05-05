@@ -6,9 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface GrantAccessBody {
+export type SetProjectApproversBodyAssignmentsItem = {
+  /**
+   * @minimum 1
+   * @maximum 5
+   */
+  level: number;
   userId: string;
-  canViewSummary?: boolean;
-  canEditEntries?: boolean;
-  canResetApproval?: boolean;
-}
+};

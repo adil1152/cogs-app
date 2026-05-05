@@ -21,6 +21,7 @@ async function serializeAccess(a: typeof projectAccessTable.$inferSelect) {
     userId: a.userId,
     canViewSummary: a.canViewSummary,
     canEditEntries: a.canEditEntries,
+    canResetApproval: a.canResetApproval,
     grantedAt: a.grantedAt.toISOString(),
     user: u
       ? {
@@ -77,6 +78,7 @@ router.post(
         userId: parsed.data.userId,
         canViewSummary: parsed.data.canViewSummary ?? true,
         canEditEntries: parsed.data.canEditEntries ?? false,
+        canResetApproval: parsed.data.canResetApproval ?? false,
         grantedById: req.user!.id,
       })
       .onConflictDoUpdate({
@@ -84,6 +86,7 @@ router.post(
         set: {
           canViewSummary: parsed.data.canViewSummary ?? true,
           canEditEntries: parsed.data.canEditEntries ?? false,
+          canResetApproval: parsed.data.canResetApproval ?? false,
           grantedById: req.user!.id,
           grantedAt: new Date(),
         },
@@ -107,6 +110,8 @@ router.patch(
       data.canViewSummary = parsed.data.canViewSummary;
     if (parsed.data.canEditEntries !== undefined)
       data.canEditEntries = parsed.data.canEditEntries;
+    if (parsed.data.canResetApproval !== undefined)
+      data.canResetApproval = parsed.data.canResetApproval;
     const [updated] = await db
       .update(projectAccessTable)
       .set(data)

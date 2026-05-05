@@ -3,129 +3,25 @@ import {
   db,
   dailyEntriesTable,
   serviceCostEntriesTable,
-  projectServicesTable,
-  projectsTable,
 } from "@workspace/db";
-import { and, eq, gte, lte, desc } from "drizzle-orm";
+import { and, eq, gte, lte, desc, isNull } from "drizzle-orm";
 import {
   CreateDailyEntryBody,
   UpdateDailyEntryBody,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
 import { getProjectVisibility } from "../lib/projectAccess";
-import { calcFoodMandays, safeDivide } from "../lib/cogsCalc";
+import {
+  buildEntryDetail,
+  buildEntrySummary,
+  computeTotalMandays,
+  type ServiceCostInputItem,
+} from "../lib/entries";
 
 const router: IRouter = Router();
 
-interface ServiceCostInputItem {
-  projectServiceId: string;
-  kind: "food" | "standard";
-  cost?: number;
-  breakfastQty?: number;
-  lunchQty?: number;
-  dinnerQty?: number;
-  midnightQty?: number;
-  mealBoxQty?: number;
-}
-
 function asDateString(d: Date | string): string {
   return d instanceof Date ? d.toISOString().slice(0, 10) : d;
-}
-
-async function buildEntryDetail(entryId: string) {
-  const [entry] = await db
-    .select()
-    .from(dailyEntriesTable)
-    .where(eq(dailyEntriesTable.id, entryId));
-  if (!entry) return null;
-
-  const [project] = await db
-    .select()
-    .from(projectsTable)
-    .where(eq(projectsTable.id, entry.projectId));
-
-  const costs = await db
-    .select({
-      cost: serviceCostEntriesTable,
-      service: projectServicesTable,
-    })
-    .from(serviceCostEntriesTable)
-    .leftJoin(
-      projectServicesTable,
-      eq(projectServicesTable.id, serviceCostEntriesTable.projectServiceId),
-    )
-    .where(eq(serviceCostEntriesTable.dailyEntryId, entryId));
-
-  const totalMandays = Number(entry.totalMandays);
-  let totalCost = 0;
-  const serviceCosts = costs.map(({ cost: c, service }) => {
-    const cVal = Number(c.cost ?? 0);
-    totalCost += cVal;
-    const mandayContribution =
-      c.kind === "food"
-        ? calcFoodMandays({
-            breakfastQty: c.breakfastQty,
-            lunchQty: c.lunchQty,
-            dinnerQty: c.dinnerQty,
-            midnightQty: c.midnightQty,
-            mealBoxQty: c.mealBoxQty,
-          })
-        : 0;
-    return {
-      id: c.id,
-      projectServiceId: c.projectServiceId,
-      serviceName: service?.name ?? "Unknown",
-      kind: c.kind as "food" | "standard",
-      cost: cVal,
-      mandayContribution,
-      costPerManday: safeDivide(cVal, totalMandays),
-      breakfastQty: c.breakfastQty,
-      lunchQty: c.lunchQty,
-      dinnerQty: c.dinnerQty,
-      midnightQty: c.midnightQty,
-      mealBoxQty: c.mealBoxQty,
-    };
-  });
-
-  return {
-    id: entry.id,
-    projectId: entry.projectId,
-    projectName: project?.name ?? "",
-    entryDate: entry.entryDate,
-    location: entry.location,
-    totalMandays,
-    totalCost,
-    costPerManday: safeDivide(totalCost, totalMandays),
-    notes: entry.notes,
-    serviceCosts,
-  };
-}
-
-async function buildEntrySummary(entry: typeof dailyEntriesTable.$inferSelect) {
-  const [project] = await db
-    .select()
-    .from(projectsTable)
-    .where(eq(projectsTable.id, entry.projectId));
-
-  const costs = await db
-    .select({ cost: serviceCostEntriesTable.cost })
-    .from(serviceCostEntriesTable)
-    .where(eq(serviceCostEntriesTable.dailyEntryId, entry.id));
-
-  const totalMandays = Number(entry.totalMandays);
-  const totalCost = costs.reduce((s, r) => s + Number(r.cost ?? 0), 0);
-
-  return {
-    id: entry.id,
-    projectId: entry.projectId,
-    projectName: project?.name ?? "",
-    entryDate: entry.entryDate,
-    location: entry.location,
-    totalMandays,
-    totalCost,
-    costPerManday: safeDivide(totalCost, totalMandays),
-    notes: entry.notes,
-  };
 }
 
 router.get(
@@ -135,7 +31,7 @@ router.get(
     const v = await getProjectVisibility(
       req.user!.id,
       req.user!.role,
-      (req.params.id as string),
+      req.params.id as string,
     );
     if (!v.project) {
       res.status(404).json({ error: "Project not found" });
@@ -146,7 +42,7 @@ router.get(
       return;
     }
 
-    const conds = [eq(dailyEntriesTable.projectId, (req.params.id as string))];
+    const conds = [eq(dailyEntriesTable.projectId, req.params.id as string)];
     if (typeof req.query.from === "string")
       conds.push(gte(dailyEntriesTable.entryDate, req.query.from));
     if (typeof req.query.to === "string")
@@ -169,7 +65,7 @@ router.post(
     const v = await getProjectVisibility(
       req.user!.id,
       req.user!.role,
-      (req.params.id as string),
+      req.params.id as string,
     );
     if (!v.project) {
       res.status(404).json({ error: "Project not found" });
@@ -182,47 +78,42 @@ router.post(
 
     const parsed = CreateDailyEntryBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Invalid body", details: parsed.error.issues });
+      res
+        .status(400)
+        .json({ error: "Invalid body", details: parsed.error.issues });
       return;
     }
 
-    // Server is the source of truth for totalMandays. Sum the food-formula
-    // mandays from every service line; standard services contribute 0.
-    const computedMandays = parsed.data.serviceCosts.reduce(
-      (sum: number, sc: ServiceCostInputItem) =>
-        sum +
-        (sc.kind === "food"
-          ? calcFoodMandays({
-              breakfastQty: sc.breakfastQty,
-              lunchQty: sc.lunchQty,
-              dinnerQty: sc.dinnerQty,
-              midnightQty: sc.midnightQty,
-              mealBoxQty: sc.mealBoxQty,
-            })
-          : 0),
-      0,
+    const override = !!parsed.data.totalMandaysOverride;
+    const serviceCosts = parsed.data.serviceCosts as ServiceCostInputItem[];
+    const totalMandays = computeTotalMandays(
+      serviceCosts,
+      override,
+      parsed.data.totalMandays,
     );
 
     const created = await db.transaction(async (tx) => {
       const [entry] = await tx
         .insert(dailyEntriesTable)
         .values({
-          projectId: (req.params.id as string),
+          projectId: req.params.id as string,
           entryDate: asDateString(parsed.data.entryDate),
           location: parsed.data.location,
-          totalMandays: String(computedMandays),
+          totalMandays: String(totalMandays),
+          totalMandaysOverride: override,
           notes: parsed.data.notes ?? null,
           createdById: req.user!.id,
         })
         .returning();
 
-      if (parsed.data.serviceCosts.length > 0) {
+      if (serviceCosts.length > 0) {
         await tx.insert(serviceCostEntriesTable).values(
-          parsed.data.serviceCosts.map((sc: ServiceCostInputItem) => ({
+          serviceCosts.map((sc) => ({
             dailyEntryId: entry.id,
             projectServiceId: sc.projectServiceId,
             kind: sc.kind,
             cost: String(sc.cost ?? 0),
+            mandays: sc.mandays != null ? String(sc.mandays) : null,
             breakfastQty: sc.breakfastQty ?? null,
             lunchQty: sc.lunchQty ?? null,
             dinnerQty: sc.dinnerQty ?? null,
@@ -245,7 +136,7 @@ router.get(
     const [entry] = await db
       .select()
       .from(dailyEntriesTable)
-      .where(eq(dailyEntriesTable.id, (req.params.id as string)));
+      .where(eq(dailyEntriesTable.id, req.params.id as string));
     if (!entry) {
       res.status(404).json({ error: "Entry not found" });
       return;
@@ -267,12 +158,17 @@ router.patch(
   "/entries/:id",
   requireAuth,
   async (req: Request, res: Response): Promise<void> => {
+    const id = req.params.id as string;
     const [entry] = await db
       .select()
       .from(dailyEntriesTable)
-      .where(eq(dailyEntriesTable.id, (req.params.id as string)));
+      .where(eq(dailyEntriesTable.id, id));
     if (!entry) {
       res.status(404).json({ error: "Entry not found" });
+      return;
+    }
+    if (entry.lockedAt) {
+      res.status(403).json({ error: "Entry is locked and cannot be edited" });
       return;
     }
     const v = await getProjectVisibility(
@@ -291,51 +187,65 @@ router.patch(
       return;
     }
 
+    try {
     await db.transaction(async (tx) => {
       const data: Record<string, unknown> = {};
       if (parsed.data.entryDate !== undefined)
         data.entryDate = asDateString(parsed.data.entryDate);
-      if (parsed.data.location !== undefined) data.location = parsed.data.location;
+      if (parsed.data.location !== undefined)
+        data.location = parsed.data.location;
       if (parsed.data.notes !== undefined) data.notes = parsed.data.notes;
 
-      // Recompute totalMandays from serviceCosts whenever they're provided.
-      if (parsed.data.serviceCosts !== undefined) {
-        const computedMandays = parsed.data.serviceCosts.reduce(
-          (sum: number, sc: ServiceCostInputItem) =>
-            sum +
-            (sc.kind === "food"
-              ? calcFoodMandays({
-                  breakfastQty: sc.breakfastQty,
-                  lunchQty: sc.lunchQty,
-                  dinnerQty: sc.dinnerQty,
-                  midnightQty: sc.midnightQty,
-                  mealBoxQty: sc.mealBoxQty,
-                })
-              : 0),
-          0,
-        );
-        data.totalMandays = String(computedMandays);
+      const overrideAfter =
+        parsed.data.totalMandaysOverride ?? entry.totalMandaysOverride;
+      if (parsed.data.totalMandaysOverride !== undefined) {
+        data.totalMandaysOverride = overrideAfter;
       }
+
+      if (parsed.data.serviceCosts !== undefined) {
+        const tm = computeTotalMandays(
+          parsed.data.serviceCosts as ServiceCostInputItem[],
+          overrideAfter,
+          parsed.data.totalMandays,
+        );
+        data.totalMandays = String(tm);
+      } else if (overrideAfter && parsed.data.totalMandays !== undefined) {
+        data.totalMandays = String(parsed.data.totalMandays);
+      }
+
       data.updatedAt = new Date();
 
+      // Lock-aware update: re-check lockedAt inside the transaction so a
+      // concurrent approval that locks between our check and our write cannot
+      // mutate a now-locked record.
       if (Object.keys(data).length > 0) {
-        await tx
+        const updated = await tx
           .update(dailyEntriesTable)
           .set(data)
-          .where(eq(dailyEntriesTable.id, (req.params.id as string)));
+          .where(
+            and(
+              eq(dailyEntriesTable.id, id),
+              isNull(dailyEntriesTable.lockedAt),
+            ),
+          )
+          .returning({ id: dailyEntriesTable.id });
+        if (updated.length === 0) {
+          throw new LockedConflict("Entry was locked — refresh to see changes");
+        }
       }
 
       if (parsed.data.serviceCosts !== undefined) {
         await tx
           .delete(serviceCostEntriesTable)
-          .where(eq(serviceCostEntriesTable.dailyEntryId, (req.params.id as string)));
+          .where(eq(serviceCostEntriesTable.dailyEntryId, id));
         if (parsed.data.serviceCosts.length > 0) {
           await tx.insert(serviceCostEntriesTable).values(
-            parsed.data.serviceCosts.map((sc: ServiceCostInputItem) => ({
-              dailyEntryId: (req.params.id as string),
+            (parsed.data.serviceCosts as ServiceCostInputItem[]).map((sc) => ({
+              dailyEntryId: id,
               projectServiceId: sc.projectServiceId,
               kind: sc.kind,
               cost: String(sc.cost ?? 0),
+              mandays: sc.mandays != null ? String(sc.mandays) : null,
               breakfastQty: sc.breakfastQty ?? null,
               lunchQty: sc.lunchQty ?? null,
               dinnerQty: sc.dinnerQty ?? null,
@@ -346,8 +256,15 @@ router.patch(
         }
       }
     });
+    } catch (e) {
+      if (e instanceof LockedConflict) {
+        res.status(409).json({ error: e.message });
+        return;
+      }
+      throw e;
+    }
 
-    res.json(await buildEntryDetail((req.params.id as string)));
+    res.json(await buildEntryDetail(id));
   },
 );
 
@@ -355,12 +272,17 @@ router.delete(
   "/entries/:id",
   requireAuth,
   async (req: Request, res: Response): Promise<void> => {
+    const id = req.params.id as string;
     const [entry] = await db
       .select()
       .from(dailyEntriesTable)
-      .where(eq(dailyEntriesTable.id, (req.params.id as string)));
+      .where(eq(dailyEntriesTable.id, id));
     if (!entry) {
       res.status(204).end();
+      return;
+    }
+    if (entry.lockedAt) {
+      res.status(403).json({ error: "Entry is locked and cannot be deleted" });
       return;
     }
     const v = await getProjectVisibility(
@@ -372,9 +294,27 @@ router.delete(
       res.status(403).json({ error: "Edit access required" });
       return;
     }
-    await db.delete(dailyEntriesTable).where(eq(dailyEntriesTable.id, (req.params.id as string)));
+    // Lock-aware delete: refuses to remove a record locked between our pre-check
+    // and the delete itself.
+    const deleted = await db
+      .delete(dailyEntriesTable)
+      .where(
+        and(
+          eq(dailyEntriesTable.id, id),
+          isNull(dailyEntriesTable.lockedAt),
+        ),
+      )
+      .returning({ id: dailyEntriesTable.id });
+    if (deleted.length === 0) {
+      res
+        .status(409)
+        .json({ error: "Entry was locked concurrently — refresh and retry" });
+      return;
+    }
     res.status(204).end();
   },
 );
+
+class LockedConflict extends Error {}
 
 export default router;

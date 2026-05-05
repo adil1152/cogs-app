@@ -6,6 +6,7 @@ import projectsRouter from "./projects";
 import servicesRouter from "./services";
 import accessRouter from "./access";
 import entriesRouter from "./entries";
+import approvalsRouter from "./approvals";
 import reportsRouter from "./reports";
 
 const router: IRouter = Router();
@@ -17,6 +18,7 @@ router.use(projectsRouter);
 router.use(servicesRouter);
 router.use(accessRouter);
 router.use(entriesRouter);
+router.use(approvalsRouter);
 router.use(reportsRouter);
 
 export default router;

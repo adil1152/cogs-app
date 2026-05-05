@@ -8,54 +8,42 @@ import {
   useCreateDailyEntry,
   useUpdateDailyEntry,
   useDeleteDailyEntry,
+  useApproveDailyEntry,
+  useRejectDailyEntry,
+  useListEntryApprovals,
   getGetProjectQueryKey,
   getListProjectServicesQueryKey,
   getGetDailyEntryQueryKey,
   getListProjectEntriesQueryKey,
   getGetDashboardQueryKey,
   getGetRecentActivityQueryKey,
+  getListEntryApprovalsQueryKey,
   type ServiceCostInput,
 } from "@workspace/api-client-react";
+import { useAuth } from "@workspace/replit-auth-web";
 import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { computeMealMandays } from "@/lib/cogs-formula";
 import { formatCurrency, formatNumber, todayISO } from "@/lib/format";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2, Lock, CheckCircle2, XCircle } from "lucide-react";
+
+const APPROVAL_LEVELS = ["OP", "SOP", "COO", "CC", "Additional"] as const;
 
 interface ServiceLine {
   projectServiceId: string;
   name: string;
   kind: "food" | "standard";
   cost: string;
-  breakfastQty: string;
-  lunchQty: string;
-  dinnerQty: string;
-  midnightQty: string;
-  mealBoxQty: string;
+  mandays: string;
 }
 
 function emptyLine(svc: { id: string; name: string; kind: "food" | "standard" }): ServiceLine {
-  return {
-    projectServiceId: svc.id,
-    name: svc.name,
-    kind: svc.kind,
-    cost: "",
-    breakfastQty: "",
-    lunchQty: "",
-    dinnerQty: "",
-    midnightQty: "",
-    mealBoxQty: "",
-  };
+  return { projectServiceId: svc.id, name: svc.name, kind: svc.kind, cost: "", mandays: "" };
 }
 
 export default function EntryForm() {
@@ -67,6 +55,8 @@ export default function EntryForm() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const { data: project } = useGetProject(projectId, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId) },
@@ -77,22 +67,28 @@ export default function EntryForm() {
   const { data: existingEntry } = useGetDailyEntry(entryId ?? "", {
     query: { enabled: !!entryId, queryKey: getGetDailyEntryQueryKey(entryId ?? "") },
   });
+  const { data: approvals } = useListEntryApprovals(entryId ?? "", {
+    query: { enabled: !!entryId, queryKey: getListEntryApprovalsQueryKey(entryId ?? "") },
+  });
+
+  const isLocked = !!existingEntry?.isLocked;
+  const currentLevel = existingEntry?.currentApprovalLevel ?? 0;
 
   const [entryDate, setEntryDate] = useState(todayISO());
   const [location, setLocation] = useState("");
-  const [totalMandays, setTotalMandays] = useState("");
+  const [totalMandaysOverride, setTotalMandaysOverride] = useState(false);
+  const [totalMandaysManual, setTotalMandaysManual] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<ServiceLine[]>([]);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Initialize lines when services load (for new entry) or when entry+services load (for edit)
   useEffect(() => {
     if (!services) return;
     if (isEdit) {
       if (!existingEntry) return;
       setEntryDate(existingEntry.entryDate);
       setLocation(existingEntry.location);
-      setTotalMandays(String(existingEntry.totalMandays));
+      setTotalMandaysOverride(!!existingEntry.totalMandaysOverride);
+      setTotalMandaysManual(String(existingEntry.totalMandays));
       setNotes(existingEntry.notes ?? "");
       const byId = new Map(existingEntry.serviceCosts.map((s) => [s.projectServiceId, s]));
       setLines(
@@ -103,11 +99,12 @@ export default function EntryForm() {
             name: svc.name,
             kind: svc.kind as "food" | "standard",
             cost: sc?.cost != null ? String(sc.cost) : "",
-            breakfastQty: sc?.breakfastQty != null ? String(sc.breakfastQty) : "",
-            lunchQty: sc?.lunchQty != null ? String(sc.lunchQty) : "",
-            dinnerQty: sc?.dinnerQty != null ? String(sc.dinnerQty) : "",
-            midnightQty: sc?.midnightQty != null ? String(sc.midnightQty) : "",
-            mealBoxQty: sc?.mealBoxQty != null ? String(sc.mealBoxQty) : "",
+            mandays:
+              sc?.mandays != null
+                ? String(sc.mandays)
+                : sc?.mandayContribution != null && sc.mandayContribution > 0
+                  ? String(sc.mandayContribution)
+                  : "",
           };
         }),
       );
@@ -119,32 +116,35 @@ export default function EntryForm() {
 
   const totals = useMemo(() => {
     let totalCost = 0;
-    let mealMandays = 0;
+    let summedMandays = 0;
     for (const l of lines) {
       const c = Number(l.cost);
       if (!Number.isNaN(c)) totalCost += c;
-      if (l.kind === "food") {
-        mealMandays += computeMealMandays({
-          breakfastQty: Number(l.breakfastQty) || 0,
-          lunchQty: Number(l.lunchQty) || 0,
-          dinnerQty: Number(l.dinnerQty) || 0,
-          midnightQty: Number(l.midnightQty) || 0,
-          mealBoxQty: Number(l.mealBoxQty) || 0,
-        });
-      }
+      const m = Number(l.mandays);
+      if (!Number.isNaN(m)) summedMandays += m;
     }
-    const tm = Number(totalMandays) || 0;
+    const tm = totalMandaysOverride
+      ? Number(totalMandaysManual) || 0
+      : summedMandays;
     const cpm = tm ? totalCost / tm : null;
-    return { totalCost, mealMandays, costPerManday: cpm };
-  }, [lines, totalMandays]);
+    return { totalCost, summedMandays, totalMandays: tm, costPerManday: cpm };
+  }, [lines, totalMandaysOverride, totalMandaysManual]);
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: getListProjectEntriesQueryKey(projectId) });
+    queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetRecentActivityQueryKey() });
+    if (entryId) {
+      queryClient.invalidateQueries({ queryKey: getGetDailyEntryQueryKey(entryId) });
+      queryClient.invalidateQueries({ queryKey: getListEntryApprovalsQueryKey(entryId) });
+    }
+  };
 
   const create = useCreateDailyEntry({
     mutation: {
       onSuccess: () => {
         toast({ title: "Entry saved" });
-        queryClient.invalidateQueries({ queryKey: getListProjectEntriesQueryKey(projectId) });
-        queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetRecentActivityQueryKey() });
+        invalidateAll();
         navigate(`/projects/${projectId}`);
       },
       onError: (err: any) => toast({ title: "Could not save", description: err.message, variant: "destructive" }),
@@ -154,10 +154,7 @@ export default function EntryForm() {
     mutation: {
       onSuccess: () => {
         toast({ title: "Entry updated" });
-        queryClient.invalidateQueries({ queryKey: getListProjectEntriesQueryKey(projectId) });
-        queryClient.invalidateQueries({ queryKey: getGetDailyEntryQueryKey(entryId!) });
-        queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetRecentActivityQueryKey() });
+        invalidateAll();
         navigate(`/projects/${projectId}`);
       },
       onError: (err: any) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
@@ -167,44 +164,61 @@ export default function EntryForm() {
     mutation: {
       onSuccess: () => {
         toast({ title: "Entry deleted" });
-        queryClient.invalidateQueries({ queryKey: getListProjectEntriesQueryKey(projectId) });
-        queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetRecentActivityQueryKey() });
+        invalidateAll();
         navigate(`/projects/${projectId}`);
       },
+      onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
+    },
+  });
+  const approve = useApproveDailyEntry({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Approval recorded" });
+        invalidateAll();
+      },
+      onError: (err: any) => toast({ title: "Approval failed", description: err.message, variant: "destructive" }),
+    },
+  });
+  const reject = useRejectDailyEntry({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Entry sent back to draft" });
+        invalidateAll();
+      },
+      onError: (err: any) => toast({ title: "Reject failed", description: err.message, variant: "destructive" }),
     },
   });
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const tm = Number(totalMandays);
-    if (!entryDate || !location || Number.isNaN(tm) || tm < 0) {
-      toast({ title: "Check the form", description: "Date, location and mandays are required.", variant: "destructive" });
+    if (isLocked) return;
+    if (!entryDate || !location) {
+      toast({ title: "Check the form", description: "Date and location are required.", variant: "destructive" });
       return;
     }
+    if (totalMandaysOverride) {
+      const tm = Number(totalMandaysManual);
+      if (Number.isNaN(tm) || tm < 0) {
+        toast({ title: "Manual mandays invalid", variant: "destructive" });
+        return;
+      }
+    }
     const serviceCosts: ServiceCostInput[] = lines
-      .filter((l) => {
-        if (l.kind === "standard") return l.cost !== "";
-        return (
-          l.cost !== "" || l.breakfastQty !== "" || l.lunchQty !== "" ||
-          l.dinnerQty !== "" || l.midnightQty !== "" || l.mealBoxQty !== ""
-        );
-      })
+      .filter((l) => l.cost !== "" || l.mandays !== "")
       .map((l) => ({
         projectServiceId: l.projectServiceId,
         kind: l.kind as any,
         cost: l.cost !== "" ? Number(l.cost) : 0,
-        ...(l.kind === "food"
-          ? {
-              breakfastQty: Number(l.breakfastQty) || 0,
-              lunchQty: Number(l.lunchQty) || 0,
-              dinnerQty: Number(l.dinnerQty) || 0,
-              midnightQty: Number(l.midnightQty) || 0,
-              mealBoxQty: Number(l.mealBoxQty) || 0,
-            }
-          : {}),
+        ...(l.mandays !== "" ? { mandays: Number(l.mandays) } : {}),
       }));
-    const payload = { entryDate, location, totalMandays: tm, notes, serviceCosts };
+    const payload: any = {
+      entryDate,
+      location,
+      totalMandaysOverride,
+      notes,
+      serviceCosts,
+    };
+    if (totalMandaysOverride) payload.totalMandays = Number(totalMandaysManual);
     if (isEdit) update.mutate({ id: entryId!, data: payload });
     else create.mutate({ id: projectId, data: payload });
   }
@@ -224,149 +238,235 @@ export default function EntryForm() {
           </Link>
         }
       />
-      <form onSubmit={onSubmit} className="px-8 py-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader><CardTitle className="text-base">Day</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
-                <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required data-testid="input-entry-date" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Location</Label>
-                <Input value={location} onChange={(e) => setLocation(e.target.value)} required data-testid="input-entry-location" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Total mandays</Label>
-                <Input
-                  type="number" step="0.01" min="0"
-                  value={totalMandays} onChange={(e) => setTotalMandays(e.target.value)}
-                  required data-testid="input-entry-mandays"
-                />
-              </div>
-              <div className="md:col-span-3 space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
-                <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} data-testid="input-entry-notes" />
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Service costs</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                For food services, enter meal counts and total food spend. Meal mandays are
-                computed live (breakfast 0.2, lunch / dinner / midnight / meal box 0.4 each).
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {lines.length === 0 && (
-                <div className="text-sm text-muted-foreground">
-                  No services configured for this project yet — add some on the project page first.
+      {isEdit && (
+        <div className="px-8 pt-4">
+          <ApprovalStrip
+            currentLevel={currentLevel}
+            isLocked={isLocked}
+            isAdmin={isAdmin}
+            approvals={approvals ?? []}
+            onApprove={() => approve.mutate({ id: entryId! })}
+            onReject={() => reject.mutate({ id: entryId! })}
+            pending={approve.isPending || reject.isPending}
+          />
+        </div>
+      )}
+
+      <form onSubmit={onSubmit} className="px-8 py-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <fieldset disabled={isLocked} className="contents">
+          <div className="lg:col-span-2 space-y-4">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Day</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
+                  <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required data-testid="input-entry-date" />
                 </div>
-              )}
-              {lines.map((l, i) => (
-                <div key={l.projectServiceId} className="rounded-md border border-border bg-card p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{l.name}</span>
-                      <Badge variant={l.kind === "food" ? "default" : "secondary"}>{l.kind}</Badge>
-                    </div>
-                    {l.kind === "food" && (
-                      <span className="text-xs text-muted-foreground tabular-nums">
-                        Meal mandays: {formatNumber(
-                          computeMealMandays({
-                            breakfastQty: Number(l.breakfastQty) || 0,
-                            lunchQty: Number(l.lunchQty) || 0,
-                            dinnerQty: Number(l.dinnerQty) || 0,
-                            midnightQty: Number(l.midnightQty) || 0,
-                            mealBoxQty: Number(l.mealBoxQty) || 0,
-                          }),
-                          2,
-                        )}
-                      </span>
-                    )}
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Location</Label>
+                  <Input value={location} onChange={(e) => setLocation(e.target.value)} required data-testid="input-entry-location" />
+                </div>
+                <div className="md:col-span-2 space-y-1.5">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
+                  <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} data-testid="input-entry-notes" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Service costs</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter cost and mandays per service. Total mandays auto-sum below — flip the
+                  override switch to type in a different number.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {lines.length === 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    No services configured for this project yet — add some on the project page first.
                   </div>
-                  {l.kind === "food" && (
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
-                      <MealInput label="Breakfast" value={l.breakfastQty} onChange={(v) => setLine(i, { breakfastQty: v })} data-testid={`input-breakfast-${i}`} />
-                      <MealInput label="Lunch" value={l.lunchQty} onChange={(v) => setLine(i, { lunchQty: v })} data-testid={`input-lunch-${i}`} />
-                      <MealInput label="Dinner" value={l.dinnerQty} onChange={(v) => setLine(i, { dinnerQty: v })} data-testid={`input-dinner-${i}`} />
-                      <MealInput label="Midnight" value={l.midnightQty} onChange={(v) => setLine(i, { midnightQty: v })} data-testid={`input-midnight-${i}`} />
-                      <MealInput label="Meal box" value={l.mealBoxQty} onChange={(v) => setLine(i, { mealBoxQty: v })} data-testid={`input-mealbox-${i}`} />
+                )}
+                {lines.map((l, i) => {
+                  const cost = Number(l.cost) || 0;
+                  const md = Number(l.mandays) || 0;
+                  const cpm = md ? cost / md : null;
+                  return (
+                    <div key={l.projectServiceId} className="rounded-md border border-border bg-card p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="font-medium">{l.name}</span>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {cpm != null ? `${formatCurrency(cpm)} / manday` : "—"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Cost (SAR)</Label>
+                          <Input
+                            type="number" step="0.01" min="0"
+                            value={l.cost} onChange={(e) => setLine(i, { cost: e.target.value })}
+                            placeholder="0.00"
+                            data-testid={`input-cost-${i}`}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Mandays</Label>
+                          <Input
+                            type="number" step="0.01" min="0"
+                            value={l.mandays} onChange={(e) => setLine(i, { mandays: e.target.value })}
+                            placeholder="0"
+                            data-testid={`input-mandays-${i}`}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  <div className="space-y-1.5 max-w-xs">
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-4">
+            <Card className="border-accent/40 bg-accent/5 sticky top-6">
+              <CardHeader><CardTitle className="text-base">Live totals</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <Row label="Total cost" value={formatCurrency(totals.totalCost)} accent />
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="flex items-center gap-2">
                     <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                      {l.kind === "food" ? "Total food spend" : "Daily cost"}
+                      Manual mandays
                     </Label>
-                    <Input
-                      type="number" step="0.01" min="0"
-                      value={l.cost} onChange={(e) => setLine(i, { cost: e.target.value })}
-                      placeholder="0.00"
-                      data-testid={`input-cost-${i}`}
+                    <Switch
+                      checked={totalMandaysOverride}
+                      onCheckedChange={setTotalMandaysOverride}
+                      data-testid="switch-mandays-override"
                     />
                   </div>
+                  {totalMandaysOverride ? (
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={totalMandaysManual}
+                      onChange={(e) => setTotalMandaysManual(e.target.value)}
+                      className="w-28 text-right tabular-nums"
+                      data-testid="input-total-mandays"
+                    />
+                  ) : (
+                    <span className="tabular-nums font-semibold text-base">
+                      {formatNumber(totals.summedMandays, 2)}
+                    </span>
+                  )}
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-4">
-          <Card className="border-accent/40 bg-accent/5 sticky top-6">
-            <CardHeader><CardTitle className="text-base">Live totals</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Row label="Total cost" value={formatCurrency(totals.totalCost)} accent />
-              <Row label="Total mandays" value={formatNumber(Number(totalMandays) || 0, 2)} />
-              <Row label="Meal mandays (food)" value={formatNumber(totals.mealMandays, 2)} />
-              <Row label="Cost / manday" value={totals.costPerManday != null ? formatCurrency(totals.costPerManday) : "—"} />
-              <Button type="submit" className="w-full" disabled={create.isPending || update.isPending} data-testid="button-save-entry">
-                {isEdit ? "Save changes" : "Save entry"}
-              </Button>
-              {isEdit && (
-                <Button
-                  type="button" variant="outline" className="w-full text-destructive hover:text-destructive"
-                  onClick={() => setConfirmDelete(true)}
-                  data-testid="button-delete-entry"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete entry
+                <Row label="Cost / manday" value={totals.costPerManday != null ? `${formatCurrency(totals.costPerManday)}` : "—"} />
+                <Button type="submit" className="w-full" disabled={create.isPending || update.isPending || isLocked} data-testid="button-save-entry">
+                  {isEdit ? "Save changes" : "Save entry"}
                 </Button>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                {isEdit && !isLocked && (
+                  <Button
+                    type="button" variant="outline" className="w-full text-destructive hover:text-destructive"
+                    onClick={() => del.mutate({ id: entryId! })}
+                    data-testid="button-delete-entry"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete entry
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </fieldset>
       </form>
-      {isEdit && (
-        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this entry?</AlertDialogTitle>
-              <AlertDialogDescription>This can't be undone.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => del.mutate({ id: entryId! })}
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
     </AppLayout>
   );
 }
 
-function MealInput({ label, value, onChange, ...rest }: { label: string; value: string; onChange: (v: string) => void; [k: string]: any }) {
+function ApprovalStrip({
+  currentLevel,
+  isLocked,
+  isAdmin,
+  approvals,
+  onApprove,
+  onReject,
+  pending,
+}: {
+  currentLevel: number;
+  isLocked: boolean;
+  isAdmin: boolean;
+  approvals: Array<any>;
+  onApprove: () => void;
+  onReject: () => void;
+  pending: boolean;
+}) {
+  const nextLevelName = APPROVAL_LEVELS[currentLevel];
+  const byLevel = new Map(approvals.map((a) => [a.level, a]));
   return (
-    <div className="space-y-1">
-      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</Label>
-      <Input type="number" min="0" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" {...rest} />
-    </div>
+    <Card className={isLocked ? "border-accent/60 bg-accent/10" : ""}>
+      <CardContent className="p-4">
+        <div className="flex flex-wrap items-center gap-3 justify-between">
+          <div className="flex items-center gap-3 flex-wrap">
+            {isLocked ? (
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-accent">
+                <Lock className="h-4 w-4" /> Locked — fully approved
+              </span>
+            ) : (
+              <span className="text-sm font-medium text-muted-foreground">
+                Approval progress: {currentLevel} of {APPROVAL_LEVELS.length}
+              </span>
+            )}
+            <div className="flex items-center gap-1.5">
+              {APPROVAL_LEVELS.map((name, i) => {
+                const level = i + 1;
+                const done = level <= currentLevel;
+                const a = byLevel.get(level);
+                return (
+                  <div
+                    key={name}
+                    className={`px-2 py-1 rounded text-xs font-medium border ${
+                      done
+                        ? "bg-accent/20 border-accent/50 text-accent-foreground"
+                        : "bg-muted/40 border-border text-muted-foreground"
+                    }`}
+                    title={a ? `${a.approverName ?? "Approver"} • ${new Date(a.approvedAt).toLocaleString()}` : "Pending"}
+                    data-testid={`approval-step-${name}`}
+                  >
+                    {done && <CheckCircle2 className="inline h-3 w-3 mr-1" />}
+                    {name}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              {!isLocked && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={onApprove}
+                  disabled={pending}
+                  data-testid="button-approve"
+                >
+                  <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                  Approve as {nextLevelName}
+                </Button>
+              )}
+              {currentLevel > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={onReject}
+                  disabled={pending}
+                  data-testid="button-reject"
+                >
+                  <XCircle className="mr-1.5 h-4 w-4" />
+                  Reject to draft
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

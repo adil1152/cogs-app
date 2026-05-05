@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,7 +9,9 @@ import {
   useListProjectEntries,
   useListUsers,
   useCreateProjectService,
+  useUpdateProjectService,
   useDeleteProjectService,
+  useReorderProjectServices,
   useGrantProjectAccess,
   useUpdateProjectAccess,
   useRevokeProjectAccess,
@@ -24,7 +26,6 @@ import {
   type CreateProjectServiceBody,
   type GrantAccessBody,
   type UpdateProjectBody,
-  ProjectServiceKind,
 } from "@workspace/api-client-react";
 import { useAuth } from "@workspace/replit-auth-web";
 import { AppLayout, PageHeader } from "@/components/AppLayout";
@@ -47,7 +48,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
-import { Lock, Plus, Trash2, MapPin, Calendar, FileText, Pencil, Eye, BarChart3 } from "lucide-react";
+import { Lock, Plus, Trash2, MapPin, Calendar, Pencil, BarChart3, ArrowUp, ArrowDown, Check, X } from "lucide-react";
 
 export default function ProjectDetail() {
   const [, params] = useRoute("/projects/:id");
@@ -145,7 +146,8 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
               <TableHead>Location</TableHead>
               <TableHead className="text-right">Mandays</TableHead>
               <TableHead className="text-right">Total cost</TableHead>
-              <TableHead className="text-right">$ / manday</TableHead>
+              <TableHead className="text-right">SAR / manday</TableHead>
+              <TableHead className="text-center">Status</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -157,9 +159,18 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
                 <TableCell className="text-right tabular-nums">{formatNumber(e.totalMandays, 1)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatCurrency(e.totalCost)}</TableCell>
                 <TableCell className="text-right tabular-nums">{e.totalMandays ? formatCurrency(e.costPerManday) : "—"}</TableCell>
+                <TableCell className="text-center">
+                  {e.isLocked ? (
+                    <Badge variant="default" className="gap-1"><Lock className="h-3 w-3" /> Locked</Badge>
+                  ) : (e.currentApprovalLevel ?? 0) > 0 ? (
+                    <Badge variant="secondary">{e.currentApprovalLevel}/5</Badge>
+                  ) : (
+                    <Badge variant="outline">Draft</Badge>
+                  )}
+                </TableCell>
                 <TableCell className="text-right">
                   <Link href={`/projects/${projectId}/entries/${e.id}`}>
-                    <Button variant="ghost" size="sm">View</Button>
+                    <Button variant="ghost" size="sm">{e.isLocked ? "View" : "Edit"}</Button>
                   </Link>
                 </TableCell>
               </TableRow>
@@ -178,12 +189,19 @@ function ServicesPanel({ projectId, services, canEdit }: { projectId: string; se
     defaultValues: { kind: "standard" as any },
   });
   const kind = watch("kind");
+  const sorted = useMemo(
+    () => [...services].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)),
+    [services],
+  );
+  const invalidateServices = () => {
+    queryClient.invalidateQueries({ queryKey: getListProjectServicesQueryKey(projectId) });
+    queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+  };
   const createService = useCreateProjectService({
     mutation: {
       onSuccess: () => {
         toast({ title: "Service added" });
-        queryClient.invalidateQueries({ queryKey: getListProjectServicesQueryKey(projectId) });
-        queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+        invalidateServices();
         reset({ kind: "standard" as any });
       },
       onError: (err: any) => toast({ title: "Could not add service", description: err.message, variant: "destructive" }),
@@ -193,20 +211,36 @@ function ServicesPanel({ projectId, services, canEdit }: { projectId: string; se
     mutation: {
       onSuccess: () => {
         toast({ title: "Service removed" });
-        queryClient.invalidateQueries({ queryKey: getListProjectServicesQueryKey(projectId) });
-        queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+        invalidateServices();
       },
     },
   });
+  const reorder = useReorderProjectServices({
+    mutation: {
+      onSuccess: () => invalidateServices(),
+      onError: (err: any) => toast({ title: "Reorder failed", description: err.message, variant: "destructive" }),
+    },
+  });
+
+  function move(idx: number, dir: -1 | 1) {
+    const target = idx + dir;
+    if (target < 0 || target >= sorted.length) return;
+    const next = sorted.slice();
+    [next[idx], next[target]] = [next[target], next[idx]];
+    reorder.mutate({
+      id: projectId,
+      data: { services: next.map((s, i) => ({ id: s.id, sortOrder: i })) },
+    });
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <Card className="lg:col-span-2">
         <CardHeader><CardTitle className="text-base">Services for this project</CardTitle></CardHeader>
         <CardContent className="p-0">
-          {services.length === 0 ? (
+          {sorted.length === 0 ? (
             <div className="px-6 py-8 text-sm text-muted-foreground text-center">
-              No services configured yet. Food services use the meal-weighted manday formula; standard services use a flat daily cost.
+              No services configured yet. Add services like Catering, Transport, Accommodation — each daily entry will record cost and mandays per service.
             </div>
           ) : (
             <Table>
@@ -214,29 +248,22 @@ function ServicesPanel({ projectId, services, canEdit }: { projectId: string; se
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Kind</TableHead>
-                  {canEdit && <TableHead></TableHead>}
+                  {canEdit && <TableHead className="text-right">Actions</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {services.map((s) => (
-                  <TableRow key={s.id} data-testid={`service-row-${s.id}`}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell>
-                      <Badge variant={s.kind === "food" ? "default" : "secondary"}>{s.kind}</Badge>
-                    </TableCell>
-                    {canEdit && (
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteService.mutate({ id: s.id })}
-                          data-testid={`delete-service-${s.id}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </TableCell>
-                    )}
-                  </TableRow>
+                {sorted.map((s, i) => (
+                  <ServiceRow
+                    key={s.id}
+                    service={s}
+                    canEdit={canEdit}
+                    isFirst={i === 0}
+                    isLast={i === sorted.length - 1}
+                    onMoveUp={() => move(i, -1)}
+                    onMoveDown={() => move(i, 1)}
+                    onDelete={() => deleteService.mutate({ id: s.id })}
+                    onRenamed={invalidateServices}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -260,8 +287,8 @@ function ServicesPanel({ projectId, services, canEdit }: { projectId: string; se
                 <Select value={kind as string} onValueChange={(v) => setValue("kind", v as any)}>
                   <SelectTrigger data-testid="select-service-kind"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="standard">Standard (flat daily cost)</SelectItem>
-                    <SelectItem value="food">Food (meal-weighted)</SelectItem>
+                    <SelectItem value="standard">Standard</SelectItem>
+                    <SelectItem value="food">Food</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -273,6 +300,105 @@ function ServicesPanel({ projectId, services, canEdit }: { projectId: string; se
         </Card>
       )}
     </div>
+  );
+}
+
+function ServiceRow({
+  service,
+  canEdit,
+  isFirst,
+  isLast,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
+  onRenamed,
+}: {
+  service: any;
+  canEdit: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onDelete: () => void;
+  onRenamed: () => void;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(service.name);
+  const update = useUpdateProjectService({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Service renamed" });
+        setEditing(false);
+        onRenamed();
+      },
+      onError: (err: any) => toast({ title: "Rename failed", description: err.message, variant: "destructive" }),
+    },
+  });
+
+  return (
+    <TableRow data-testid={`service-row-${service.id}`}>
+      <TableCell className="font-medium">
+        {editing ? (
+          <div className="flex items-center gap-1">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-8 max-w-xs"
+              autoFocus
+              data-testid={`input-rename-${service.id}`}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") update.mutate({ id: service.id, data: { name } });
+                if (e.key === "Escape") { setName(service.name); setEditing(false); }
+              }}
+            />
+            <Button
+              size="icon" variant="ghost" className="h-8 w-8"
+              onClick={() => update.mutate({ id: service.id, data: { name } })}
+              disabled={update.isPending || !name.trim()}
+              data-testid={`save-rename-${service.id}`}
+            >
+              <Check className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon" variant="ghost" className="h-8 w-8"
+              onClick={() => { setName(service.name); setEditing(false); }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          service.name
+        )}
+      </TableCell>
+      <TableCell>
+        <Badge variant={service.kind === "food" ? "default" : "secondary"}>{service.kind}</Badge>
+      </TableCell>
+      {canEdit && (
+        <TableCell className="text-right">
+          <div className="inline-flex items-center gap-0.5">
+            <Button size="icon" variant="ghost" className="h-8 w-8" disabled={isFirst} onClick={onMoveUp} data-testid={`move-up-${service.id}`}>
+              <ArrowUp className="h-3.5 w-3.5" />
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" disabled={isLast} onClick={onMoveDown} data-testid={`move-down-${service.id}`}>
+              <ArrowDown className="h-3.5 w-3.5" />
+            </Button>
+            {!editing && (
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditing(true)} data-testid={`rename-${service.id}`}>
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            <Button
+              size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive"
+              onClick={onDelete}
+              data-testid={`delete-service-${service.id}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </TableCell>
+      )}
+    </TableRow>
   );
 }
 

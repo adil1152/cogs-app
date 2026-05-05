@@ -44,7 +44,7 @@ export default function Reports() {
     if (!agg) return;
     downloadCsv(
       `report-projects-${from}-to-${to}.csv`,
-      ["Project", "Location", "Mandays", "Total cost", "$/manday"],
+      ["Project", "Location", "Mandays", "Total cost", "SAR/manday"],
       agg.projectBreakdown.map((p) => [p.projectName, p.location, p.totalMandays, p.totalCost, p.totalMandays ? p.costPerManday : ""]),
     );
   }
@@ -97,7 +97,7 @@ export default function Reports() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Kpi label="Total cost" value={formatCurrency(agg?.kpi.totalCost ?? 0)} accent />
           <Kpi label="Total mandays" value={formatNumber(agg?.kpi.totalMandays ?? 0, 1)} />
-          <Kpi label="$ / manday" value={agg?.kpi.totalMandays ? formatCurrency(agg?.kpi.costPerManday ?? 0) : "—"} />
+          <Kpi label="SAR / manday" value={agg?.kpi.totalMandays ? formatCurrency(agg?.kpi.costPerManday ?? 0) : "—"} />
           <Kpi label="Entries" value={formatNumber(agg?.kpi.entryCount ?? 0, 0)} />
         </div>
 
@@ -115,7 +115,7 @@ export default function Reports() {
                       contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 6, fontSize: 12 }}
                     />
                     <Line type="monotone" dataKey="totalCost" name="Total cost" stroke="hsl(var(--accent))" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="costPerManday" name="$/manday" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="costPerManday" name="SAR/manday" stroke="hsl(var(--chart-3))" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (

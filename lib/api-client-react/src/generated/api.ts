@@ -27,6 +27,7 @@ import type {
   DailyEntryDetail,
   DailyEntrySummary,
   DashboardReport,
+  EntryApproval,
   ErrorEnvelope,
   GetAggregateReportParams,
   GetProjectSummaryParams,
@@ -44,6 +45,7 @@ import type {
   ProjectService,
   ProjectSummaryReport,
   RecentActivityItem,
+  ReorderProjectServicesBody,
   TrendsReport,
   UpdateAccessBody,
   UpdateDailyEntryBody,
@@ -1374,6 +1376,94 @@ export const useCreateProjectService = <
   return useMutation(getCreateProjectServiceMutationOptions(options));
 };
 
+/**
+ * @summary Bulk update sort order for a project's services (admin only)
+ */
+export const getReorderProjectServicesUrl = (id: string) => {
+  return `/api/projects/${id}/services/reorder`;
+};
+
+export const reorderProjectServices = async (
+  id: string,
+  reorderProjectServicesBody: ReorderProjectServicesBody,
+  options?: RequestInit,
+): Promise<ProjectService[]> => {
+  return customFetch<ProjectService[]>(getReorderProjectServicesUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(reorderProjectServicesBody),
+  });
+};
+
+export const getReorderProjectServicesMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderProjectServices>>,
+    TError,
+    { id: string; data: BodyType<ReorderProjectServicesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reorderProjectServices>>,
+  TError,
+  { id: string; data: BodyType<ReorderProjectServicesBody> },
+  TContext
+> => {
+  const mutationKey = ["reorderProjectServices"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reorderProjectServices>>,
+    { id: string; data: BodyType<ReorderProjectServicesBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return reorderProjectServices(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReorderProjectServicesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reorderProjectServices>>
+>;
+export type ReorderProjectServicesMutationBody =
+  BodyType<ReorderProjectServicesBody>;
+export type ReorderProjectServicesMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Bulk update sort order for a project's services (admin only)
+ */
+export const useReorderProjectServices = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderProjectServices>>,
+    TError,
+    { id: string; data: BodyType<ReorderProjectServicesBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reorderProjectServices>>,
+  TError,
+  { id: string; data: BodyType<ReorderProjectServicesBody> },
+  TContext
+> => {
+  return useMutation(getReorderProjectServicesMutationOptions(options));
+};
+
 export const getUpdateProjectServiceUrl = (id: string) => {
   return `/api/services/${id}`;
 };
@@ -2292,6 +2382,261 @@ export const useDeleteDailyEntry = <
 > => {
   return useMutation(getDeleteDailyEntryMutationOptions(options));
 };
+
+/**
+ * @summary Advance the entry one approval level (admin only). Locks at final level.
+ */
+export const getApproveDailyEntryUrl = (id: string) => {
+  return `/api/entries/${id}/approve`;
+};
+
+export const approveDailyEntry = async (
+  id: string,
+  options?: RequestInit,
+): Promise<DailyEntryDetail> => {
+  return customFetch<DailyEntryDetail>(getApproveDailyEntryUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getApproveDailyEntryMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveDailyEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof approveDailyEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["approveDailyEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof approveDailyEntry>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return approveDailyEntry(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ApproveDailyEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof approveDailyEntry>>
+>;
+
+export type ApproveDailyEntryMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Advance the entry one approval level (admin only). Locks at final level.
+ */
+export const useApproveDailyEntry = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof approveDailyEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof approveDailyEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getApproveDailyEntryMutationOptions(options));
+};
+
+/**
+ * @summary Reset the entry to draft (level 0, unlock) (admin only)
+ */
+export const getRejectDailyEntryUrl = (id: string) => {
+  return `/api/entries/${id}/reject`;
+};
+
+export const rejectDailyEntry = async (
+  id: string,
+  options?: RequestInit,
+): Promise<DailyEntryDetail> => {
+  return customFetch<DailyEntryDetail>(getRejectDailyEntryUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRejectDailyEntryMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectDailyEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof rejectDailyEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["rejectDailyEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof rejectDailyEntry>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return rejectDailyEntry(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RejectDailyEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof rejectDailyEntry>>
+>;
+
+export type RejectDailyEntryMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reset the entry to draft (level 0, unlock) (admin only)
+ */
+export const useRejectDailyEntry = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof rejectDailyEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof rejectDailyEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRejectDailyEntryMutationOptions(options));
+};
+
+/**
+ * @summary List approvals already granted on this entry
+ */
+export const getListEntryApprovalsUrl = (id: string) => {
+  return `/api/entries/${id}/approvals`;
+};
+
+export const listEntryApprovals = async (
+  id: string,
+  options?: RequestInit,
+): Promise<EntryApproval[]> => {
+  return customFetch<EntryApproval[]>(getListEntryApprovalsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListEntryApprovalsQueryKey = (id: string) => {
+  return [`/api/entries/${id}/approvals`] as const;
+};
+
+export const getListEntryApprovalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listEntryApprovals>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEntryApprovals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListEntryApprovalsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listEntryApprovals>>
+  > = ({ signal }) => listEntryApprovals(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listEntryApprovals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListEntryApprovalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listEntryApprovals>>
+>;
+export type ListEntryApprovalsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List approvals already granted on this entry
+ */
+
+export function useListEntryApprovals<
+  TData = Awaited<ReturnType<typeof listEntryApprovals>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEntryApprovals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListEntryApprovalsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Headline numbers for today, week, month

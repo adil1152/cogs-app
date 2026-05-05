@@ -317,6 +317,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectService'
+  /projects/{id}/services/reorder:
+    patch:
+      tags: [Services]
+      operationId: reorderProjectServices
+      summary: Bulk update sort order for a project's services (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderProjectServicesBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectService'
   /services/{id}:
     patch:
       tags: [Services]
@@ -536,6 +562,69 @@ paths:
       responses:
         '204':
           description: Deleted
+
+  /entries/{id}/approve:
+    post:
+      tags: [Entries]
+      operationId: approveDailyEntry
+      summary: Advance the entry one approval level (admin only). Locks at final level.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /entries/{id}/reject:
+    post:
+      tags: [Entries]
+      operationId: rejectDailyEntry
+      summary: Reset the entry to draft (level 0, unlock) (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+  /entries/{id}/approvals:
+    get:
+      tags: [Entries]
+      operationId: listEntryApprovals
+      summary: List approvals already granted on this entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntryApproval'
 
   /reports/dashboard:
     get:
@@ -817,6 +906,20 @@ components:
           type: string
           enum: [food, standard]
         sortOrder: { type: integer }
+    ReorderProjectServiceItem:
+      type: object
+      required: [id, sortOrder]
+      properties:
+        id: { type: string }
+        sortOrder: { type: integer }
+    ReorderProjectServicesBody:
+      type: object
+      required: [services]
+      properties:
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReorderProjectServiceItem'
 
     ProjectAccess:
       type: object
@@ -857,7 +960,11 @@ components:
           enum: [food, standard]
         cost:
           type: number
-          description: Total daily cost for a standard service line
+          description: Total daily cost for this service line (SAR)
+        mandays:
+          type: number
+          minimum: 0
+          description: Optional per-service mandays contribution
         breakfastQty:
           type: integer
           minimum: 0
@@ -884,6 +991,8 @@ components:
           type: string
           enum: [food, standard]
         cost: { type: number }
+        mandays:
+          type: [number, 'null']
         mandayContribution: { type: number }
         costPerManday: { type: number }
         breakfastQty:
@@ -897,9 +1006,23 @@ components:
         mealBoxQty:
           type: [integer, 'null']
 
+    EntryApproval:
+      type: object
+      required: [id, dailyEntryId, level, levelName, approvedAt]
+      properties:
+        id: { type: string }
+        dailyEntryId: { type: string }
+        level: { type: integer }
+        levelName: { type: string }
+        approverId:
+          type: [string, 'null']
+        approverName:
+          type: [string, 'null']
+        approvedAt: { type: string, format: date-time }
+
     DailyEntrySummary:
       type: object
-      required: [id, projectId, projectName, entryDate, location, totalMandays, totalCost, costPerManday]
+      required: [id, projectId, projectName, entryDate, location, totalMandays, totalCost, costPerManday, totalMandaysOverride, currentApprovalLevel, isLocked]
       properties:
         id: { type: string }
         projectId: { type: string }
@@ -909,6 +1032,12 @@ components:
         totalMandays: { type: number }
         totalCost: { type: number }
         costPerManday: { type: number }
+        totalMandaysOverride: { type: boolean }
+        currentApprovalLevel: { type: integer }
+        isLocked: { type: boolean }
+        lockedAt:
+          type: [string, 'null']
+          format: date-time
         notes:
           type: [string, 'null']
     DailyEntryDetail:
@@ -923,13 +1052,17 @@ components:
                 $ref: '#/components/schemas/ServiceCostBreakdown'
     CreateDailyEntryBody:
       type: object
-      required: [entryDate, location, totalMandays, serviceCosts]
+      required: [entryDate, location, serviceCosts]
       properties:
         entryDate: { type: string, format: date }
         location: { type: string, minLength: 1 }
         totalMandays:
           type: number
           minimum: 0
+          description: Only honored when totalMandaysOverride is true; otherwise auto-summed from serviceCosts.
+        totalMandaysOverride:
+          type: boolean
+          default: false
         notes: { type: string }
         serviceCosts:
           type: array
@@ -943,6 +1076,8 @@ components:
         totalMandays:
           type: number
           minimum: 0
+        totalMandaysOverride:
+          type: boolean
         notes: { type: string }
         serviceCosts:
           type: array

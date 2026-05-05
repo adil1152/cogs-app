@@ -1,9 +1,15 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, projectServicesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import {
+  db,
+  projectServicesTable,
+  serviceCostEntriesTable,
+  dailyEntriesTable,
+} from "@workspace/db";
+import { and, eq, isNotNull, exists, sql } from "drizzle-orm";
 import {
   CreateProjectServiceBody,
   UpdateProjectServiceBody,
+  ReorderProjectServicesBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireAdmin } from "../middlewares/requireAuth";
 import { getProjectVisibility } from "../lib/projectAccess";
@@ -102,10 +108,89 @@ router.delete(
   "/services/:id",
   requireAdmin,
   async (req: Request, res: Response): Promise<void> => {
-    await db
+    const serviceId = req.params.id as string;
+    // Atomic, race-safe: delete only if NO cost rows reference a locked entry.
+    // A concurrent approval that locks an entry between check and delete cannot
+    // sneak through, because the predicate is evaluated by the DB at delete time.
+    const lockedRefSubquery = db
+      .select({ x: sql<number>`1` })
+      .from(serviceCostEntriesTable)
+      .innerJoin(
+        dailyEntriesTable,
+        eq(dailyEntriesTable.id, serviceCostEntriesTable.dailyEntryId),
+      )
+      .where(
+        and(
+          eq(serviceCostEntriesTable.projectServiceId, serviceId),
+          isNotNull(dailyEntriesTable.lockedAt),
+        ),
+      );
+    const deleted = await db
       .delete(projectServicesTable)
-      .where(eq(projectServicesTable.id, (req.params.id as string)));
+      .where(
+        and(
+          eq(projectServicesTable.id, serviceId),
+          sql`NOT EXISTS ${lockedRefSubquery}`,
+        ),
+      )
+      .returning({ id: projectServicesTable.id });
+    if (deleted.length === 0) {
+      // Distinguish "not found" from "locked-blocked" with a follow-up read.
+      const [stillExists] = await db
+        .select({ id: projectServicesTable.id })
+        .from(projectServicesTable)
+        .where(eq(projectServicesTable.id, serviceId));
+      if (stillExists) {
+        res.status(409).json({
+          error:
+            "This service has cost entries on locked records and cannot be deleted",
+        });
+        return;
+      }
+    }
     res.status(204).end();
+  },
+);
+
+router.patch(
+  "/projects/:id/services/reorder",
+  requireAdmin,
+  async (req: Request, res: Response): Promise<void> => {
+    const projectId = req.params.id as string;
+    const parsed = ReorderProjectServicesBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid body" });
+      return;
+    }
+    const items = parsed.data.services;
+    if (items.length === 0) {
+      const rows = await db
+        .select()
+        .from(projectServicesTable)
+        .where(eq(projectServicesTable.projectId, projectId))
+        .orderBy(projectServicesTable.sortOrder);
+      res.json(rows.map(serialize));
+      return;
+    }
+    await db.transaction(async (tx) => {
+      for (const it of items) {
+        await tx
+          .update(projectServicesTable)
+          .set({ sortOrder: it.sortOrder })
+          .where(
+            and(
+              eq(projectServicesTable.id, it.id),
+              eq(projectServicesTable.projectId, projectId),
+            ),
+          );
+      }
+    });
+    const rows = await db
+      .select()
+      .from(projectServicesTable)
+      .where(eq(projectServicesTable.projectId, projectId))
+      .orderBy(projectServicesTable.sortOrder);
+    res.json(rows.map(serialize));
   },
 );
 

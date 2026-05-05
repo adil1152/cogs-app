@@ -219,7 +219,7 @@ function KpiCard({
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
           <Stat label="Mandays" value={kpi ? formatNumber(kpi.totalMandays, 1) : "—"} />
-          <Stat label="$ / manday" value={kpi && kpi.totalMandays ? formatCurrency(kpi.costPerManday) : "—"} />
+          <Stat label="SAR / manday" value={kpi && kpi.totalMandays ? formatCurrency(kpi.costPerManday) : "—"} />
           <Stat label="Entries" value={kpi ? formatNumber(kpi.entryCount, 0) : "—"} />
         </div>
       </CardContent>

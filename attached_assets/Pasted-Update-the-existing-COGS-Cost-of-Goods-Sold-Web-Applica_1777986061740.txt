@@ -1,0 +1,176 @@
+Update the existing **COGS (Cost of Goods Sold) Web Application** with the following functional, UI, and workflow enhancements.
+
+---
+
+# 🔹 1. Manday Calculation Enhancements
+
+* The **Total Manday field** must:
+
+  * Be **auto-calculated from all services**
+  * Also remain **editable (readable & writable)** for manual override
+
+* Each service must include:
+
+  * **Manday field (optional, not mandatory)**
+  * **Cost field (mandatory)**
+
+---
+
+### 🔸 Calculation Logic
+
+* For each service:
+
+  * System calculates:
+
+    ```
+    Cost per Manday = Service Cost ÷ Service Manday
+    ```
+
+* Total Manday:
+
+  * If user manually enters value → override system calculation
+  * Else → sum of all service mandays
+
+* If a service has:
+
+  * Manday = empty → exclude from manday calculation
+  * Cost still included in total
+
+---
+
+### 🔸 Output Requirements
+
+System must display:
+
+* **Cost per manday (per service)**
+* **Total manday**
+* **Total daily cost (all services combined)**
+
+---
+
+# 🔹 2. Service-Level Costing
+
+Each service should function independently:
+
+* Fields per service:
+
+  * Manday
+  * Cost
+  * Calculated: **Cost per Manday**
+
+* Final summary must:
+
+  * Aggregate all services
+  * Show:
+
+    * Total Cost
+    * Total Manday
+    * Overall Cost per Manday
+
+---
+
+# 🔹 3. Approval Workflow (Multi-Level)
+
+Implement a structured approval process:
+
+### Approval Levels:
+
+1. OP
+2. SOP
+3. COO
+4. CC
+5. Additional Approval (configurable)
+
+### Workflow Rules:
+
+* Approvals must occur **sequentially**
+* Each level must approve before moving to next
+* Final approval locks the record
+
+---
+
+# 🔹 4. Currency Update
+
+* Replace all **Dollar ($)** symbols with **SAR (Saudi Riyal)**
+* Apply consistently across:
+
+  * UI screens
+  * Reports
+  * Exports
+
+---
+
+# 🔹 5. Read-Only After Approval
+
+After final approval:
+
+* Entire record becomes **read-only**
+* Disable:
+
+  * Editing
+  * Deletion
+  * Service modification
+
+---
+
+# 🔹 6. Service Removal Behavior
+
+* When removing a service:
+
+  * **Do NOT show confirmation popup**
+  * Remove instantly
+
+---
+
+# 🔹 7. Service Management (Admin Control)
+
+Admin users must be able to:
+
+* Edit service names
+* Reorder services:
+
+  * Drag & drop OR sequence-based
+* Control service display order (top → bottom)
+
+---
+
+# 🔹 8. Enhanced Calculation Model
+
+Introduce structured calculation per service:
+
+Each service must have:
+
+* Manday
+* Cost
+* Calculated field: **Cost per Manday**
+
+### Processing Flow:
+
+1. Calculate **cost per manday per service**
+2. Aggregate:
+
+   * Total manday
+   * Total cost
+3. Display overall cost metrics
+
+---
+
+# 🔹 Expected Outcome
+
+The updated system should:
+
+* Support **flexible manday calculation (auto + manual)**
+* Provide **accurate service-level costing**
+* Enforce **strict approval workflow**
+* Improve **user experience (faster, cleaner UI)**
+* Enable **admin-level customization and control**
+
+---
+
+# 🔹 Technical Requirement
+
+* Changes must be **backward compatible**
+* Must NOT break existing project data or reports
+* Ensure performance optimization for large datasets
+
+---

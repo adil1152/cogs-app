@@ -86,6 +86,13 @@ export const dailyEntriesTable = pgTable(
       precision: 12,
       scale: 2,
     }).notNull(),
+    totalMandaysOverride: boolean("total_mandays_override")
+      .notNull()
+      .default(false),
+    currentApprovalLevel: integer("current_approval_level")
+      .notNull()
+      .default(0),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
     notes: text("notes"),
     createdById: varchar("created_by_id").references(() => usersTable.id, {
       onDelete: "set null",
@@ -115,6 +122,7 @@ export const serviceCostEntriesTable = pgTable(
       .references(() => projectServicesTable.id, { onDelete: "cascade" }),
     kind: varchar("kind", { length: 16 }).notNull(),
     cost: numeric("cost", { precision: 14, scale: 2 }).notNull().default("0"),
+    mandays: numeric("mandays", { precision: 10, scale: 2 }),
     breakfastQty: integer("breakfast_qty"),
     lunchQty: integer("lunch_qty"),
     dinnerQty: integer("dinner_qty"),
@@ -122,6 +130,28 @@ export const serviceCostEntriesTable = pgTable(
     mealBoxQty: integer("meal_box_qty"),
   },
   (t) => [index("IDX_service_costs_entry").on(t.dailyEntryId)],
+);
+
+export const entryApprovalsTable = pgTable(
+  "entry_approvals",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    dailyEntryId: varchar("daily_entry_id")
+      .notNull()
+      .references(() => dailyEntriesTable.id, { onDelete: "cascade" }),
+    level: integer("level").notNull(),
+    levelName: varchar("level_name", { length: 32 }).notNull(),
+    approverId: varchar("approver_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("IDX_entry_approvals_entry").on(t.dailyEntryId),
+    uniqueIndex("UQ_entry_approvals_entry_level").on(t.dailyEntryId, t.level),
+  ],
 );
 
 export type Project = typeof projectsTable.$inferSelect;
@@ -138,3 +168,6 @@ export type InsertDailyEntry = typeof dailyEntriesTable.$inferInsert;
 
 export type ServiceCostEntry = typeof serviceCostEntriesTable.$inferSelect;
 export type InsertServiceCostEntry = typeof serviceCostEntriesTable.$inferInsert;
+
+export type EntryApproval = typeof entryApprovalsTable.$inferSelect;
+export type InsertEntryApproval = typeof entryApprovalsTable.$inferInsert;

@@ -15,6 +15,11 @@ export interface DailyEntrySummary {
   totalMandays: number;
   totalCost: number;
   costPerManday: number;
+  totalMandaysOverride: boolean;
+  currentApprovalLevel: number;
+  isLocked: boolean;
+  /** @nullable */
+  lockedAt?: Date | null;
   /** @nullable */
   notes?: string | null;
 }

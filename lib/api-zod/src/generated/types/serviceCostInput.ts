@@ -10,8 +10,13 @@ import type { ServiceCostInputKind } from "./serviceCostInputKind";
 export interface ServiceCostInput {
   projectServiceId: string;
   kind: ServiceCostInputKind;
-  /** Total daily cost for a standard service line */
+  /** Total daily cost for this service line (SAR) */
   cost?: number;
+  /**
+   * Optional per-service mandays contribution
+   * @minimum 0
+   */
+  mandays?: number;
   /** @minimum 0 */
   breakfastQty?: number;
   /** @minimum 0 */

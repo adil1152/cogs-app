@@ -157,6 +157,15 @@ export interface UpdateProjectServiceBody {
   sortOrder?: number;
 }
 
+export interface ReorderProjectServiceItem {
+  id: string;
+  sortOrder: number;
+}
+
+export interface ReorderProjectServicesBody {
+  services: ReorderProjectServiceItem[];
+}
+
 export interface ProjectAccess {
   id: string;
   projectId: string;
@@ -189,8 +198,13 @@ export const ServiceCostInputKind = {
 export interface ServiceCostInput {
   projectServiceId: string;
   kind: ServiceCostInputKind;
-  /** Total daily cost for a standard service line */
+  /** Total daily cost for this service line (SAR) */
   cost?: number;
+  /**
+   * Optional per-service mandays contribution
+   * @minimum 0
+   */
+  mandays?: number;
   /** @minimum 0 */
   breakfastQty?: number;
   /** @minimum 0 */
@@ -217,6 +231,8 @@ export interface ServiceCostBreakdown {
   serviceName: string;
   kind: ServiceCostBreakdownKind;
   cost: number;
+  /** @nullable */
+  mandays?: number | null;
   mandayContribution: number;
   costPerManday: number;
   /** @nullable */
@@ -231,6 +247,18 @@ export interface ServiceCostBreakdown {
   mealBoxQty?: number | null;
 }
 
+export interface EntryApproval {
+  id: string;
+  dailyEntryId: string;
+  level: number;
+  levelName: string;
+  /** @nullable */
+  approverId?: string | null;
+  /** @nullable */
+  approverName?: string | null;
+  approvedAt: string;
+}
+
 export interface DailyEntrySummary {
   id: string;
   projectId: string;
@@ -240,6 +268,11 @@ export interface DailyEntrySummary {
   totalMandays: number;
   totalCost: number;
   costPerManday: number;
+  totalMandaysOverride: boolean;
+  currentApprovalLevel: number;
+  isLocked: boolean;
+  /** @nullable */
+  lockedAt?: string | null;
   /** @nullable */
   notes?: string | null;
 }
@@ -252,8 +285,12 @@ export interface CreateDailyEntryBody {
   entryDate: string;
   /** @minLength 1 */
   location: string;
-  /** @minimum 0 */
-  totalMandays: number;
+  /**
+   * Only honored when totalMandaysOverride is true; otherwise auto-summed from serviceCosts.
+   * @minimum 0
+   */
+  totalMandays?: number;
+  totalMandaysOverride?: boolean;
   notes?: string;
   serviceCosts: ServiceCostInput[];
 }
@@ -264,6 +301,7 @@ export interface UpdateDailyEntryBody {
   location?: string;
   /** @minimum 0 */
   totalMandays?: number;
+  totalMandaysOverride?: boolean;
   notes?: string;
   serviceCosts?: ServiceCostInput[];
 }

@@ -11,8 +11,12 @@ export interface CreateDailyEntryBody {
   entryDate: Date;
   /** @minLength 1 */
   location: string;
-  /** @minimum 0 */
-  totalMandays: number;
+  /**
+   * Only honored when totalMandaysOverride is true; otherwise auto-summed from serviceCosts.
+   * @minimum 0
+   */
+  totalMandays?: number;
+  totalMandaysOverride?: boolean;
   notes?: string;
   serviceCosts: ServiceCostInput[];
 }

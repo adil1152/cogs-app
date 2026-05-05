@@ -14,7 +14,8 @@ import {
   getProjectVisibility,
   serializeProject,
 } from "../lib/projectAccess";
-import { calcFoodMandays, safeDivide } from "../lib/cogsCalc";
+import { safeDivide } from "../lib/cogsCalc";
+import { serviceMandays } from "../lib/entries";
 
 const router: IRouter = Router();
 
@@ -151,16 +152,15 @@ router.get(
           mandayContribution: 0,
         };
         prev.totalCost += Number(row.cost.cost ?? 0);
-        prev.mandayContribution +=
-          row.cost.kind === "food"
-            ? calcFoodMandays({
-                breakfastQty: row.cost.breakfastQty,
-                lunchQty: row.cost.lunchQty,
-                dinnerQty: row.cost.dinnerQty,
-                midnightQty: row.cost.midnightQty,
-                mealBoxQty: row.cost.mealBoxQty,
-              })
-            : 0;
+        prev.mandayContribution += serviceMandays({
+          mandays: row.cost.mandays,
+          kind: row.cost.kind,
+          breakfastQty: row.cost.breakfastQty,
+          lunchQty: row.cost.lunchQty,
+          dinnerQty: row.cost.dinnerQty,
+          midnightQty: row.cost.midnightQty,
+          mealBoxQty: row.cost.mealBoxQty,
+        });
         serviceTotals.set(key, prev);
       }
 
@@ -306,16 +306,15 @@ router.get(
           mandayContribution: 0,
         };
         prev.totalCost += Number(row.cost.cost ?? 0);
-        prev.mandayContribution +=
-          row.cost.kind === "food"
-            ? calcFoodMandays({
-                breakfastQty: row.cost.breakfastQty,
-                lunchQty: row.cost.lunchQty,
-                dinnerQty: row.cost.dinnerQty,
-                midnightQty: row.cost.midnightQty,
-                mealBoxQty: row.cost.mealBoxQty,
-              })
-            : 0;
+        prev.mandayContribution += serviceMandays({
+          mandays: row.cost.mandays,
+          kind: row.cost.kind,
+          breakfastQty: row.cost.breakfastQty,
+          lunchQty: row.cost.lunchQty,
+          dinnerQty: row.cost.dinnerQty,
+          midnightQty: row.cost.midnightQty,
+          mealBoxQty: row.cost.mealBoxQty,
+        });
         serviceTotals.set(key, prev);
       }
       const eprev = entriesById.get(row.entry.id) ?? {
@@ -408,16 +407,15 @@ router.get(
           mandayContribution: 0,
         };
         prev.totalCost += Number(row.cost.cost ?? 0);
-        prev.mandayContribution +=
-          row.cost.kind === "food"
-            ? calcFoodMandays({
-                breakfastQty: row.cost.breakfastQty,
-                lunchQty: row.cost.lunchQty,
-                dinnerQty: row.cost.dinnerQty,
-                midnightQty: row.cost.midnightQty,
-                mealBoxQty: row.cost.mealBoxQty,
-              })
-            : 0;
+        prev.mandayContribution += serviceMandays({
+          mandays: row.cost.mandays,
+          kind: row.cost.kind,
+          breakfastQty: row.cost.breakfastQty,
+          lunchQty: row.cost.lunchQty,
+          dinnerQty: row.cost.dinnerQty,
+          midnightQty: row.cost.midnightQty,
+          mealBoxQty: row.cost.mealBoxQty,
+        });
         serviceTotals.set(key, prev);
       }
       if (row.project) {

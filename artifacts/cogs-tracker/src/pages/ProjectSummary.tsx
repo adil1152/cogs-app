@@ -41,7 +41,7 @@ export default function ProjectSummary() {
     if (!summary) return;
     downloadCsv(
       `${project?.name ?? "project"}-summary-${from}-to-${to}.csv`,
-      ["Date", "Location", "Total mandays", "Total cost", "Cost/manday"],
+      ["Date", "Location", "Total mandays", "Total cost", "SAR/manday"],
       summary.dailyEntries.map((e) => [
         e.entryDate, e.location, e.totalMandays, e.totalCost, e.totalMandays ? e.costPerManday : "",
       ]),
@@ -96,7 +96,7 @@ export default function ProjectSummary() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Kpi label="Total cost" value={formatCurrency(summary?.kpi.totalCost ?? 0)} accent />
               <Kpi label="Total mandays" value={formatNumber(summary?.kpi.totalMandays ?? 0, 1)} />
-              <Kpi label="$ / manday" value={summary?.kpi.totalMandays ? formatCurrency(summary?.kpi.costPerManday ?? 0) : "—"} />
+              <Kpi label="SAR / manday" value={summary?.kpi.totalMandays ? formatCurrency(summary?.kpi.costPerManday ?? 0) : "—"} />
               <Kpi label="Entries" value={formatNumber(summary?.kpi.entryCount ?? 0, 0)} />
             </div>
             <Card>

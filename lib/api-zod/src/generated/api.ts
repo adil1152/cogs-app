@@ -241,6 +241,33 @@ export const CreateProjectServiceBody = zod.object({
   sortOrder: zod.number().optional(),
 });
 
+/**
+ * @summary Bulk update sort order for a project's services (admin only)
+ */
+export const ReorderProjectServicesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ReorderProjectServicesBody = zod.object({
+  services: zod.array(
+    zod.object({
+      id: zod.string(),
+      sortOrder: zod.number(),
+    }),
+  ),
+});
+
+export const ReorderProjectServicesResponseItem = zod.object({
+  id: zod.string(),
+  projectId: zod.string(),
+  name: zod.string(),
+  kind: zod.enum(["food", "standard"]),
+  sortOrder: zod.number(),
+});
+export const ReorderProjectServicesResponse = zod.array(
+  ReorderProjectServicesResponseItem,
+);
+
 export const UpdateProjectServiceParams = zod.object({
   id: zod.coerce.string(),
 });
@@ -358,6 +385,10 @@ export const ListProjectEntriesResponseItem = zod.object({
   totalMandays: zod.number(),
   totalCost: zod.number(),
   costPerManday: zod.number(),
+  totalMandaysOverride: zod.boolean(),
+  currentApprovalLevel: zod.number(),
+  isLocked: zod.boolean(),
+  lockedAt: zod.coerce.date().nullish(),
   notes: zod.string().nullish(),
 });
 export const ListProjectEntriesResponse = zod.array(
@@ -369,6 +400,9 @@ export const CreateDailyEntryParams = zod.object({
 });
 
 export const createDailyEntryBodyTotalMandaysMin = 0;
+
+export const createDailyEntryBodyTotalMandaysOverrideDefault = false;
+export const createDailyEntryBodyServiceCostsItemMandaysMin = 0;
 
 export const createDailyEntryBodyServiceCostsItemBreakfastQtyMin = 0;
 
@@ -383,7 +417,16 @@ export const createDailyEntryBodyServiceCostsItemMealBoxQtyMin = 0;
 export const CreateDailyEntryBody = zod.object({
   entryDate: zod.coerce.date(),
   location: zod.string().min(1),
-  totalMandays: zod.number().min(createDailyEntryBodyTotalMandaysMin),
+  totalMandays: zod
+    .number()
+    .min(createDailyEntryBodyTotalMandaysMin)
+    .optional()
+    .describe(
+      "Only honored when totalMandaysOverride is true; otherwise auto-summed from serviceCosts.",
+    ),
+  totalMandaysOverride: zod
+    .boolean()
+    .default(createDailyEntryBodyTotalMandaysOverrideDefault),
   notes: zod.string().optional(),
   serviceCosts: zod.array(
     zod.object({
@@ -392,7 +435,12 @@ export const CreateDailyEntryBody = zod.object({
       cost: zod
         .number()
         .optional()
-        .describe("Total daily cost for a standard service line"),
+        .describe("Total daily cost for this service line (SAR)"),
+      mandays: zod
+        .number()
+        .min(createDailyEntryBodyServiceCostsItemMandaysMin)
+        .optional()
+        .describe("Optional per-service mandays contribution"),
       breakfastQty: zod
         .number()
         .min(createDailyEntryBodyServiceCostsItemBreakfastQtyMin)
@@ -431,6 +479,10 @@ export const GetDailyEntryResponse = zod
     totalMandays: zod.number(),
     totalCost: zod.number(),
     costPerManday: zod.number(),
+    totalMandaysOverride: zod.boolean(),
+    currentApprovalLevel: zod.number(),
+    isLocked: zod.boolean(),
+    lockedAt: zod.coerce.date().nullish(),
     notes: zod.string().nullish(),
   })
   .and(
@@ -442,6 +494,7 @@ export const GetDailyEntryResponse = zod
           serviceName: zod.string(),
           kind: zod.enum(["food", "standard"]),
           cost: zod.number(),
+          mandays: zod.number().nullish(),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
           breakfastQty: zod.number().nullish(),
@@ -460,6 +513,8 @@ export const UpdateDailyEntryParams = zod.object({
 
 export const updateDailyEntryBodyTotalMandaysMin = 0;
 
+export const updateDailyEntryBodyServiceCostsItemMandaysMin = 0;
+
 export const updateDailyEntryBodyServiceCostsItemBreakfastQtyMin = 0;
 
 export const updateDailyEntryBodyServiceCostsItemLunchQtyMin = 0;
@@ -477,6 +532,7 @@ export const UpdateDailyEntryBody = zod.object({
     .number()
     .min(updateDailyEntryBodyTotalMandaysMin)
     .optional(),
+  totalMandaysOverride: zod.boolean().optional(),
   notes: zod.string().optional(),
   serviceCosts: zod
     .array(
@@ -486,7 +542,12 @@ export const UpdateDailyEntryBody = zod.object({
         cost: zod
           .number()
           .optional()
-          .describe("Total daily cost for a standard service line"),
+          .describe("Total daily cost for this service line (SAR)"),
+        mandays: zod
+          .number()
+          .min(updateDailyEntryBodyServiceCostsItemMandaysMin)
+          .optional()
+          .describe("Optional per-service mandays contribution"),
         breakfastQty: zod
           .number()
           .min(updateDailyEntryBodyServiceCostsItemBreakfastQtyMin)
@@ -522,6 +583,10 @@ export const UpdateDailyEntryResponse = zod
     totalMandays: zod.number(),
     totalCost: zod.number(),
     costPerManday: zod.number(),
+    totalMandaysOverride: zod.boolean(),
+    currentApprovalLevel: zod.number(),
+    isLocked: zod.boolean(),
+    lockedAt: zod.coerce.date().nullish(),
     notes: zod.string().nullish(),
   })
   .and(
@@ -533,6 +598,7 @@ export const UpdateDailyEntryResponse = zod
           serviceName: zod.string(),
           kind: zod.enum(["food", "standard"]),
           cost: zod.number(),
+          mandays: zod.number().nullish(),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
           breakfastQty: zod.number().nullish(),
@@ -548,6 +614,116 @@ export const UpdateDailyEntryResponse = zod
 export const DeleteDailyEntryParams = zod.object({
   id: zod.coerce.string(),
 });
+
+/**
+ * @summary Advance the entry one approval level (admin only). Locks at final level.
+ */
+export const ApproveDailyEntryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ApproveDailyEntryResponse = zod
+  .object({
+    id: zod.string(),
+    projectId: zod.string(),
+    projectName: zod.string(),
+    entryDate: zod.coerce.date(),
+    location: zod.string(),
+    totalMandays: zod.number(),
+    totalCost: zod.number(),
+    costPerManday: zod.number(),
+    totalMandaysOverride: zod.boolean(),
+    currentApprovalLevel: zod.number(),
+    isLocked: zod.boolean(),
+    lockedAt: zod.coerce.date().nullish(),
+    notes: zod.string().nullish(),
+  })
+  .and(
+    zod.object({
+      serviceCosts: zod.array(
+        zod.object({
+          id: zod.string(),
+          projectServiceId: zod.string(),
+          serviceName: zod.string(),
+          kind: zod.enum(["food", "standard"]),
+          cost: zod.number(),
+          mandays: zod.number().nullish(),
+          mandayContribution: zod.number(),
+          costPerManday: zod.number(),
+          breakfastQty: zod.number().nullish(),
+          lunchQty: zod.number().nullish(),
+          dinnerQty: zod.number().nullish(),
+          midnightQty: zod.number().nullish(),
+          mealBoxQty: zod.number().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Reset the entry to draft (level 0, unlock) (admin only)
+ */
+export const RejectDailyEntryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const RejectDailyEntryResponse = zod
+  .object({
+    id: zod.string(),
+    projectId: zod.string(),
+    projectName: zod.string(),
+    entryDate: zod.coerce.date(),
+    location: zod.string(),
+    totalMandays: zod.number(),
+    totalCost: zod.number(),
+    costPerManday: zod.number(),
+    totalMandaysOverride: zod.boolean(),
+    currentApprovalLevel: zod.number(),
+    isLocked: zod.boolean(),
+    lockedAt: zod.coerce.date().nullish(),
+    notes: zod.string().nullish(),
+  })
+  .and(
+    zod.object({
+      serviceCosts: zod.array(
+        zod.object({
+          id: zod.string(),
+          projectServiceId: zod.string(),
+          serviceName: zod.string(),
+          kind: zod.enum(["food", "standard"]),
+          cost: zod.number(),
+          mandays: zod.number().nullish(),
+          mandayContribution: zod.number(),
+          costPerManday: zod.number(),
+          breakfastQty: zod.number().nullish(),
+          lunchQty: zod.number().nullish(),
+          dinnerQty: zod.number().nullish(),
+          midnightQty: zod.number().nullish(),
+          mealBoxQty: zod.number().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary List approvals already granted on this entry
+ */
+export const ListEntryApprovalsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListEntryApprovalsResponseItem = zod.object({
+  id: zod.string(),
+  dailyEntryId: zod.string(),
+  level: zod.number(),
+  levelName: zod.string(),
+  approverId: zod.string().nullish(),
+  approverName: zod.string().nullish(),
+  approvedAt: zod.coerce.date(),
+});
+export const ListEntryApprovalsResponse = zod.array(
+  ListEntryApprovalsResponseItem,
+);
 
 /**
  * @summary Headline numbers for today, week, month
@@ -661,6 +837,10 @@ export const GetProjectSummaryResponse = zod.object({
       totalMandays: zod.number(),
       totalCost: zod.number(),
       costPerManday: zod.number(),
+      totalMandaysOverride: zod.boolean(),
+      currentApprovalLevel: zod.number(),
+      isLocked: zod.boolean(),
+      lockedAt: zod.coerce.date().nullish(),
       notes: zod.string().nullish(),
     }),
   ),

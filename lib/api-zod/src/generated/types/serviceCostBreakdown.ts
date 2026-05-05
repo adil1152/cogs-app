@@ -13,6 +13,8 @@ export interface ServiceCostBreakdown {
   serviceName: string;
   kind: ServiceCostBreakdownKind;
   cost: number;
+  /** @nullable */
+  mandays?: number | null;
   mandayContribution: number;
   costPerManday: number;
   /** @nullable */

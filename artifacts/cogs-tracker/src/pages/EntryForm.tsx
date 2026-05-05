@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatNumber, todayISO } from "@/lib/format";
+import { MEAL_WEIGHTS, computeMealMandays } from "@/lib/cogs-formula";
 import { ArrowLeft, Trash2, Lock, CheckCircle2, XCircle } from "lucide-react";
 
 const APPROVAL_LEVELS = ["OP", "SOP", "COO", "CC", "Additional"] as const;
@@ -40,10 +41,41 @@ interface ServiceLine {
   kind: "food" | "standard";
   cost: string;
   mandays: string;
+  // Food-only meal counts; auto-derive mandays via MEAL_WEIGHTS.
+  breakfastQty: string;
+  lunchQty: string;
+  dinnerQty: string;
+  midnightQty: string;
+  mealBoxQty: string;
 }
 
 function emptyLine(svc: { id: string; name: string; kind: "food" | "standard" }): ServiceLine {
-  return { projectServiceId: svc.id, name: svc.name, kind: svc.kind, cost: "", mandays: "" };
+  return {
+    projectServiceId: svc.id,
+    name: svc.name,
+    kind: svc.kind,
+    cost: "",
+    mandays: "",
+    breakfastQty: "",
+    lunchQty: "",
+    dinnerQty: "",
+    midnightQty: "",
+    mealBoxQty: "",
+  };
+}
+
+function lineMandays(l: ServiceLine): number {
+  if (l.kind === "food") {
+    return computeMealMandays({
+      breakfastQty: Number(l.breakfastQty) || 0,
+      lunchQty: Number(l.lunchQty) || 0,
+      dinnerQty: Number(l.dinnerQty) || 0,
+      midnightQty: Number(l.midnightQty) || 0,
+      mealBoxQty: Number(l.mealBoxQty) || 0,
+    });
+  }
+  const n = Number(l.mandays);
+  return Number.isNaN(n) ? 0 : n;
 }
 
 export default function EntryForm() {
@@ -94,17 +126,19 @@ export default function EntryForm() {
       setLines(
         services.map((svc) => {
           const sc = byId.get(svc.id);
+          const kind = svc.kind as "food" | "standard";
           return {
             projectServiceId: svc.id,
             name: svc.name,
-            kind: svc.kind as "food" | "standard",
+            kind,
             cost: sc?.cost != null ? String(sc.cost) : "",
             mandays:
-              sc?.mandays != null
-                ? String(sc.mandays)
-                : sc?.mandayContribution != null && sc.mandayContribution > 0
-                  ? String(sc.mandayContribution)
-                  : "",
+              kind === "standard" && sc?.mandays != null ? String(sc.mandays) : "",
+            breakfastQty: sc?.breakfastQty != null ? String(sc.breakfastQty) : "",
+            lunchQty: sc?.lunchQty != null ? String(sc.lunchQty) : "",
+            dinnerQty: sc?.dinnerQty != null ? String(sc.dinnerQty) : "",
+            midnightQty: sc?.midnightQty != null ? String(sc.midnightQty) : "",
+            mealBoxQty: sc?.mealBoxQty != null ? String(sc.mealBoxQty) : "",
           };
         }),
       );
@@ -120,8 +154,7 @@ export default function EntryForm() {
     for (const l of lines) {
       const c = Number(l.cost);
       if (!Number.isNaN(c)) totalCost += c;
-      const m = Number(l.mandays);
-      if (!Number.isNaN(m)) summedMandays += m;
+      summedMandays += lineMandays(l);
     }
     const tm = totalMandaysOverride
       ? Number(totalMandaysManual) || 0
@@ -204,13 +237,40 @@ export default function EntryForm() {
       }
     }
     const serviceCosts: ServiceCostInput[] = lines
-      .filter((l) => l.cost !== "" || l.mandays !== "")
-      .map((l) => ({
-        projectServiceId: l.projectServiceId,
-        kind: l.kind as any,
-        cost: l.cost !== "" ? Number(l.cost) : 0,
-        ...(l.mandays !== "" ? { mandays: Number(l.mandays) } : {}),
-      }));
+      .filter((l) => {
+        if (l.cost !== "") return true;
+        if (l.kind === "food") {
+          return (
+            l.breakfastQty !== "" ||
+            l.lunchQty !== "" ||
+            l.dinnerQty !== "" ||
+            l.midnightQty !== "" ||
+            l.mealBoxQty !== ""
+          );
+        }
+        return l.mandays !== "";
+      })
+      .map((l) => {
+        const base: any = {
+          projectServiceId: l.projectServiceId,
+          kind: l.kind,
+          cost: l.cost !== "" ? Number(l.cost) : 0,
+        };
+        if (l.kind === "food") {
+          // For food rows, persist the meal qtys; mandays is auto-derived from
+          // MEAL_WEIGHTS (B 20%, L/D/M/MB 40%) and sent so the backend stores
+          // and reuses the exact computed value.
+          if (l.breakfastQty !== "") base.breakfastQty = Number(l.breakfastQty);
+          if (l.lunchQty !== "") base.lunchQty = Number(l.lunchQty);
+          if (l.dinnerQty !== "") base.dinnerQty = Number(l.dinnerQty);
+          if (l.midnightQty !== "") base.midnightQty = Number(l.midnightQty);
+          if (l.mealBoxQty !== "") base.mealBoxQty = Number(l.mealBoxQty);
+          base.mandays = lineMandays(l);
+        } else if (l.mandays !== "") {
+          base.mandays = Number(l.mandays);
+        }
+        return base as ServiceCostInput;
+      });
     const payload: any = {
       entryDate,
       location,
@@ -278,8 +338,9 @@ export default function EntryForm() {
               <CardHeader>
                 <CardTitle className="text-base">Service costs</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Enter cost and mandays per service. Total mandays auto-sum below — flip the
-                  override switch to type in a different number.
+                  Standard services: enter cost + mandays. Food services: enter
+                  meal counts and mandays auto-calculate using Breakfast 20%,
+                  Lunch / Dinner / Midnight / Meal Box 40% each.
                 </p>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -290,36 +351,95 @@ export default function EntryForm() {
                 )}
                 {lines.map((l, i) => {
                   const cost = Number(l.cost) || 0;
-                  const md = Number(l.mandays) || 0;
+                  const md = lineMandays(l);
                   const cpm = md ? cost / md : null;
                   return (
                     <div key={l.projectServiceId} className="rounded-md border border-border bg-card p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <span className="font-medium">{l.name}</span>
+                        <span className="font-medium">
+                          {l.name}
+                          <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            {l.kind}
+                          </span>
+                        </span>
                         <span className="text-xs text-muted-foreground tabular-nums">
                           {cpm != null ? `${formatCurrency(cpm)} / manday` : "—"}
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Cost (SAR)</Label>
-                          <Input
-                            type="number" step="0.01" min="0"
-                            value={l.cost} onChange={(e) => setLine(i, { cost: e.target.value })}
-                            placeholder="0.00"
-                            data-testid={`input-cost-${i}`}
-                          />
+                      {l.kind === "food" ? (
+                        <div className="space-y-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Cost (SAR)</Label>
+                            <Input
+                              type="number" step="0.01" min="0"
+                              value={l.cost} onChange={(e) => setLine(i, { cost: e.target.value })}
+                              placeholder="0.00"
+                              data-testid={`input-cost-${i}`}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                            <MealQty
+                              label="Breakfast"
+                              weight={MEAL_WEIGHTS.breakfast}
+                              value={l.breakfastQty}
+                              onChange={(v) => setLine(i, { breakfastQty: v })}
+                              testId={`input-breakfast-${i}`}
+                            />
+                            <MealQty
+                              label="Lunch"
+                              weight={MEAL_WEIGHTS.lunch}
+                              value={l.lunchQty}
+                              onChange={(v) => setLine(i, { lunchQty: v })}
+                              testId={`input-lunch-${i}`}
+                            />
+                            <MealQty
+                              label="Dinner"
+                              weight={MEAL_WEIGHTS.dinner}
+                              value={l.dinnerQty}
+                              onChange={(v) => setLine(i, { dinnerQty: v })}
+                              testId={`input-dinner-${i}`}
+                            />
+                            <MealQty
+                              label="Midnight"
+                              weight={MEAL_WEIGHTS.midnight}
+                              value={l.midnightQty}
+                              onChange={(v) => setLine(i, { midnightQty: v })}
+                              testId={`input-midnight-${i}`}
+                            />
+                            <MealQty
+                              label="Meal Box"
+                              weight={MEAL_WEIGHTS.mealBox}
+                              value={l.mealBoxQty}
+                              onChange={(v) => setLine(i, { mealBoxQty: v })}
+                              testId={`input-mealbox-${i}`}
+                            />
+                          </div>
+                          <div className="text-xs text-muted-foreground tabular-nums">
+                            Auto mandays: <span className="font-semibold text-foreground">{formatNumber(md, 2)}</span>
+                          </div>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs uppercase tracking-wider text-muted-foreground">Mandays</Label>
-                          <Input
-                            type="number" step="0.01" min="0"
-                            value={l.mandays} onChange={(e) => setLine(i, { mandays: e.target.value })}
-                            placeholder="0"
-                            data-testid={`input-mandays-${i}`}
-                          />
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Cost (SAR)</Label>
+                            <Input
+                              type="number" step="0.01" min="0"
+                              value={l.cost} onChange={(e) => setLine(i, { cost: e.target.value })}
+                              placeholder="0.00"
+                              data-testid={`input-cost-${i}`}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Mandays</Label>
+                            <Input
+                              type="number" step="0.01" min="0"
+                              value={l.mandays} onChange={(e) => setLine(i, { mandays: e.target.value })}
+                              placeholder="0"
+                              data-testid={`input-mandays-${i}`}
+                            />
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
@@ -467,6 +587,41 @@ function ApprovalStrip({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function MealQty({
+  label,
+  weight,
+  value,
+  onChange,
+  testId,
+}: {
+  label: string;
+  weight: number;
+  value: string;
+  onChange: (v: string) => void;
+  testId: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}{" "}
+        <span className="text-muted-foreground/70 normal-case">
+          ({Math.round(weight * 100)}%)
+        </span>
+      </Label>
+      <Input
+        type="number"
+        step="1"
+        min="0"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0"
+        className="text-right tabular-nums"
+        data-testid={testId}
+      />
+    </div>
   );
 }
 

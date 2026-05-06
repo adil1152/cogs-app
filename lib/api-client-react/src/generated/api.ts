@@ -18,6 +18,7 @@ import type {
 
 import type {
   AggregateReport,
+  ApprovalChainEntry,
   ApproverAssignment,
   AuditLogEntry,
   AuthUser,
@@ -38,6 +39,7 @@ import type {
   HandleBrowserLoginCallbackParams,
   HealthStatus,
   ListProjectEntriesParams,
+  ListVisibleServicesParams,
   LogoutSuccess,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
@@ -48,6 +50,8 @@ import type {
   ProjectSummaryReport,
   RecentActivityItem,
   ReorderProjectServicesBody,
+  ServiceCatalogItem,
+  SetApprovalChainBody,
   SetProjectApproversBody,
   TrendsReport,
   UpdateAccessBody,
@@ -3443,3 +3447,280 @@ export function useGetTrendsReport<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List services across visible projects, optionally filtered by project ids
+ */
+export const getListVisibleServicesUrl = (
+  params?: ListVisibleServicesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/services?${stringifiedParams}`
+    : `/api/services`;
+};
+
+export const listVisibleServices = async (
+  params?: ListVisibleServicesParams,
+  options?: RequestInit,
+): Promise<ServiceCatalogItem[]> => {
+  return customFetch<ServiceCatalogItem[]>(getListVisibleServicesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListVisibleServicesQueryKey = (
+  params?: ListVisibleServicesParams,
+) => {
+  return [`/api/services`, ...(params ? [params] : [])] as const;
+};
+
+export const getListVisibleServicesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listVisibleServices>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListVisibleServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listVisibleServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListVisibleServicesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listVisibleServices>>
+  > = ({ signal }) =>
+    listVisibleServices(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listVisibleServices>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListVisibleServicesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listVisibleServices>>
+>;
+export type ListVisibleServicesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List services across visible projects, optionally filtered by project ids
+ */
+
+export function useListVisibleServices<
+  TData = Awaited<ReturnType<typeof listVisibleServices>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListVisibleServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listVisibleServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListVisibleServicesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get the ordered approval chain for a project
+ */
+export const getGetProjectApprovalChainUrl = (id: string) => {
+  return `/api/projects/${id}/approval-chain`;
+};
+
+export const getProjectApprovalChain = async (
+  id: string,
+  options?: RequestInit,
+): Promise<ApprovalChainEntry[]> => {
+  return customFetch<ApprovalChainEntry[]>(getGetProjectApprovalChainUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetProjectApprovalChainQueryKey = (id: string) => {
+  return [`/api/projects/${id}/approval-chain`] as const;
+};
+
+export const getGetProjectApprovalChainQueryOptions = <
+  TData = Awaited<ReturnType<typeof getProjectApprovalChain>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProjectApprovalChain>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetProjectApprovalChainQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getProjectApprovalChain>>
+  > = ({ signal }) =>
+    getProjectApprovalChain(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getProjectApprovalChain>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetProjectApprovalChainQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getProjectApprovalChain>>
+>;
+export type GetProjectApprovalChainQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the ordered approval chain for a project
+ */
+
+export function useGetProjectApprovalChain<
+  TData = Awaited<ReturnType<typeof getProjectApprovalChain>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProjectApprovalChain>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetProjectApprovalChainQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace the ordered approval chain for a project (admin only)
+ */
+export const getSetProjectApprovalChainUrl = (id: string) => {
+  return `/api/projects/${id}/approval-chain`;
+};
+
+export const setProjectApprovalChain = async (
+  id: string,
+  setApprovalChainBody: SetApprovalChainBody,
+  options?: RequestInit,
+): Promise<ApprovalChainEntry[]> => {
+  return customFetch<ApprovalChainEntry[]>(getSetProjectApprovalChainUrl(id), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setApprovalChainBody),
+  });
+};
+
+export const getSetProjectApprovalChainMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setProjectApprovalChain>>,
+    TError,
+    { id: string; data: BodyType<SetApprovalChainBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setProjectApprovalChain>>,
+  TError,
+  { id: string; data: BodyType<SetApprovalChainBody> },
+  TContext
+> => {
+  const mutationKey = ["setProjectApprovalChain"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setProjectApprovalChain>>,
+    { id: string; data: BodyType<SetApprovalChainBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return setProjectApprovalChain(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetProjectApprovalChainMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setProjectApprovalChain>>
+>;
+export type SetProjectApprovalChainMutationBody =
+  BodyType<SetApprovalChainBody>;
+export type SetProjectApprovalChainMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Replace the ordered approval chain for a project (admin only)
+ */
+export const useSetProjectApprovalChain = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setProjectApprovalChain>>,
+    TError,
+    { id: string; data: BodyType<SetApprovalChainBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setProjectApprovalChain>>,
+  TError,
+  { id: string; data: BodyType<SetApprovalChainBody> },
+  TContext
+> => {
+  return useMutation(getSetProjectApprovalChainMutationOptions(options));
+};

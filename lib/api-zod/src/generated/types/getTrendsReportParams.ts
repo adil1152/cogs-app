@@ -9,5 +9,12 @@
 export type GetTrendsReportParams = {
   from?: Date;
   to?: Date;
-  projectId?: string;
+  /**
+   * Comma-separated list of project ids to include.
+   */
+  projectIds?: string;
+  /**
+   * Comma-separated list of service ids to include.
+   */
+  serviceIds?: string;
 };

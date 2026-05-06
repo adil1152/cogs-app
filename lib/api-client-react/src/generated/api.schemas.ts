@@ -73,6 +73,16 @@ export interface UpdateUserRoleBody {
   role: UpdateUserRoleBodyRole;
 }
 
+export interface ApprovalChainEntry {
+  /** @minimum 1 */
+  position: number;
+  /**
+   * @minLength 1
+   * @maxLength 32
+   */
+  levelName: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -88,6 +98,8 @@ export interface Project {
   currentUserCanViewSummary: boolean;
   currentUserCanEditEntries: boolean;
   currentUserCanResetApproval: boolean;
+  /** Ordered approval chain for this project (position 1 is first, last is final lock). */
+  approvalChain: ApprovalChainEntry[];
 }
 
 export type ProjectServiceKind =
@@ -206,10 +218,7 @@ export interface UpdateAccessBody {
 export interface ApproverAssignment {
   id: string;
   projectId: string;
-  /**
-   * @minimum 1
-   * @maximum 5
-   */
+  /** @minimum 1 */
   level: number;
   levelName: string;
   userId: string;
@@ -217,16 +226,34 @@ export interface ApproverAssignment {
 }
 
 export type SetProjectApproversBodyAssignmentsItem = {
-  /**
-   * @minimum 1
-   * @maximum 5
-   */
+  /** @minimum 1 */
   level: number;
   userId: string;
 };
 
 export interface SetProjectApproversBody {
   assignments: SetProjectApproversBodyAssignmentsItem[];
+}
+
+export interface SetApprovalChainBody {
+  /** @minItems 1 */
+  chain: ApprovalChainEntry[];
+}
+
+export type ServiceCatalogItemKind =
+  (typeof ServiceCatalogItemKind)[keyof typeof ServiceCatalogItemKind];
+
+export const ServiceCatalogItemKind = {
+  food: "food",
+  standard: "standard",
+} as const;
+
+export interface ServiceCatalogItem {
+  id: string;
+  projectId: string;
+  projectName: string;
+  name: string;
+  kind: ServiceCatalogItemKind;
 }
 
 export interface AuditLogEntry {
@@ -497,11 +524,32 @@ export type GetProjectSummaryParams = {
 export type GetAggregateReportParams = {
   from?: string;
   to?: string;
-  projectId?: string;
+  /**
+   * Comma-separated list of project ids to include.
+   */
+  projectIds?: string;
+  /**
+   * Comma-separated list of service ids to include.
+   */
+  serviceIds?: string;
 };
 
 export type GetTrendsReportParams = {
   from?: string;
   to?: string;
-  projectId?: string;
+  /**
+   * Comma-separated list of project ids to include.
+   */
+  projectIds?: string;
+  /**
+   * Comma-separated list of service ids to include.
+   */
+  serviceIds?: string;
+};
+
+export type ListVisibleServicesParams = {
+  /**
+   * Comma-separated list of project ids to filter by.
+   */
+  projectIds?: string;
 };

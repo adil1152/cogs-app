@@ -5,6 +5,7 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { ApprovalChainEntry } from "./approvalChainEntry";
 
 export interface Project {
   id: string;
@@ -21,4 +22,6 @@ export interface Project {
   currentUserCanViewSummary: boolean;
   currentUserCanEditEntries: boolean;
   currentUserCanResetApproval: boolean;
+  /** Ordered approval chain for this project (position 1 is first, last is final lock). */
+  approvalChain: ApprovalChainEntry[];
 }

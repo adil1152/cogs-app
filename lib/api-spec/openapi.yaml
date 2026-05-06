@@ -796,9 +796,16 @@ paths:
           schema:
             type: string
             format: date
-        - name: projectId
+        - name: projectIds
           in: query
           required: false
+          description: Comma-separated list of project ids to include.
+          schema:
+            type: string
+        - name: serviceIds
+          in: query
+          required: false
+          description: Comma-separated list of service ids to include.
           schema:
             type: string
       responses:
@@ -826,9 +833,16 @@ paths:
           schema:
             type: string
             format: date
-        - name: projectId
+        - name: projectIds
           in: query
           required: false
+          description: Comma-separated list of project ids to include.
+          schema:
+            type: string
+        - name: serviceIds
+          in: query
+          required: false
+          description: Comma-separated list of service ids to include.
           schema:
             type: string
       responses:
@@ -838,6 +852,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TrendsReport'
+  /services:
+    get:
+      tags: [Reports]
+      operationId: listVisibleServices
+      summary: List services across visible projects, optionally filtered by project ids
+      parameters:
+        - name: projectIds
+          in: query
+          required: false
+          description: Comma-separated list of project ids to filter by.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceCatalogItem'
+  /projects/{id}/approval-chain:
+    get:
+      tags: [Projects]
+      operationId: getProjectApprovalChain
+      summary: Get the ordered approval chain for a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalChainEntry'
+    put:
+      tags: [Projects]
+      operationId: setProjectApprovalChain
+      summary: Replace the ordered approval chain for a project (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetApprovalChainBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalChainEntry'
 components:
   parameters:
     AuthorizationSessionHeader:
@@ -927,7 +1007,7 @@ components:
 
     Project:
       type: object
-      required: [id, name, location, contractStart, contractEnd, createdAt, isAdminOwned, currentUserCanViewSummary, currentUserCanEditEntries, currentUserCanResetApproval]
+      required: [id, name, location, contractStart, contractEnd, createdAt, isAdminOwned, currentUserCanViewSummary, currentUserCanEditEntries, currentUserCanResetApproval, approvalChain]
       properties:
         id: { type: string }
         name: { type: string }
@@ -943,6 +1023,11 @@ components:
         currentUserCanViewSummary: { type: boolean }
         currentUserCanEditEntries: { type: boolean }
         currentUserCanResetApproval: { type: boolean }
+        approvalChain:
+          type: array
+          description: Ordered approval chain for this project (position 1 is first, last is final lock).
+          items:
+            $ref: '#/components/schemas/ApprovalChainEntry'
     ProjectDetail:
       allOf:
         - $ref: '#/components/schemas/Project'
@@ -1064,7 +1149,6 @@ components:
         level:
           type: integer
           minimum: 1
-          maximum: 5
         levelName: { type: string }
         userId: { type: string }
         user:
@@ -1082,8 +1166,40 @@ components:
               level:
                 type: integer
                 minimum: 1
-                maximum: 5
               userId: { type: string }
+
+    ApprovalChainEntry:
+      type: object
+      required: [position, levelName]
+      properties:
+        position:
+          type: integer
+          minimum: 1
+        levelName:
+          type: string
+          minLength: 1
+          maxLength: 32
+    SetApprovalChainBody:
+      type: object
+      required: [chain]
+      properties:
+        chain:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApprovalChainEntry'
+
+    ServiceCatalogItem:
+      type: object
+      required: [id, projectId, projectName, name, kind]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        projectName: { type: string }
+        name: { type: string }
+        kind:
+          type: string
+          enum: [food, standard]
 
     AuditLogEntry:
       type: object

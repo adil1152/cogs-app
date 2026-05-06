@@ -11,11 +11,9 @@ import { getProjectVisibility } from "../lib/projectAccess";
 import { buildEntryDetail } from "../lib/entries";
 import { isApproverFor } from "../lib/approvers";
 import { recordAudit } from "../lib/audit";
+import { getProjectChain, levelNameAt } from "../lib/approvalChain";
 
 const router: IRouter = Router();
-
-export const APPROVAL_LEVELS = ["OP", "SOP", "COO", "CC", "Additional"] as const;
-export const FINAL_LEVEL = APPROVAL_LEVELS.length;
 
 router.post(
   "/entries/:id/approve",
@@ -34,13 +32,15 @@ router.post(
       res.status(403).json({ error: "Entry is locked" });
       return;
     }
+    const chain = await getProjectChain(entry.projectId);
+    const finalLevel = chain.length;
     const expectedLevel = entry.currentApprovalLevel;
     const nextLevel = expectedLevel + 1;
-    if (nextLevel > FINAL_LEVEL) {
+    if (nextLevel > finalLevel) {
       res.status(403).json({ error: "Already fully approved" });
       return;
     }
-    const levelName = APPROVAL_LEVELS[nextLevel - 1];
+    const levelName = levelNameAt(chain, nextLevel);
 
     if (req.user!.role !== "admin") {
       const allowed = await isApproverFor(
@@ -62,7 +62,7 @@ router.post(
           .update(dailyEntriesTable)
           .set({
             currentApprovalLevel: nextLevel,
-            lockedAt: nextLevel === FINAL_LEVEL ? new Date() : null,
+            lockedAt: nextLevel === finalLevel ? new Date() : null,
             updatedAt: new Date(),
           })
           .where(

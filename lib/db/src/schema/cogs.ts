@@ -239,5 +239,34 @@ export type ProjectApproverAssignment =
 export type InsertProjectApproverAssignment =
   typeof projectApproverAssignmentsTable.$inferInsert;
 
+/**
+ * Per-project ordered approval chain. Position 1 is the first approver, the
+ * last position is the final approver (which locks the entry). When no rows
+ * exist for a project, the system falls back to the default chain
+ * [OP, SOP, COO, CC, Additional]. Admins can reorder freely.
+ */
+export const projectApprovalChainTable = pgTable(
+  "project_approval_chain",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    projectId: varchar("project_id")
+      .notNull()
+      .references(() => projectsTable.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    levelName: varchar("level_name", { length: 32 }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("UQ_approval_chain_project_position").on(
+      t.projectId,
+      t.position,
+    ),
+  ],
+);
+
+export type ProjectApprovalChainEntry =
+  typeof projectApprovalChainTable.$inferSelect;
+export type InsertProjectApprovalChainEntry =
+  typeof projectApprovalChainTable.$inferInsert;
+
 export type EntryAuditLog = typeof entryAuditLogTable.$inferSelect;
 export type InsertEntryAuditLog = typeof entryAuditLogTable.$inferInsert;

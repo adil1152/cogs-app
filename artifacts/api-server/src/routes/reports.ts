@@ -16,6 +16,7 @@ import {
 } from "../lib/projectAccess";
 import { safeDivide } from "../lib/cogsCalc";
 import { serviceMandays } from "../lib/entries";
+import { getProjectChain } from "../lib/approvalChain";
 
 const router: IRouter = Router();
 
@@ -71,30 +72,64 @@ async function fetchJoined(
     )
     .leftJoin(projectsTable, eq(projectsTable.id, dailyEntriesTable.projectId))
     .where(and(...conds));
+
   return rows;
+}
+
+function parseCsv(v: unknown): string[] | null {
+  if (typeof v !== "string") return null;
+  const parts = v.split(",").map((s) => s.trim()).filter(Boolean);
+  return parts.length > 0 ? parts : null;
+}
+
+function rowMandayContribution(row: JoinedRow): number {
+  if (!row.cost) return 0;
+  return serviceMandays({
+    mandays: row.cost.mandays,
+    kind: row.cost.kind,
+    breakfastQty: row.cost.breakfastQty,
+    lunchQty: row.cost.lunchQty,
+    dinnerQty: row.cost.dinnerQty,
+    midnightQty: row.cost.midnightQty,
+    mealBoxQty: row.cost.mealBoxQty,
+  });
 }
 
 interface KpiAccumulator {
   totalCost: number;
-  mandaysSet: Map<string, number>;
+  /**
+   * When `useEntryMandays` is true (no service filter), sum entry.totalMandays
+   * once per entry. When false (service-filtered), sum the per-row contribution
+   * from filtered cost rows so totals reflect the chosen services only.
+   */
+  entryMandays: Map<string, number>;
+  contributedMandays: number;
   entryIds: Set<string>;
 }
 
 function newKpi(): KpiAccumulator {
-  return { totalCost: 0, mandaysSet: new Map(), entryIds: new Set() };
+  return {
+    totalCost: 0,
+    entryMandays: new Map(),
+    contributedMandays: 0,
+    entryIds: new Set(),
+  };
 }
 
-function accumulate(k: KpiAccumulator, row: JoinedRow) {
+function accumulate(k: KpiAccumulator, row: JoinedRow, useEntryMandays: boolean) {
   k.entryIds.add(row.entry.id);
-  k.mandaysSet.set(row.entry.id, Number(row.entry.totalMandays));
+  if (useEntryMandays) {
+    k.entryMandays.set(row.entry.id, Number(row.entry.totalMandays));
+  } else {
+    k.contributedMandays += rowMandayContribution(row);
+  }
   if (row.cost) k.totalCost += Number(row.cost.cost ?? 0);
 }
 
-function kpiOut(k: KpiAccumulator) {
-  const totalMandays = Array.from(k.mandaysSet.values()).reduce(
-    (a, b) => a + b,
-    0,
-  );
+function kpiOut(k: KpiAccumulator, useEntryMandays: boolean) {
+  const totalMandays = useEntryMandays
+    ? Array.from(k.entryMandays.values()).reduce((a, b) => a + b, 0)
+    : k.contributedMandays;
   return {
     totalCost: k.totalCost,
     totalMandays,
@@ -122,6 +157,7 @@ router.get(
     const todayKpi = newKpi();
     const weekKpi = newKpi();
     const monthKpi = newKpi();
+
     const serviceTotals = new Map<
       string,
       { name: string; kind: "food" | "standard"; totalCost: number; mandayContribution: number }
@@ -139,9 +175,9 @@ router.get(
 
     for (const row of all) {
       const d = row.entry.entryDate;
-      if (d === todayStr) accumulate(todayKpi, row);
-      if (d >= weekStart) accumulate(weekKpi, row);
-      accumulate(monthKpi, row);
+      if (d === todayStr) accumulate(todayKpi, row, true);
+      if (d >= weekStart) accumulate(weekKpi, row, true);
+      accumulate(monthKpi, row, true);
 
       if (row.cost && row.service) {
         const key = `${row.service.id}`;
@@ -152,15 +188,7 @@ router.get(
           mandayContribution: 0,
         };
         prev.totalCost += Number(row.cost.cost ?? 0);
-        prev.mandayContribution += serviceMandays({
-          mandays: row.cost.mandays,
-          kind: row.cost.kind,
-          breakfastQty: row.cost.breakfastQty,
-          lunchQty: row.cost.lunchQty,
-          dinnerQty: row.cost.dinnerQty,
-          midnightQty: row.cost.midnightQty,
-          mealBoxQty: row.cost.mealBoxQty,
-        });
+        prev.mandayContribution += rowMandayContribution(row);
         serviceTotals.set(key, prev);
       }
 
@@ -180,9 +208,9 @@ router.get(
     }
 
     res.json({
-      today: kpiOut(todayKpi),
-      weekToDate: kpiOut(weekKpi),
-      monthToDate: kpiOut(monthKpi),
+      today: kpiOut(todayKpi, true),
+      weekToDate: kpiOut(weekKpi, true),
+      monthToDate: kpiOut(monthKpi, true),
       serviceBreakdown: Array.from(serviceTotals.values()).map((s) => ({
         serviceName: s.name,
         kind: s.kind,
@@ -250,6 +278,7 @@ router.get(
         };
       }),
     );
+
     res.json(out);
   },
 );
@@ -281,7 +310,10 @@ router.get(
         ? req.query.to
         : dateOnly(new Date());
 
-    const rows = await fetchJoined([(req.params.id as string)], from, to);
+    const [rows, chain] = await Promise.all([
+      fetchJoined([(req.params.id as string)], from, to),
+      getProjectChain(v.project.id),
+    ]);
     const kpi = newKpi();
     const serviceTotals = new Map<
       string,
@@ -296,7 +328,7 @@ router.get(
     >();
 
     for (const row of rows) {
-      accumulate(kpi, row);
+      accumulate(kpi, row, true);
       if (row.cost && row.service) {
         const key = row.service.id;
         const prev = serviceTotals.get(key) ?? {
@@ -306,17 +338,10 @@ router.get(
           mandayContribution: 0,
         };
         prev.totalCost += Number(row.cost.cost ?? 0);
-        prev.mandayContribution += serviceMandays({
-          mandays: row.cost.mandays,
-          kind: row.cost.kind,
-          breakfastQty: row.cost.breakfastQty,
-          lunchQty: row.cost.lunchQty,
-          dinnerQty: row.cost.dinnerQty,
-          midnightQty: row.cost.midnightQty,
-          mealBoxQty: row.cost.mealBoxQty,
-        });
+        prev.mandayContribution += rowMandayContribution(row);
         serviceTotals.set(key, prev);
       }
+
       const eprev = entriesById.get(row.entry.id) ?? {
         entry: row.entry,
         totalCost: 0,
@@ -326,15 +351,18 @@ router.get(
     }
 
     res.json({
-      project: serializeProject({
-        project: v.project,
-        canViewSummary: v.canViewSummary,
-        canEditEntries: v.canEditEntries,
-        canResetApproval: v.canResetApproval,
-        isAdminOwned: v.isAdminOwned,
-      }),
+      project: serializeProject(
+        {
+          project: v.project,
+          canViewSummary: v.canViewSummary,
+          canEditEntries: v.canEditEntries,
+          canResetApproval: v.canResetApproval,
+          isAdminOwned: v.isAdminOwned,
+        },
+        chain,
+      ),
       range: { from, to },
-      kpi: kpiOut(kpi),
+      kpi: kpiOut(kpi, true),
       serviceBreakdown: Array.from(serviceTotals.values()).map((s) => ({
         serviceName: s.name,
         kind: s.kind,
@@ -367,9 +395,16 @@ router.get(
   async (req: Request, res: Response): Promise<void> => {
     const visible = await listVisibleProjects(req.user!.id, req.user!.role);
     let ids = visible.filter((v) => v.canViewSummary).map((v) => v.project.id);
-    if (typeof req.query.projectId === "string") {
-      ids = ids.filter((id) => id === req.query.projectId);
+
+    const projectFilter = parseCsv(req.query.projectIds);
+    if (projectFilter) {
+      const wanted = new Set(projectFilter);
+      ids = ids.filter((id) => wanted.has(id));
     }
+
+    const serviceFilter = parseCsv(req.query.serviceIds);
+    const serviceFilterSet = serviceFilter ? new Set(serviceFilter) : null;
+    const useEntryMandays = serviceFilterSet === null;
 
     const from =
       typeof req.query.from === "string"
@@ -380,7 +415,16 @@ router.get(
         ? req.query.to
         : dateOnly(new Date());
 
-    const rows = await fetchJoined(ids, from, to);
+    const allRows = await fetchJoined(ids, from, to);
+    // Apply service filter at the row level (only count cost rows for the
+    // chosen services). We still need entry rows for KPI entry counts even
+    // when their costs are filtered out.
+    const rows = serviceFilterSet
+      ? allRows.filter(
+          (r) => !r.cost || (r.service && serviceFilterSet.has(r.service.id)),
+        )
+      : allRows;
+
     const kpi = newKpi();
     const serviceTotals = new Map<
       string,
@@ -393,13 +437,21 @@ router.get(
         projectName: string;
         location: string;
         totalCost: number;
-        mandays: Map<string, number>;
+        entryMandays: Map<string, number>;
+        contributedMandays: number;
       }
     >();
 
     for (const row of rows) {
-      accumulate(kpi, row);
-      if (row.cost && row.service) {
+      // Skip rows whose cost was filtered out for cost/manday accumulation,
+      // but still count entries that had at least one matching service row.
+      const hasUsableCost = row.cost && (!serviceFilterSet || (row.service && serviceFilterSet.has(row.service.id)));
+
+      if (hasUsableCost || !serviceFilterSet) {
+        accumulate(kpi, row, useEntryMandays);
+      }
+
+      if (hasUsableCost && row.service) {
         const key = row.service.id;
         const prev = serviceTotals.get(key) ?? {
           name: row.service.name,
@@ -407,55 +459,54 @@ router.get(
           totalCost: 0,
           mandayContribution: 0,
         };
-        prev.totalCost += Number(row.cost.cost ?? 0);
-        prev.mandayContribution += serviceMandays({
-          mandays: row.cost.mandays,
-          kind: row.cost.kind,
-          breakfastQty: row.cost.breakfastQty,
-          lunchQty: row.cost.lunchQty,
-          dinnerQty: row.cost.dinnerQty,
-          midnightQty: row.cost.midnightQty,
-          mealBoxQty: row.cost.mealBoxQty,
-        });
+        prev.totalCost += Number(row.cost!.cost ?? 0);
+        prev.mandayContribution += rowMandayContribution(row);
         serviceTotals.set(key, prev);
       }
+
       if (row.project) {
         const prev = projectTotals.get(row.project.id) ?? {
           projectId: row.project.id,
           projectName: row.project.name,
           location: row.project.location,
           totalCost: 0,
-          mandays: new Map<string, number>(),
+          entryMandays: new Map<string, number>(),
+          contributedMandays: 0,
         };
-        prev.mandays.set(row.entry.id, Number(row.entry.totalMandays));
-        if (row.cost) prev.totalCost += Number(row.cost.cost ?? 0);
+        if (useEntryMandays) {
+          prev.entryMandays.set(row.entry.id, Number(row.entry.totalMandays));
+        } else if (hasUsableCost) {
+          prev.contributedMandays += rowMandayContribution(row);
+        }
+        if (hasUsableCost) prev.totalCost += Number(row.cost!.cost ?? 0);
         projectTotals.set(row.project.id, prev);
       }
     }
 
     res.json({
       range: { from, to },
-      kpi: kpiOut(kpi),
+      kpi: kpiOut(kpi, useEntryMandays),
       serviceBreakdown: Array.from(serviceTotals.values()).map((s) => ({
         serviceName: s.name,
         kind: s.kind,
         totalCost: s.totalCost,
         totalMandayContribution: s.mandayContribution,
       })),
-      projectBreakdown: Array.from(projectTotals.values()).map((p) => {
-        const totalMandays = Array.from(p.mandays.values()).reduce(
-          (a, b) => a + b,
-          0,
-        );
-        return {
-          projectId: p.projectId,
-          projectName: p.projectName,
-          location: p.location,
-          totalCost: p.totalCost,
-          totalMandays,
-          costPerManday: safeDivide(p.totalCost, totalMandays),
-        };
-      }),
+      projectBreakdown: Array.from(projectTotals.values())
+        .filter((p) => p.totalCost > 0 || p.entryMandays.size > 0 || p.contributedMandays > 0)
+        .map((p) => {
+          const totalMandays = useEntryMandays
+            ? Array.from(p.entryMandays.values()).reduce((a, b) => a + b, 0)
+            : p.contributedMandays;
+          return {
+            projectId: p.projectId,
+            projectName: p.projectName,
+            location: p.location,
+            totalCost: p.totalCost,
+            totalMandays,
+            costPerManday: safeDivide(p.totalCost, totalMandays),
+          };
+        }),
     });
   },
 );
@@ -466,9 +517,16 @@ router.get(
   async (req: Request, res: Response): Promise<void> => {
     const visible = await listVisibleProjects(req.user!.id, req.user!.role);
     let ids = visible.filter((v) => v.canViewSummary).map((v) => v.project.id);
-    if (typeof req.query.projectId === "string") {
-      ids = ids.filter((id) => id === req.query.projectId);
+
+    const projectFilter = parseCsv(req.query.projectIds);
+    if (projectFilter) {
+      const wanted = new Set(projectFilter);
+      ids = ids.filter((id) => wanted.has(id));
     }
+
+    const serviceFilter = parseCsv(req.query.serviceIds);
+    const serviceFilterSet = serviceFilter ? new Set(serviceFilter) : null;
+    const useEntryMandays = serviceFilterSet === null;
 
     const from =
       typeof req.query.from === "string"
@@ -482,25 +540,36 @@ router.get(
     const rows = await fetchJoined(ids, from, to);
 
     interface DayBucket {
-      mandays: Map<string, number>;
+      entryMandays: Map<string, number>;
+      contributedMandays: number;
       totalCost: number;
     }
+
     const byDate = new Map<string, DayBucket>();
     for (const row of rows) {
+      const hasUsableCost = row.cost && (!serviceFilterSet || (row.service && serviceFilterSet.has(row.service.id)));
+
       const d = row.entry.entryDate;
-      const prev = byDate.get(d) ?? { mandays: new Map(), totalCost: 0 };
-      prev.mandays.set(row.entry.id, Number(row.entry.totalMandays));
-      if (row.cost) prev.totalCost += Number(row.cost.cost ?? 0);
+      const prev = byDate.get(d) ?? {
+        entryMandays: new Map(),
+        contributedMandays: 0,
+        totalCost: 0,
+      };
+      if (useEntryMandays) {
+        prev.entryMandays.set(row.entry.id, Number(row.entry.totalMandays));
+      } else if (hasUsableCost) {
+        prev.contributedMandays += rowMandayContribution(row);
+      }
+      if (hasUsableCost) prev.totalCost += Number(row.cost!.cost ?? 0);
       byDate.set(d, prev);
     }
 
     const points = Array.from(byDate.entries())
       .sort((a, b) => (a[0] < b[0] ? -1 : 1))
       .map(([date, b]) => {
-        const totalMandays = Array.from(b.mandays.values()).reduce(
-          (a, x) => a + x,
-          0,
-        );
+        const totalMandays = useEntryMandays
+          ? Array.from(b.entryMandays.values()).reduce((a, x) => a + x, 0)
+          : b.contributedMandays;
         return {
           date,
           totalCost: b.totalCost,

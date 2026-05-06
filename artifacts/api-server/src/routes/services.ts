@@ -4,15 +4,16 @@ import {
   projectServicesTable,
   serviceCostEntriesTable,
   dailyEntriesTable,
+  projectsTable,
 } from "@workspace/db";
-import { and, eq, isNotNull, exists, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   CreateProjectServiceBody,
   UpdateProjectServiceBody,
   ReorderProjectServicesBody,
 } from "@workspace/api-zod";
 import { requireAuth, requireAdmin } from "../middlewares/requireAuth";
-import { getProjectVisibility } from "../lib/projectAccess";
+import { getProjectVisibility, listVisibleProjects } from "../lib/projectAccess";
 
 const router: IRouter = Router();
 
@@ -25,6 +26,57 @@ function serialize(s: typeof projectServicesTable.$inferSelect) {
     sortOrder: s.sortOrder,
   };
 }
+
+/**
+ * Catalog of services across the projects the caller can view summaries for.
+ * Used by the Reports page to populate the service multi-select.
+ */
+router.get(
+  "/services",
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const visible = await listVisibleProjects(req.user!.id, req.user!.role);
+    let allowedIds = visible
+      .filter((v) => v.canViewSummary)
+      .map((v) => v.project.id);
+
+    if (typeof req.query.projectIds === "string") {
+      const filter = req.query.projectIds
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (filter.length > 0) {
+        const filterSet = new Set(filter);
+        allowedIds = allowedIds.filter((id) => filterSet.has(id));
+      }
+    }
+
+    if (allowedIds.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const rows = await db
+      .select({ s: projectServicesTable, p: projectsTable })
+      .from(projectServicesTable)
+      .leftJoin(
+        projectsTable,
+        eq(projectsTable.id, projectServicesTable.projectId),
+      )
+      .where(inArray(projectServicesTable.projectId, allowedIds))
+      .orderBy(asc(projectsTable.name), asc(projectServicesTable.sortOrder));
+
+    res.json(
+      rows.map(({ s, p }) => ({
+        id: s.id,
+        projectId: s.projectId,
+        projectName: p?.name ?? "",
+        name: s.name,
+        kind: s.kind as "food" | "standard",
+      })),
+    );
+  },
+);
 
 router.get(
   "/projects/:id/services",

@@ -8,6 +8,7 @@ import accessRouter from "./access";
 import entriesRouter from "./entries";
 import approvalsRouter from "./approvals";
 import approversRouter from "./approvers";
+import approvalChainRouter from "./approvalChain";
 import reportsRouter from "./reports";
 
 const router: IRouter = Router();
@@ -21,6 +22,7 @@ router.use(accessRouter);
 router.use(entriesRouter);
 router.use(approvalsRouter);
 router.use(approversRouter);
+router.use(approvalChainRouter);
 router.use(reportsRouter);
 
 export default router;

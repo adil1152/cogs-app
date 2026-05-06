@@ -130,6 +130,9 @@ export const UpdateUserRoleResponse = zod.object({
 /**
  * @summary List projects visible to the current user
  */
+
+export const listProjectsResponseApprovalChainItemLevelNameMax = 32;
+
 export const ListProjectsResponseItem = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -143,6 +146,19 @@ export const ListProjectsResponseItem = zod.object({
   currentUserCanViewSummary: zod.boolean(),
   currentUserCanEditEntries: zod.boolean(),
   currentUserCanResetApproval: zod.boolean(),
+  approvalChain: zod
+    .array(
+      zod.object({
+        position: zod.number().min(1),
+        levelName: zod
+          .string()
+          .min(1)
+          .max(listProjectsResponseApprovalChainItemLevelNameMax),
+      }),
+    )
+    .describe(
+      "Ordered approval chain for this project (position 1 is first, last is final lock).",
+    ),
 });
 export const ListProjectsResponse = zod.array(ListProjectsResponseItem);
 
@@ -171,6 +187,8 @@ export const GetProjectParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const getProjectResponseOneApprovalChainItemLevelNameMax = 32;
+
 export const GetProjectResponse = zod
   .object({
     id: zod.string(),
@@ -185,6 +203,19 @@ export const GetProjectResponse = zod
     currentUserCanViewSummary: zod.boolean(),
     currentUserCanEditEntries: zod.boolean(),
     currentUserCanResetApproval: zod.boolean(),
+    approvalChain: zod
+      .array(
+        zod.object({
+          position: zod.number().min(1),
+          levelName: zod
+            .string()
+            .min(1)
+            .max(getProjectResponseOneApprovalChainItemLevelNameMax),
+        }),
+      )
+      .describe(
+        "Ordered approval chain for this project (position 1 is first, last is final lock).",
+      ),
   })
   .and(
     zod.object({
@@ -215,6 +246,8 @@ export const UpdateProjectBody = zod.object({
   notes: zod.string().optional(),
 });
 
+export const updateProjectResponseApprovalChainItemLevelNameMax = 32;
+
 export const UpdateProjectResponse = zod.object({
   id: zod.string(),
   name: zod.string(),
@@ -228,6 +261,19 @@ export const UpdateProjectResponse = zod.object({
   currentUserCanViewSummary: zod.boolean(),
   currentUserCanEditEntries: zod.boolean(),
   currentUserCanResetApproval: zod.boolean(),
+  approvalChain: zod
+    .array(
+      zod.object({
+        position: zod.number().min(1),
+        levelName: zod
+          .string()
+          .min(1)
+          .max(updateProjectResponseApprovalChainItemLevelNameMax),
+      }),
+    )
+    .describe(
+      "Ordered approval chain for this project (position 1 is first, last is final lock).",
+    ),
 });
 
 export const DeleteProjectParams = zod.object({
@@ -839,12 +885,10 @@ export const ListProjectApproversParams = zod.object({
   id: zod.coerce.string(),
 });
 
-export const listProjectApproversResponseLevelMax = 5;
-
 export const ListProjectApproversResponseItem = zod.object({
   id: zod.string(),
   projectId: zod.string(),
-  level: zod.number().min(1).max(listProjectApproversResponseLevelMax),
+  level: zod.number().min(1),
   levelName: zod.string(),
   userId: zod.string(),
   user: zod.object({
@@ -867,26 +911,19 @@ export const SetProjectApproversParams = zod.object({
   id: zod.coerce.string(),
 });
 
-export const setProjectApproversBodyAssignmentsItemLevelMax = 5;
-
 export const SetProjectApproversBody = zod.object({
   assignments: zod.array(
     zod.object({
-      level: zod
-        .number()
-        .min(1)
-        .max(setProjectApproversBodyAssignmentsItemLevelMax),
+      level: zod.number().min(1),
       userId: zod.string(),
     }),
   ),
 });
 
-export const setProjectApproversResponseLevelMax = 5;
-
 export const SetProjectApproversResponseItem = zod.object({
   id: zod.string(),
   projectId: zod.string(),
-  level: zod.number().min(1).max(setProjectApproversResponseLevelMax),
+  level: zod.number().min(1),
   levelName: zod.string(),
   userId: zod.string(),
   user: zod.object({
@@ -973,6 +1010,8 @@ export const GetProjectSummaryQueryParams = zod.object({
   to: zod.date().optional(),
 });
 
+export const getProjectSummaryResponseProjectApprovalChainItemLevelNameMax = 32;
+
 export const GetProjectSummaryResponse = zod.object({
   project: zod.object({
     id: zod.string(),
@@ -987,6 +1026,19 @@ export const GetProjectSummaryResponse = zod.object({
     currentUserCanViewSummary: zod.boolean(),
     currentUserCanEditEntries: zod.boolean(),
     currentUserCanResetApproval: zod.boolean(),
+    approvalChain: zod
+      .array(
+        zod.object({
+          position: zod.number().min(1),
+          levelName: zod
+            .string()
+            .min(1)
+            .max(getProjectSummaryResponseProjectApprovalChainItemLevelNameMax),
+        }),
+      )
+      .describe(
+        "Ordered approval chain for this project (position 1 is first, last is final lock).",
+      ),
   }),
   range: zod.object({
     from: zod.coerce.date(),
@@ -1033,7 +1085,14 @@ export const GetProjectSummaryResponse = zod.object({
 export const GetAggregateReportQueryParams = zod.object({
   from: zod.date().optional(),
   to: zod.date().optional(),
-  projectId: zod.coerce.string().optional(),
+  projectIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated list of project ids to include."),
+  serviceIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated list of service ids to include."),
 });
 
 export const GetAggregateReportResponse = zod.object({
@@ -1073,7 +1132,14 @@ export const GetAggregateReportResponse = zod.object({
 export const GetTrendsReportQueryParams = zod.object({
   from: zod.date().optional(),
   to: zod.date().optional(),
-  projectId: zod.coerce.string().optional(),
+  projectIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated list of project ids to include."),
+  serviceIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated list of service ids to include."),
 });
 
 export const GetTrendsReportResponse = zod.object({
@@ -1090,3 +1156,80 @@ export const GetTrendsReportResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary List services across visible projects, optionally filtered by project ids
+ */
+export const ListVisibleServicesQueryParams = zod.object({
+  projectIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated list of project ids to filter by."),
+});
+
+export const ListVisibleServicesResponseItem = zod.object({
+  id: zod.string(),
+  projectId: zod.string(),
+  projectName: zod.string(),
+  name: zod.string(),
+  kind: zod.enum(["food", "standard"]),
+});
+export const ListVisibleServicesResponse = zod.array(
+  ListVisibleServicesResponseItem,
+);
+
+/**
+ * @summary Get the ordered approval chain for a project
+ */
+export const GetProjectApprovalChainParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const getProjectApprovalChainResponseLevelNameMax = 32;
+
+export const GetProjectApprovalChainResponseItem = zod.object({
+  position: zod.number().min(1),
+  levelName: zod
+    .string()
+    .min(1)
+    .max(getProjectApprovalChainResponseLevelNameMax),
+});
+export const GetProjectApprovalChainResponse = zod.array(
+  GetProjectApprovalChainResponseItem,
+);
+
+/**
+ * @summary Replace the ordered approval chain for a project (admin only)
+ */
+export const SetProjectApprovalChainParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const setProjectApprovalChainBodyChainItemLevelNameMax = 32;
+
+export const SetProjectApprovalChainBody = zod.object({
+  chain: zod
+    .array(
+      zod.object({
+        position: zod.number().min(1),
+        levelName: zod
+          .string()
+          .min(1)
+          .max(setProjectApprovalChainBodyChainItemLevelNameMax),
+      }),
+    )
+    .min(1),
+});
+
+export const setProjectApprovalChainResponseLevelNameMax = 32;
+
+export const SetProjectApprovalChainResponseItem = zod.object({
+  position: zod.number().min(1),
+  levelName: zod
+    .string()
+    .min(1)
+    .max(setProjectApprovalChainResponseLevelNameMax),
+});
+export const SetProjectApprovalChainResponse = zod.array(
+  SetProjectApprovalChainResponseItem,
+);

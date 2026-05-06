@@ -9,7 +9,7 @@ import { SetProjectApproversBody } from "@workspace/api-zod";
 import { requireAdmin, requireAuth } from "../middlewares/requireAuth";
 import { getProjectVisibility } from "../lib/projectAccess";
 import { listProjectApprovers } from "../lib/approvers";
-import { FINAL_LEVEL } from "./approvals";
+import { getProjectChain } from "../lib/approvalChain";
 
 const router: IRouter = Router();
 
@@ -55,16 +55,18 @@ router.put(
         .json({ error: "Invalid body", details: parsed.error.issues });
       return;
     }
+    const chain = await getProjectChain(projectId);
+    const maxLevel = chain.length;
     const assignments = parsed.data.assignments.filter(
-      (a) => a.level >= 1 && a.level <= FINAL_LEVEL,
+      (a) => a.level >= 1 && a.level <= maxLevel,
     );
 
     await db.transaction(async (tx) => {
       await tx
         .delete(projectApproverAssignmentsTable)
         .where(eq(projectApproverAssignmentsTable.projectId, projectId));
+
       if (assignments.length > 0) {
-        // Deduplicate (level,userId) so the unique index does not throw.
         const seen = new Set<string>();
         const rows = assignments.flatMap((a) => {
           const key = `${a.level}:${a.userId}`;
@@ -78,6 +80,7 @@ router.put(
             },
           ];
         });
+
         if (rows.length > 0) {
           await tx.insert(projectApproverAssignmentsTable).values(rows);
         }

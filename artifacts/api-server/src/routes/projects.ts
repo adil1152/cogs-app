@@ -8,6 +8,11 @@ import {
   getProjectVisibility,
   serializeProject,
 } from "../lib/projectAccess";
+import {
+  defaultChain,
+  getProjectChain,
+  getProjectChainsMap,
+} from "../lib/approvalChain";
 
 const router: IRouter = Router();
 
@@ -16,7 +21,10 @@ router.get(
   requireAuth,
   async (req: Request, res: Response): Promise<void> => {
     const visible = await listVisibleProjects(req.user!.id, req.user!.role);
-    res.json(visible.map(serializeProject));
+    const chains = await getProjectChainsMap(visible.map((v) => v.project.id));
+    res.json(
+      visible.map((v) => serializeProject(v, chains.get(v.project.id) ?? defaultChain())),
+    );
   },
 );
 
@@ -52,13 +60,16 @@ router.post(
         .returning();
 
       res.status(201).json(
-        serializeProject({
-          project: created,
-          canViewSummary: true,
-          canEditEntries: true,
-          canResetApproval: true,
-          isAdminOwned: true,
-        }),
+        serializeProject(
+          {
+            project: created,
+            canViewSummary: true,
+            canEditEntries: true,
+            canResetApproval: true,
+            isAdminOwned: true,
+          },
+          defaultChain(),
+        ),
       );
     } catch (e) {
       if ((e as { code?: string }).code === "23505") {
@@ -94,20 +105,26 @@ router.get(
       return;
     }
 
-    const services = await db
-      .select()
-      .from(projectServicesTable)
-      .where(eq(projectServicesTable.projectId, v.project.id))
-      .orderBy(projectServicesTable.sortOrder);
+    const [services, chain] = await Promise.all([
+      db
+        .select()
+        .from(projectServicesTable)
+        .where(eq(projectServicesTable.projectId, v.project.id))
+        .orderBy(projectServicesTable.sortOrder),
+      getProjectChain(v.project.id),
+    ]);
 
     res.json({
-      ...serializeProject({
-        project: v.project,
-        canViewSummary: v.canViewSummary,
-        canEditEntries: v.canEditEntries,
-        canResetApproval: v.canResetApproval,
-        isAdminOwned: v.isAdminOwned,
-      }),
+      ...serializeProject(
+        {
+          project: v.project,
+          canViewSummary: v.canViewSummary,
+          canEditEntries: v.canEditEntries,
+          canResetApproval: v.canResetApproval,
+          isAdminOwned: v.isAdminOwned,
+        },
+        chain,
+      ),
       services: services.map((s) => ({
         id: s.id,
         projectId: s.projectId,
@@ -172,14 +189,18 @@ router.patch(
       res.status(404).json({ error: "Project not found" });
       return;
     }
+    const chain = await getProjectChain(updated.id);
     res.json(
-      serializeProject({
-        project: updated,
-        canViewSummary: true,
-        canEditEntries: true,
-        canResetApproval: true,
-        isAdminOwned: true,
-      }),
+      serializeProject(
+        {
+          project: updated,
+          canViewSummary: true,
+          canEditEntries: true,
+          canResetApproval: true,
+          isAdminOwned: true,
+        },
+        chain,
+      ),
     );
   },
 );

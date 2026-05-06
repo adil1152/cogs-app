@@ -18,9 +18,11 @@ service contracts (catering, cleaning, security, transport, etc.).
 - **Security field** (key feature): each project has a per-user access list. Admins decide who
   can view that project's summary report, who can edit its daily entries, and who can reset an
   entry to draft.
-- **Sequential approval** (OP → SOP → COO → CC → Additional). Each level can be assigned to one
-  or more users in the project's *Approvers* tab; only assigned users (or admins) can approve
-  at that level. Final approval locks the entry.
+- **Sequential approval** with a **per-project, reorderable approval chain** (default
+  `OP → SOP → COO → CC → Additional`). Admins reorder freely on the *Approvers* tab; the chain
+  lives in `project_approval_chain` and is exposed as `project.approvalChain`. Each position
+  can be assigned to one or more users; only assigned users (or admins) can approve at that
+  position. The last position locks the entry.
 - **Reset to draft**: admins, or users with the per-project `canResetApproval` permission, can
   unlock and clear all approvals on any entry. The action is fully audited.
 - **Audit log**: every entry create / update / delete / approve / reject / reset is recorded in
@@ -69,9 +71,12 @@ Shared libs:
 - `POST /api/entries/:id/reset` (admin or `canResetApproval`)
 - `GET /api/entries/:id/audit`
 - `GET /api/projects/:id/approvers`, `PUT /api/projects/:id/approvers` (admin)
+- `GET /api/projects/:id/approval-chain`, `PUT /api/projects/:id/approval-chain` (admin, reorder only)
+- `GET /api/services` — services across visible projects (Reports filter)
 - `GET /api/dashboard`, `GET /api/recent-activity`
 - `GET /api/projects/:id/summary` (requires `canViewSummary` for non-admins)
-- `GET /api/reports/aggregate`, `GET /api/reports/trends`
+- `GET /api/reports/aggregate`, `GET /api/reports/trends` — both accept `projectIds` and
+  `serviceIds` CSV filters; service filter recomputes mandays from filtered cost rows.
 
 ## Visibility / authorization rules
 
@@ -94,8 +99,9 @@ Shared libs:
 
 ## Visual identity
 
-Dark navy sidebar with amber/gold primary accents and teal/green secondary chart colors.
-Light content area. The app feels like an operations cockpit: dense, tabular, confident.
+Light SAR/QNC theme: white sidebar with colored nav icons (sky/amber/emerald/violet), blue
+primary accents, soft pastel content background. Sidebar collapses to a 64-px rail; the
+collapsed/expanded state persists in `localStorage` under `qnc-sidebar-collapsed`.
 
 ## Working with this repo
 

@@ -66,10 +66,13 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ---------- QNC brand palette ---------- */
-/* Blue   #2D8DC8  → 202 64% 48%   (primary brand) */
-/* Purple #8B5CA5  → 285 28% 50%   (secondary accent) */
-/* Green  #5BAE48  → 110 41% 48%   (success / approved) */
+/* ---------- QNC brand palette ----------
+   Blue   #2D8DC8  → 202 64% 48%   (primary brand)
+   Purple #8B5CA5  → 285 28% 50%   (secondary accent)
+   Green  #5BAE48  → 110 41% 48%   (success / approved)
+   Light "ops cockpit" theme: white sidebar with brand-blue active states,
+   soft pastel page background, dense but airy tables.
+*/
 
 :root {
   --button-outline: rgba(0,0,0, .10);
@@ -80,50 +83,47 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 210 40% 98%;
-  --foreground: 222 47% 11%;
+  --background: 220 38% 97%;
+  --foreground: 215 28% 17%;
 
-  --border: 214 32% 91%;
+  --border: 215 24% 90%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  --card-foreground: 215 28% 17%;
+  --card-border: 215 24% 90%;
 
-  /* Sidebar — deep navy with a hint of QNC blue. Stays dark in both modes. */
-  --sidebar: 215 45% 13%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 215 40% 18%;
-  --sidebar-primary: 202 64% 52%;        /* QNC blue */
+  /* Sidebar — clean white panel, brand-blue active item, dark navy text. */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 215 28% 22%;
+  --sidebar-border: 215 22% 92%;
+  --sidebar-primary: 202 64% 47%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 215 35% 20%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 202 64% 52%;
+  --sidebar-accent: 202 80% 95%;          /* very pale blue tint for active row */
+  --sidebar-accent-foreground: 202 70% 35%;
+  --sidebar-ring: 202 64% 47%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 215 28% 17%;
+  --popover-border: 215 24% 90%;
 
-  /* Primary — QNC blue */
   --primary: 202 64% 47%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 215 25% 95%;
+  --secondary-foreground: 215 28% 17%;
 
-  --muted: 210 40% 96%;
+  --muted: 220 25% 95%;
   --muted-foreground: 215 16% 47%;
 
-  /* Accent — QNC blue (used for highlights, active states) */
   --accent: 202 64% 47%;
   --accent-foreground: 0 0% 100%;
 
   --destructive: 0 75% 52%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 214 32% 91%;
+  --input: 215 24% 90%;
   --ring: 202 64% 47%;
 
-  /* Charts: QNC blue → green → purple → teal → amber */
   --chart-1: 202 64% 47%;
   --chart-2: 110 41% 47%;
   --chart-3: 285 28% 50%;
@@ -133,15 +133,15 @@
   --app-font-sans: 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
-  --radius: 0.4rem;
+  --radius: 0.5rem;
   --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0, 0.05);
-  --shadow-xs: 0px 1px 3px 0px rgba(0,0,0, 0.1);
+  --shadow-xs: 0px 1px 3px 0px rgba(0,0,0, 0.08);
   --shadow-sm: 0px 2px 4px 0px rgba(0,0,0, 0.05);
-  --shadow: 0px 4px 6px -1px rgba(0,0,0, 0.1);
-  --shadow-md: 0px 6px 8px -2px rgba(0,0,0, 0.1);
-  --shadow-lg: 0px 10px 15px -3px rgba(0,0,0, 0.1);
+  --shadow: 0px 4px 6px -1px rgba(0,0,0, 0.08);
+  --shadow-md: 0px 6px 8px -2px rgba(0,0,0, 0.08);
+  --shadow-lg: 0px 10px 15px -3px rgba(0,0,0, 0.08);
   --shadow-xl: 0px 20px 25px -5px rgba(0,0,0, 0.1);
-  --shadow-2xl: 0px 25px 50px -12px rgba(0,0,0, 0.25);
+  --shadow-2xl: 0px 25px 50px -12px rgba(0,0,0, 0.2);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
@@ -152,6 +152,13 @@
   --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* Soft pastel app background gradient */
+  --app-bg-gradient: linear-gradient(
+    180deg,
+    hsl(220 38% 98%) 0%,
+    hsl(220 50% 96%) 100%
+  );
 }
 
 .dark {
@@ -205,6 +212,12 @@
   --chart-3: 285 45% 65%;
   --chart-4: 175 60% 50%;
   --chart-5: 38 92% 60%;
+
+  --app-bg-gradient: linear-gradient(
+    180deg,
+    hsl(215 45% 9%) 0%,
+    hsl(215 50% 7%) 100%
+  );
 }
 
 @layer base {
@@ -212,6 +225,8 @@
     @apply border-border;
   }
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased text-foreground;
+    background: var(--app-bg-gradient);
+    background-attachment: fixed;
   }
 }

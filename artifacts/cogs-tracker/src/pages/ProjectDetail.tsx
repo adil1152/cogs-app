@@ -19,6 +19,7 @@ import {
   useDeleteProject,
   useListProjectApprovers,
   useSetProjectApprovers,
+  useSetProjectApprovalChain,
   getGetProjectQueryKey,
   getListProjectServicesQueryKey,
   getListProjectAccessQueryKey,
@@ -26,6 +27,7 @@ import {
   getListProjectsQueryKey,
   getListUsersQueryKey,
   getListProjectApproversQueryKey,
+  type ApprovalChainEntry,
   type CreateProjectServiceBody,
   type GrantAccessBody,
   type UpdateProjectBody,
@@ -51,7 +53,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
-import { Lock, Plus, Trash2, MapPin, Calendar, Pencil, BarChart3, ArrowUp, ArrowDown, Check, X } from "lucide-react";
+import { Lock, Plus, Trash2, MapPin, Calendar, Pencil, BarChart3, ArrowUp, ArrowDown, Check, X, GripVertical } from "lucide-react";
 
 export default function ProjectDetail() {
   const [, params] = useRoute("/projects/:id");
@@ -130,7 +132,7 @@ export default function ProjectDetail() {
 
           {isAdmin && (
             <TabsContent value="approvers" className="mt-4">
-              <ApproversPanel projectId={id} />
+              <ApproversPanel projectId={id} project={project} isAdmin={isAdmin} />
             </TabsContent>
           )}
 
@@ -632,9 +634,15 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
   );
 }
 
-const APPROVAL_LEVELS = ["OP", "SOP", "COO", "CC", "Additional"] as const;
-
-function ApproversPanel({ projectId }: { projectId: string }) {
+function ApproversPanel({
+  projectId,
+  project,
+  isAdmin,
+}: {
+  projectId: string;
+  project: { approvalChain?: ApprovalChainEntry[] } | undefined;
+  isAdmin: boolean;
+}) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: assignments } = useListProjectApprovers(projectId, {
@@ -650,6 +658,21 @@ function ApproversPanel({ projectId }: { projectId: string }) {
     query: { queryKey: getListProjectAccessQueryKey(projectId) },
   });
 
+  // Server-truth chain (with default fallback if absent).
+  const serverChain: ApprovalChainEntry[] = useMemo(
+    () =>
+      project?.approvalChain && project.approvalChain.length > 0
+        ? [...project.approvalChain].sort((a, b) => a.position - b.position)
+        : [
+            { position: 1, levelName: "OP" },
+            { position: 2, levelName: "SOP" },
+            { position: 3, levelName: "COO" },
+            { position: 4, levelName: "CC" },
+            { position: 5, levelName: "Additional" },
+          ],
+    [project],
+  );
+
   // Eligible users: anyone with project access OR admins.
   const eligible = useMemo(() => {
     const accessIds = new Set((access ?? []).map((a) => a.userId));
@@ -658,28 +681,40 @@ function ApproversPanel({ projectId }: { projectId: string }) {
     );
   }, [users, access]);
 
-  // Local edit state, seeded from server. Each level: list of user IDs.
-  const [draft, setDraft] = useState<Record<number, string[]> | null>(null);
+  // Local edit state, seeded from server.
+  // - chainDraft: ordered array of level names (length matches serverChain.length).
+  // - assignmentsDraft: keyed by ORIGINAL position (1..N) on the SERVER chain.
+  const [chainDraft, setChainDraft] = useState<string[] | null>(null);
+  const [assignmentsDraft, setAssignmentsDraft] = useState<
+    Record<number, string[]> | null
+  >(null);
+
   useEffect(() => {
-    if (assignments && draft === null) {
+    if (assignments && assignmentsDraft === null) {
       const seed: Record<number, string[]> = {};
-      for (let l = 1; l <= APPROVAL_LEVELS.length; l++) seed[l] = [];
+      for (let l = 1; l <= serverChain.length; l++) seed[l] = [];
       for (const a of assignments) {
         if (!seed[a.level]) seed[a.level] = [];
         if (!seed[a.level].includes(a.userId)) seed[a.level].push(a.userId);
       }
-      setDraft(seed);
+      setAssignmentsDraft(seed);
     }
-  }, [assignments, draft]);
+  }, [assignments, assignmentsDraft, serverChain.length]);
 
-  const set = useSetProjectApprovers({
+  useEffect(() => {
+    if (chainDraft === null) {
+      setChainDraft(serverChain.map((c) => c.levelName));
+    }
+  }, [chainDraft, serverChain]);
+
+  const setApprovers = useSetProjectApprovers({
     mutation: {
       onSuccess: () => {
         toast({ title: "Approvers saved" });
         queryClient.invalidateQueries({
           queryKey: getListProjectApproversQueryKey(projectId),
         });
-        setDraft(null);
+        setAssignmentsDraft(null);
       },
       onError: (err: any) =>
         toast({
@@ -690,32 +725,84 @@ function ApproversPanel({ projectId }: { projectId: string }) {
     },
   });
 
-  function addUser(level: number, userId: string) {
-    setDraft((prev) => {
+  const setChain = useSetProjectApprovalChain({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Approval order saved" });
+        queryClient.invalidateQueries({
+          queryKey: getGetProjectQueryKey(projectId),
+        });
+        queryClient.invalidateQueries({
+          queryKey: getListProjectApproversQueryKey(projectId),
+        });
+        // Reset assignments draft so it re-seeds from the new server-truth.
+        setAssignmentsDraft(null);
+        setChainDraft(null);
+      },
+      onError: (err: any) =>
+        toast({
+          title: "Save order failed",
+          description: err.message,
+          variant: "destructive",
+        }),
+    },
+  });
+
+  function addUser(originalLevel: number, userId: string) {
+    setAssignmentsDraft((prev) => {
       const base = prev ?? {};
-      const cur = base[level] ?? [];
+      const cur = base[originalLevel] ?? [];
       if (cur.includes(userId)) return base;
-      return { ...base, [level]: [...cur, userId] };
+      return { ...base, [originalLevel]: [...cur, userId] };
     });
   }
-  function removeUser(level: number, userId: string) {
-    setDraft((prev) => {
+  function removeUser(originalLevel: number, userId: string) {
+    setAssignmentsDraft((prev) => {
       const base = prev ?? {};
-      const cur = base[level] ?? [];
-      return { ...base, [level]: cur.filter((u) => u !== userId) };
+      const cur = base[originalLevel] ?? [];
+      return { ...base, [originalLevel]: cur.filter((u) => u !== userId) };
     });
   }
-  function save() {
-    if (!draft) return;
+  function saveAssignments() {
+    if (!assignmentsDraft) return;
     const payload = {
-      assignments: Object.entries(draft).flatMap(([lvl, ids]) =>
+      assignments: Object.entries(assignmentsDraft).flatMap(([lvl, ids]) =>
         ids.map((userId) => ({ level: Number(lvl), userId })),
       ),
     };
-    set.mutate({ id: projectId, data: payload });
+    setApprovers.mutate({ id: projectId, data: payload });
   }
 
-  if (!draft) {
+  function moveLevel(idx: number, dir: -1 | 1) {
+    setChainDraft((prev) => {
+      if (!prev) return prev;
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  }
+  function saveChain() {
+    if (!chainDraft) return;
+    setChain.mutate({
+      id: projectId,
+      data: {
+        chain: chainDraft.map((levelName, i) => ({
+          position: i + 1,
+          levelName,
+        })),
+      },
+    });
+  }
+
+  const chainDirty = useMemo(() => {
+    if (!chainDraft) return false;
+    if (chainDraft.length !== serverChain.length) return true;
+    return chainDraft.some((n, i) => n !== serverChain[i].levelName);
+  }, [chainDraft, serverChain]);
+
+  if (!assignmentsDraft || !chainDraft) {
     return (
       <Card>
         <CardContent className="py-10 text-center text-sm text-muted-foreground">
@@ -727,31 +814,101 @@ function ApproversPanel({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-4">
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Approval order</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Drag the arrows to reorder the chain. Approvals run top-to-bottom
+              and the last position locks the entry. Approver assignments stay
+              attached to each role when you reorder.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border border-border divide-y divide-border bg-card">
+              {chainDraft.map((name, i) => (
+                <div
+                  key={`${name}-${i}`}
+                  className="flex items-center gap-3 px-3 py-2.5"
+                  data-testid={`chain-row-${i}`}
+                >
+                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                  <Badge variant="secondary" className="tabular-nums">
+                    {i + 1}
+                  </Badge>
+                  <span className="flex-1 text-sm font-medium">{name}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => moveLevel(i, -1)}
+                    disabled={i === 0}
+                    data-testid={`chain-up-${i}`}
+                    title="Move up"
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={() => moveLevel(i, 1)}
+                    disabled={i === chainDraft.length - 1}
+                    data-testid={`chain-down-${i}`}
+                    title="Move down"
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 mt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setChainDraft(serverChain.map((c) => c.levelName))}
+                disabled={!chainDirty || setChain.isPending}
+                data-testid="button-reset-chain"
+              >
+                Reset order
+              </Button>
+              <Button
+                size="sm"
+                onClick={saveChain}
+                disabled={!chainDirty || setChain.isPending}
+                data-testid="button-save-chain"
+              >
+                Save order
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Approvers per level</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Each daily entry is approved sequentially OP → SOP → COO → CC →
-            Additional. Only the users you list at a level may approve at that
-            level (admins always can). Eligible picks are admins plus users
-            with any project access.
+            Each daily entry is approved sequentially in the order shown above.
+            Only the users you list at a level may approve at that level
+            (admins always can). Eligible picks are admins plus users with any
+            project access.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {APPROVAL_LEVELS.map((name, i) => {
-            const level = i + 1;
-            const selectedIds = draft[level] ?? [];
+          {serverChain.map(({ position, levelName }) => {
+            const selectedIds = assignmentsDraft[position] ?? [];
             const remaining = eligible.filter((u) => !selectedIds.includes(u.id));
             return (
               <div
-                key={name}
+                key={position}
                 className="rounded-md border border-border bg-card p-4"
-                data-testid={`approver-level-${name}`}
+                data-testid={`approver-level-${levelName}`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{level}</Badge>
-                    <span className="font-medium text-sm">{name}</span>
+                    <Badge variant="secondary">{position}</Badge>
+                    <span className="font-medium text-sm">{levelName}</span>
                   </div>
                   <span className="text-xs text-muted-foreground">
                     {selectedIds.length} assigned
@@ -775,8 +932,8 @@ function ApproversPanel({ projectId }: { projectId: string }) {
                         <button
                           type="button"
                           className="hover:text-destructive"
-                          onClick={() => removeUser(level, uid)}
-                          data-testid={`remove-approver-${name}-${uid}`}
+                          onClick={() => removeUser(position, uid)}
+                          data-testid={`remove-approver-${levelName}-${uid}`}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -787,11 +944,11 @@ function ApproversPanel({ projectId }: { projectId: string }) {
                 {remaining.length > 0 && (
                   <Select
                     value=""
-                    onValueChange={(v) => v && addUser(level, v)}
+                    onValueChange={(v) => v && addUser(position, v)}
                   >
                     <SelectTrigger
                       className="h-8 max-w-sm"
-                      data-testid={`add-approver-${name}`}
+                      data-testid={`add-approver-${levelName}`}
                     >
                       <SelectValue placeholder="Add approver…" />
                     </SelectTrigger>
@@ -813,14 +970,14 @@ function ApproversPanel({ projectId }: { projectId: string }) {
       <div className="flex justify-end gap-2">
         <Button
           variant="outline"
-          onClick={() => setDraft(null)}
+          onClick={() => setAssignmentsDraft(null)}
           data-testid="button-cancel-approvers"
         >
           Reset
         </Button>
         <Button
-          onClick={save}
-          disabled={set.isPending}
+          onClick={saveAssignments}
+          disabled={setApprovers.isPending}
           data-testid="button-save-approvers"
         >
           Save approvers

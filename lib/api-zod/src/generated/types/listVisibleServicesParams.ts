@@ -6,8 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SetProjectApproversBodyAssignmentsItem = {
-  /** @minimum 1 */
-  level: number;
-  userId: string;
+export type ListVisibleServicesParams = {
+  /**
+   * Comma-separated list of project ids to filter by.
+   */
+  projectIds?: string;
 };

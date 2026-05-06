@@ -4,26 +4,30 @@ import {
   usersTable,
 } from "@workspace/db";
 import { and, asc, eq } from "drizzle-orm";
-import { APPROVAL_LEVELS } from "../routes/approvals";
+import { getProjectChain, levelNameAt } from "./approvalChain";
 
 export async function listProjectApprovers(projectId: string) {
-  const rows = await db
-    .select({ a: projectApproverAssignmentsTable, u: usersTable })
-    .from(projectApproverAssignmentsTable)
-    .leftJoin(
-      usersTable,
-      eq(usersTable.id, projectApproverAssignmentsTable.userId),
-    )
-    .where(eq(projectApproverAssignmentsTable.projectId, projectId))
-    .orderBy(
-      asc(projectApproverAssignmentsTable.level),
-      asc(projectApproverAssignmentsTable.createdAt),
-    );
+  const [chain, rows] = await Promise.all([
+    getProjectChain(projectId),
+    db
+      .select({ a: projectApproverAssignmentsTable, u: usersTable })
+      .from(projectApproverAssignmentsTable)
+      .leftJoin(
+        usersTable,
+        eq(usersTable.id, projectApproverAssignmentsTable.userId),
+      )
+      .where(eq(projectApproverAssignmentsTable.projectId, projectId))
+      .orderBy(
+        asc(projectApproverAssignmentsTable.level),
+        asc(projectApproverAssignmentsTable.createdAt),
+      ),
+  ]);
+
   return rows.map(({ a, u }) => ({
     id: a.id,
     projectId: a.projectId,
     level: a.level,
-    levelName: APPROVAL_LEVELS[a.level - 1] ?? `L${a.level}`,
+    levelName: levelNameAt(chain, a.level),
     userId: a.userId,
     user: u
       ? {
@@ -60,5 +64,6 @@ export async function isApproverFor(
       ),
     )
     .limit(1);
+
   return !!row;
 }

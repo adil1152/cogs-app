@@ -5,14 +5,12 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { AuthUser } from "./authUser";
+import type { ServiceCatalogItemKind } from "./serviceCatalogItemKind";
 
-export interface ApproverAssignment {
+export interface ServiceCatalogItem {
   id: string;
   projectId: string;
-  /** @minimum 1 */
-  level: number;
-  levelName: string;
-  userId: string;
-  user: AuthUser;
+  projectName: string;
+  name: string;
+  kind: ServiceCatalogItemKind;
 }

@@ -4,6 +4,7 @@ import {
   projectAccessTable,
 } from "@workspace/db";
 import { and, eq, inArray } from "drizzle-orm";
+import type { ChainEntry } from "./approvalChain";
 
 export interface VisibleProject {
   project: typeof projectsTable.$inferSelect;
@@ -114,7 +115,10 @@ export async function getProjectVisibility(
   };
 }
 
-export function serializeProject(v: VisibleProject) {
+export function serializeProject(
+  v: VisibleProject,
+  approvalChain: ChainEntry[],
+) {
   const p = v.project;
   return {
     id: p.id,
@@ -129,5 +133,6 @@ export function serializeProject(v: VisibleProject) {
     currentUserCanViewSummary: v.canViewSummary,
     currentUserCanEditEntries: v.canEditEntries,
     currentUserCanResetApproval: v.canResetApproval,
+    approvalChain,
   };
 }

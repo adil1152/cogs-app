@@ -6,8 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type SetProjectApproversBodyAssignmentsItem = {
+export interface ApprovalChainEntry {
   /** @minimum 1 */
-  level: number;
-  userId: string;
-};
+  position: number;
+  /**
+   * @minLength 1
+   * @maxLength 32
+   */
+  levelName: string;
+}

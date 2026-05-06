@@ -74,7 +74,9 @@ Shared libs:
 - `GET /api/projects/:id/approval-chain`, `PUT /api/projects/:id/approval-chain` (admin, reorder only)
 - `GET /api/services` — services across visible projects (Reports filter)
 - `GET /api/dashboard`, `GET /api/recent-activity`
-- `GET /api/projects/:id/summary` (requires `canViewSummary` for non-admins)
+- `GET /api/projects/:id/summary` (requires `canViewSummary` for non-admins) — accepts
+  `from`, `to`, and `serviceIds` CSV. When `serviceIds` is set, mandays are recomputed from
+  the chosen services' cost rows (same semantics as `/reports/aggregate`).
 - `GET /api/reports/aggregate`, `GET /api/reports/trends` — both accept `projectIds` and
   `serviceIds` CSV filters; service filter recomputes mandays from filtered cost rows.
 
@@ -88,7 +90,8 @@ Shared libs:
 
 ## Frontend route map
 
-- `/` — Dashboard (KPIs, trend, breakdowns, recent activity)
+- `/` — Dashboard. Month-to-date only: 4 KPI cards (cost, mandays, SAR/manday, entries),
+  a month-to-date trend line, plus service- and project-comparison bar charts.
 - `/projects` — Projects list + create (admin)
 - `/projects/:id` — Project detail (entries, services, security tab, settings tab)
 - `/projects/:id/summary` — Per-project summary with date range + CSV export
@@ -100,8 +103,11 @@ Shared libs:
 ## Visual identity
 
 Light SAR/QNC theme: white sidebar with colored nav icons (sky/amber/emerald/violet), blue
-primary accents, soft pastel content background. Sidebar collapses to a 64-px rail; the
-collapsed/expanded state persists in `localStorage` under `qnc-sidebar-collapsed`.
+primary accents, soft pastel content background. Sidebar collapses to a 64-px rail and is
+**sticky** (`sticky top-0 h-screen`) so it stays visible while the main column scrolls; the
+collapsed/expanded state persists in `localStorage` under `qnc-sidebar-collapsed`. Daily-entry
+rows on the Project Summary and project rows on the Reports page are clickable and use
+wouter's `useLocation` to navigate without a full page reload.
 
 ## Working with this repo
 

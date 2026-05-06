@@ -87,6 +87,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <aside
         className={cn(
           "shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col transition-[width] duration-200",
+          "sticky top-0 self-start h-screen z-30",
           collapsed ? "w-16" : "w-60",
         )}
         data-testid="app-sidebar"

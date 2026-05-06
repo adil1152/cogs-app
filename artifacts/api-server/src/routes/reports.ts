@@ -310,10 +310,20 @@ router.get(
         ? req.query.to
         : dateOnly(new Date());
 
-    const [rows, chain] = await Promise.all([
+    const serviceFilter = parseCsv(req.query.serviceIds);
+    const serviceFilterSet = serviceFilter ? new Set(serviceFilter) : null;
+    const useEntryMandays = serviceFilterSet === null;
+
+    const [allRows, chain] = await Promise.all([
       fetchJoined([(req.params.id as string)], from, to),
       getProjectChain(v.project.id),
     ]);
+    const rows = serviceFilterSet
+      ? allRows.filter(
+          (r) => !r.cost || (r.service && serviceFilterSet.has(r.service.id)),
+        )
+      : allRows;
+
     const kpi = newKpi();
     const serviceTotals = new Map<
       string,
@@ -324,12 +334,21 @@ router.get(
       {
         entry: typeof dailyEntriesTable.$inferSelect;
         totalCost: number;
+        contributedMandays: number;
+        hasUsableCost: boolean;
       }
     >();
 
     for (const row of rows) {
-      accumulate(kpi, row, true);
-      if (row.cost && row.service) {
+      const hasUsableCost =
+        !!row.cost &&
+        (!serviceFilterSet || (!!row.service && serviceFilterSet.has(row.service.id)));
+
+      if (hasUsableCost || !serviceFilterSet) {
+        accumulate(kpi, row, useEntryMandays);
+      }
+
+      if (hasUsableCost && row.service) {
         const key = row.service.id;
         const prev = serviceTotals.get(key) ?? {
           name: row.service.name,
@@ -337,7 +356,7 @@ router.get(
           totalCost: 0,
           mandayContribution: 0,
         };
-        prev.totalCost += Number(row.cost.cost ?? 0);
+        prev.totalCost += Number(row.cost!.cost ?? 0);
         prev.mandayContribution += rowMandayContribution(row);
         serviceTotals.set(key, prev);
       }
@@ -345,8 +364,14 @@ router.get(
       const eprev = entriesById.get(row.entry.id) ?? {
         entry: row.entry,
         totalCost: 0,
+        contributedMandays: 0,
+        hasUsableCost: false,
       };
-      if (row.cost) eprev.totalCost += Number(row.cost.cost ?? 0);
+      if (hasUsableCost) {
+        eprev.totalCost += Number(row.cost!.cost ?? 0);
+        eprev.contributedMandays += rowMandayContribution(row);
+        eprev.hasUsableCost = true;
+      }
       entriesById.set(row.entry.id, eprev);
     }
 
@@ -362,7 +387,7 @@ router.get(
         chain,
       ),
       range: { from, to },
-      kpi: kpiOut(kpi, true),
+      kpi: kpiOut(kpi, useEntryMandays),
       serviceBreakdown: Array.from(serviceTotals.values()).map((s) => ({
         serviceName: s.name,
         kind: s.kind,
@@ -370,9 +395,13 @@ router.get(
         totalMandayContribution: s.mandayContribution,
       })),
       dailyEntries: Array.from(entriesById.values())
+        // When service-filtered, omit entries whose costs were all filtered out.
+        .filter((e) => !serviceFilterSet || e.hasUsableCost)
         .sort((a, b) => (a.entry.entryDate < b.entry.entryDate ? 1 : -1))
-        .map(({ entry, totalCost }) => {
-          const totalMandays = Number(entry.totalMandays);
+        .map(({ entry, totalCost, contributedMandays }) => {
+          const totalMandays = useEntryMandays
+            ? Number(entry.totalMandays)
+            : contributedMandays;
           return {
             id: entry.id,
             projectId: entry.projectId,

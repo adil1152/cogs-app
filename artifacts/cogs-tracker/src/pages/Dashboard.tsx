@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "wouter";
 import {
   useGetDashboard,
@@ -22,10 +23,24 @@ import {
 import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatNumber, formatDate, daysAgoISO, todayISO } from "@/lib/format";
-import { ArrowRight, Plus } from "lucide-react";
+import { formatCurrency, formatNumber, formatDate, todayISO } from "@/lib/format";
+import { ArrowRight } from "lucide-react";
 
 const CHART_COLORS = ["hsl(var(--accent))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "hsl(var(--primary))"];
+
+function startOfMonthISO(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function monthLabel(): string {
+  return new Date().toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+}
 
 export default function Dashboard() {
   const { data: dashboard, isLoading } = useGetDashboard({
@@ -34,35 +49,68 @@ export default function Dashboard() {
   const { data: activity } = useGetRecentActivity({
     query: { queryKey: getGetRecentActivityQueryKey() },
   });
-  const trendsParams = { from: daysAgoISO(29), to: todayISO() };
+  const trendsParams = useMemo(
+    () => ({ from: startOfMonthISO(), to: todayISO() }),
+    [],
+  );
   const { data: trends } = useGetTrendsReport(trendsParams, {
     query: { queryKey: getGetTrendsReportQueryKey(trendsParams) },
   });
+
+  const mtd = dashboard?.monthToDate;
 
   return (
     <AppLayout>
       <PageHeader
         title="Dashboard"
-        subtitle="Today, week-to-date and month-to-date across every project you can see."
+        subtitle={`Live spend across every project you can see — ${monthLabel()}.`}
         actions={
-          <Link href="/projects">
-            <Button variant="outline" data-testid="button-projects">
-              Projects <ArrowRight className="ml-2 h-4 w-4" />
+          <Link href="/reports">
+            <Button variant="outline" data-testid="button-reports">
+              Open reports <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </Link>
         }
       />
       <div className="px-8 py-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <KpiCard label="Today" kpi={dashboard?.today} loading={isLoading} accent />
-          <KpiCard label="Week to date" kpi={dashboard?.weekToDate} loading={isLoading} />
-          <KpiCard label="Month to date" kpi={dashboard?.monthToDate} loading={isLoading} />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <KpiCard
+            label="Total cost"
+            value={formatCurrency(mtd?.totalCost ?? 0)}
+            loading={isLoading}
+            accent
+            testid="kpi-mtd-cost"
+          />
+          <KpiCard
+            label="Mandays"
+            value={formatNumber(mtd?.totalMandays ?? 0, 1)}
+            loading={isLoading}
+            testid="kpi-mtd-mandays"
+          />
+          <KpiCard
+            label="SAR / manday"
+            value={
+              mtd && mtd.totalMandays
+                ? formatCurrency(mtd.costPerManday)
+                : "—"
+            }
+            loading={isLoading}
+            testid="kpi-mtd-cpm"
+          />
+          <KpiCard
+            label="Entries"
+            value={formatNumber(mtd?.entryCount ?? 0, 0)}
+            loading={isLoading}
+            testid="kpi-mtd-entries"
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="text-base">30-day trend</CardTitle>
+              <CardTitle className="text-base">
+                Month-to-date trend
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -88,7 +136,7 @@ export default function Dashboard() {
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <Empty>No entries yet in the last 30 days.</Empty>
+                  <Empty>No entries yet this month.</Empty>
                 )}
               </div>
             </CardContent>
@@ -101,9 +149,9 @@ export default function Dashboard() {
               <ul className="divide-y divide-border">
                 {activity && activity.length > 0 ? (
                   activity.slice(0, 8).map((it) => (
-                    <li key={it.id} className="px-6 py-3 hover:bg-muted/40 transition-colors">
+                    <li key={it.id} className="hover:bg-muted/40 transition-colors">
                       <Link href={`/projects/${it.projectId}/entries/${it.id}`}>
-                        <a className="block" data-testid={`activity-${it.id}`}>
+                        <a className="block px-6 py-3" data-testid={`activity-${it.id}`}>
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-sm font-medium truncate">{it.projectName}</span>
                             <span className="text-xs text-muted-foreground tabular-nums">
@@ -182,7 +230,11 @@ export default function Dashboard() {
                         }}
                         formatter={(v: number) => formatCurrency(v)}
                       />
-                      <Bar dataKey="totalCost" fill="hsl(var(--accent))" />
+                      <Bar dataKey="totalCost">
+                        {dashboard.projectBreakdown.map((_, i) => (
+                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -199,40 +251,31 @@ export default function Dashboard() {
 
 function KpiCard({
   label,
-  kpi,
+  value,
   loading,
   accent,
+  testid,
 }: {
   label: string;
-  kpi?: { totalCost: number; totalMandays: number; costPerManday: number; entryCount: number };
+  value: string;
   loading?: boolean;
   accent?: boolean;
+  testid?: string;
 }) {
   return (
     <Card className={accent ? "border-accent/40 bg-accent/5" : ""}>
-      <CardContent className="pt-6">
+      <CardContent className="pt-5">
         <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
           {label}
         </div>
-        <div className="mt-1 text-3xl font-semibold tabular-nums" data-testid={`kpi-${label.toLowerCase().replace(/ /g, "-")}-cost`}>
-          {loading ? "—" : formatCurrency(kpi?.totalCost ?? 0)}
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-          <Stat label="Mandays" value={kpi ? formatNumber(kpi.totalMandays, 1) : "—"} />
-          <Stat label="SAR / manday" value={kpi && kpi.totalMandays ? formatCurrency(kpi.costPerManday) : "—"} />
-          <Stat label="Entries" value={kpi ? formatNumber(kpi.entryCount, 0) : "—"} />
+        <div
+          className="mt-1 text-2xl font-semibold tabular-nums"
+          data-testid={testid}
+        >
+          {loading ? "—" : value}
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="text-sm font-medium tabular-nums mt-0.5">{value}</div>
-    </div>
   );
 }
 

@@ -1008,6 +1008,12 @@ export const GetProjectSummaryParams = zod.object({
 export const GetProjectSummaryQueryParams = zod.object({
   from: zod.date().optional(),
   to: zod.date().optional(),
+  serviceIds: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Comma-separated service IDs to restrict the summary to. When provided, mandays are recomputed from the chosen services' cost rows instead of the entry's stored total.",
+    ),
 });
 
 export const getProjectSummaryResponseProjectApprovalChainItemLevelNameMax = 32;

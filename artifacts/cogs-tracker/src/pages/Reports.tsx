@@ -38,6 +38,7 @@ import {
 import { downloadCsv } from "@/lib/csv";
 import { formatCurrency, formatNumber, daysAgoISO, todayISO } from "@/lib/format";
 import { Download } from "lucide-react";
+import { useLocation } from "wouter";
 
 const CHART_COLORS = [
   "hsl(var(--accent))",
@@ -48,6 +49,7 @@ const CHART_COLORS = [
 ];
 
 export default function Reports() {
+  const [, navigate] = useLocation();
   const [from, setFrom] = useState(daysAgoISO(29));
   const [to, setTo] = useState(todayISO());
   const [projectIds, setProjectIds] = useState<string[]>([]);
@@ -420,7 +422,12 @@ export default function Reports() {
                   </TableHeader>
                   <TableBody>
                     {agg.projectBreakdown.map((p) => (
-                      <TableRow key={p.projectId}>
+                      <TableRow
+                        key={p.projectId}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/projects/${p.projectId}/summary`)}
+                        data-testid={`report-project-row-${p.projectId}`}
+                      >
                         <TableCell>
                           <div className="font-medium">{p.projectName}</div>
                           <div className="text-xs text-muted-foreground">{p.location}</div>

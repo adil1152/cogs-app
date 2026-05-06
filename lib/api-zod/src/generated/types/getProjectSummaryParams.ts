@@ -9,4 +9,8 @@
 export type GetProjectSummaryParams = {
   from?: Date;
   to?: Date;
+  /**
+   * Comma-separated service IDs to restrict the summary to. When provided, mandays are recomputed from the chosen services' cost rows instead of the entry's stored total.
+   */
+  serviceIds?: string;
 };

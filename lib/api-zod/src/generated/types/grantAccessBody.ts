@@ -8,6 +8,7 @@
 
 export interface GrantAccessBody {
   userId: string;
+  securityGroupId?: string | null;
   canViewSummary?: boolean;
   canEditEntries?: boolean;
   canResetApproval?: boolean;

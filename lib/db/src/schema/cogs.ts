@@ -54,6 +54,29 @@ export const projectServicesTable = pgTable(
   (t) => [index("IDX_project_services_project").on(t.projectId)],
 );
 
+export const securityGroupsTable = pgTable(
+  "security_groups",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar("name", { length: 64 }).notNull(),
+    description: text("description"),
+    canViewSummary: boolean("can_view_summary").notNull().default(false),
+    canEditEntries: boolean("can_edit_entries").notNull().default(false),
+    canResetApproval: boolean("can_reset_approval").notNull().default(false),
+    createdById: varchar("created_by_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [uniqueIndex("UQ_security_groups_name").on(t.name)],
+);
+
 export const projectAccessTable = pgTable(
   "project_access",
   {
@@ -64,6 +87,10 @@ export const projectAccessTable = pgTable(
     userId: varchar("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
+    securityGroupId: varchar("security_group_id").references(
+      () => securityGroupsTable.id,
+      { onDelete: "set null" },
+    ),
     canViewSummary: boolean("can_view_summary").notNull().default(true),
     canEditEntries: boolean("can_edit_entries").notNull().default(false),
     canResetApproval: boolean("can_reset_approval").notNull().default(false),
@@ -78,6 +105,9 @@ export const projectAccessTable = pgTable(
     uniqueIndex("UQ_project_access_project_user").on(t.projectId, t.userId),
   ],
 );
+
+export type SecurityGroup = typeof securityGroupsTable.$inferSelect;
+export type InsertSecurityGroup = typeof securityGroupsTable.$inferInsert;
 
 export const dailyEntriesTable = pgTable(
   "daily_entries",

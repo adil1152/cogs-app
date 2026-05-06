@@ -26,6 +26,7 @@ export type {
   ProjectSummaryReport,
   ProjectSummaryReportRange,
   ProjectTotal,
+  SecurityGroup,
   RecentActivityItem,
   ReorderProjectServiceItem,
   ServiceCostBreakdown,

@@ -27,6 +27,7 @@ import type {
   CreateDailyEntryBody,
   CreateProjectBody,
   CreateProjectServiceBody,
+  CreateSecurityGroupBody,
   DailyEntryDetail,
   DailyEntrySummary,
   DashboardReport,
@@ -50,6 +51,7 @@ import type {
   ProjectSummaryReport,
   RecentActivityItem,
   ReorderProjectServicesBody,
+  SecurityGroup,
   ServiceCatalogItem,
   SetApprovalChainBody,
   SetProjectApproversBody,
@@ -58,6 +60,7 @@ import type {
   UpdateDailyEntryBody,
   UpdateProjectBody,
   UpdateProjectServiceBody,
+  UpdateSecurityGroupBody,
   UpdateUserRoleBody,
 } from "./api.schemas";
 
@@ -1629,6 +1632,338 @@ export const useDeleteProjectService = <
   TContext
 > => {
   return useMutation(getDeleteProjectServiceMutationOptions(options));
+};
+
+/**
+ * @summary List all security groups (admin only).
+ */
+export const getListSecurityGroupsUrl = () => {
+  return `/api/security-groups`;
+};
+
+export const listSecurityGroups = async (
+  options?: RequestInit,
+): Promise<SecurityGroup[]> => {
+  return customFetch<SecurityGroup[]>(getListSecurityGroupsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSecurityGroupsQueryKey = () => {
+  return [`/api/security-groups`] as const;
+};
+
+export const getListSecurityGroupsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSecurityGroups>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSecurityGroups>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSecurityGroupsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSecurityGroups>>
+  > = ({ signal }) => listSecurityGroups({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSecurityGroups>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSecurityGroupsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSecurityGroups>>
+>;
+export type ListSecurityGroupsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all security groups (admin only).
+ */
+
+export function useListSecurityGroups<
+  TData = Awaited<ReturnType<typeof listSecurityGroups>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSecurityGroups>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSecurityGroupsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new security group (admin only).
+ */
+export const getCreateSecurityGroupUrl = () => {
+  return `/api/security-groups`;
+};
+
+export const createSecurityGroup = async (
+  createSecurityGroupBody: CreateSecurityGroupBody,
+  options?: RequestInit,
+): Promise<SecurityGroup> => {
+  return customFetch<SecurityGroup>(getCreateSecurityGroupUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createSecurityGroupBody),
+  });
+};
+
+export const getCreateSecurityGroupMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSecurityGroup>>,
+    TError,
+    { data: BodyType<CreateSecurityGroupBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createSecurityGroup>>,
+  TError,
+  { data: BodyType<CreateSecurityGroupBody> },
+  TContext
+> => {
+  const mutationKey = ["createSecurityGroup"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createSecurityGroup>>,
+    { data: BodyType<CreateSecurityGroupBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createSecurityGroup(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSecurityGroupMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createSecurityGroup>>
+>;
+export type CreateSecurityGroupMutationBody = BodyType<CreateSecurityGroupBody>;
+export type CreateSecurityGroupMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new security group (admin only).
+ */
+export const useCreateSecurityGroup = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createSecurityGroup>>,
+    TError,
+    { data: BodyType<CreateSecurityGroupBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createSecurityGroup>>,
+  TError,
+  { data: BodyType<CreateSecurityGroupBody> },
+  TContext
+> => {
+  return useMutation(getCreateSecurityGroupMutationOptions(options));
+};
+
+/**
+ * @summary Edit a security group (admin only). Changes propagate to all access rows that reference it.
+ */
+export const getUpdateSecurityGroupUrl = (id: string) => {
+  return `/api/security-groups/${id}`;
+};
+
+export const updateSecurityGroup = async (
+  id: string,
+  updateSecurityGroupBody: UpdateSecurityGroupBody,
+  options?: RequestInit,
+): Promise<SecurityGroup> => {
+  return customFetch<SecurityGroup>(getUpdateSecurityGroupUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSecurityGroupBody),
+  });
+};
+
+export const getUpdateSecurityGroupMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSecurityGroup>>,
+    TError,
+    { id: string; data: BodyType<UpdateSecurityGroupBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSecurityGroup>>,
+  TError,
+  { id: string; data: BodyType<UpdateSecurityGroupBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSecurityGroup"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSecurityGroup>>,
+    { id: string; data: BodyType<UpdateSecurityGroupBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateSecurityGroup(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSecurityGroupMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSecurityGroup>>
+>;
+export type UpdateSecurityGroupMutationBody = BodyType<UpdateSecurityGroupBody>;
+export type UpdateSecurityGroupMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Edit a security group (admin only). Changes propagate to all access rows that reference it.
+ */
+export const useUpdateSecurityGroup = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSecurityGroup>>,
+    TError,
+    { id: string; data: BodyType<UpdateSecurityGroupBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSecurityGroup>>,
+  TError,
+  { id: string; data: BodyType<UpdateSecurityGroupBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSecurityGroupMutationOptions(options));
+};
+
+/**
+ * @summary Delete a security group (admin only). Blocked while any access row still references it.
+ */
+export const getDeleteSecurityGroupUrl = (id: string) => {
+  return `/api/security-groups/${id}`;
+};
+
+export const deleteSecurityGroup = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteSecurityGroupUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteSecurityGroupMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSecurityGroup>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteSecurityGroup>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["deleteSecurityGroup"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteSecurityGroup>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteSecurityGroup(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteSecurityGroupMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteSecurityGroup>>
+>;
+
+export type DeleteSecurityGroupMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Delete a security group (admin only). Blocked while any access row still references it.
+ */
+export const useDeleteSecurityGroup = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteSecurityGroup>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteSecurityGroup>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getDeleteSecurityGroupMutationOptions(options));
 };
 
 /**

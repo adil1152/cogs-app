@@ -5,6 +5,7 @@ import {
   FolderKanban,
   BarChart3,
   Users,
+  ShieldCheck,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -53,7 +54,15 @@ const NAV: NavItem[] = [
     icon: Users,
     iconColor: "text-violet-500",
     adminOnly: true,
-    match: (p) => p.startsWith("/admin"),
+    match: (p) => p === "/admin/users",
+  },
+  {
+    label: "Security groups",
+    href: "/admin/security-groups",
+    icon: ShieldCheck,
+    iconColor: "text-rose-500",
+    adminOnly: true,
+    match: (p) => p.startsWith("/admin/security-groups"),
   },
 ];
 

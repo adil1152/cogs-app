@@ -2,6 +2,7 @@ import {
   db,
   projectsTable,
   projectAccessTable,
+  securityGroupsTable,
 } from "@workspace/db";
 import { and, eq, inArray } from "drizzle-orm";
 import type { ChainEntry } from "./approvalChain";
@@ -17,7 +18,9 @@ export interface VisibleProject {
 /**
  * Returns all projects visible to a user.
  * - Admins see all projects (full access).
- * - Regular users see projects where they have an access record OR are the creator.
+ * - Regular users see projects where they have an access record (effective
+ *   permission = OR-merge of the linked security group's flags and the row's
+ *   own flags).
  */
 export async function listVisibleProjects(
   userId: string,
@@ -35,11 +38,18 @@ export async function listVisibleProjects(
   }
 
   const accessRows = await db
-    .select()
+    .select({
+      access: projectAccessTable,
+      group: securityGroupsTable,
+    })
     .from(projectAccessTable)
+    .leftJoin(
+      securityGroupsTable,
+      eq(securityGroupsTable.id, projectAccessTable.securityGroupId),
+    )
     .where(eq(projectAccessTable.userId, userId));
 
-  const projectIds = accessRows.map((a) => a.projectId);
+  const projectIds = accessRows.map((r) => r.access.projectId);
   if (projectIds.length === 0) return [];
 
   const projects = await db
@@ -47,14 +57,19 @@ export async function listVisibleProjects(
     .from(projectsTable)
     .where(inArray(projectsTable.id, projectIds));
 
-  const accessById = new Map(accessRows.map((a) => [a.projectId, a]));
+  const accessById = new Map(accessRows.map((r) => [r.access.projectId, r]));
   return projects.map((p) => {
-    const a = accessById.get(p.id);
+    const r = accessById.get(p.id);
+    const a = r?.access;
+    const g = r?.group;
     return {
       project: p,
-      canViewSummary: a?.canViewSummary ?? false,
-      canEditEntries: a?.canEditEntries ?? false,
-      canResetApproval: a?.canResetApproval ?? false,
+      canViewSummary:
+        ((g?.canViewSummary ?? false) || (a?.canViewSummary ?? false)),
+      canEditEntries:
+        ((g?.canEditEntries ?? false) || (a?.canEditEntries ?? false)),
+      canResetApproval:
+        ((g?.canResetApproval ?? false) || (a?.canResetApproval ?? false)),
       isAdminOwned: false,
     };
   });
@@ -96,9 +111,16 @@ export async function getProjectVisibility(
     };
   }
 
-  const [access] = await db
-    .select()
+  const [row] = await db
+    .select({
+      access: projectAccessTable,
+      group: securityGroupsTable,
+    })
     .from(projectAccessTable)
+    .leftJoin(
+      securityGroupsTable,
+      eq(securityGroupsTable.id, projectAccessTable.securityGroupId),
+    )
     .where(
       and(
         eq(projectAccessTable.userId, userId),
@@ -106,11 +128,16 @@ export async function getProjectVisibility(
       ),
     );
 
+  const a = row?.access;
+  const g = row?.group;
   return {
     project,
-    canViewSummary: access?.canViewSummary ?? false,
-    canEditEntries: access?.canEditEntries ?? false,
-    canResetApproval: access?.canResetApproval ?? false,
+    canViewSummary:
+      ((g?.canViewSummary ?? false) || (a?.canViewSummary ?? false)),
+    canEditEntries:
+      ((g?.canEditEntries ?? false) || (a?.canEditEntries ?? false)),
+    canResetApproval:
+      ((g?.canResetApproval ?? false) || (a?.canResetApproval ?? false)),
     isAdminOwned: false,
   };
 }

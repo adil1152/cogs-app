@@ -379,6 +379,81 @@ paths:
         '204':
           description: Deleted
 
+  /security-groups:
+    get:
+      tags: [SecurityGroups]
+      operationId: listSecurityGroups
+      summary: List all security groups (admin only).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SecurityGroup'
+    post:
+      tags: [SecurityGroups]
+      operationId: createSecurityGroup
+      summary: Create a new security group (admin only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecurityGroupBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityGroup'
+  /security-groups/{id}:
+    patch:
+      tags: [SecurityGroups]
+      operationId: updateSecurityGroup
+      summary: Edit a security group (admin only). Changes propagate to all access rows that reference it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSecurityGroupBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityGroup'
+    delete:
+      tags: [SecurityGroups]
+      operationId: deleteSecurityGroup
+      summary: Delete a security group (admin only). Blocked while any access row still references it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '409':
+          description: Group is still in use; remove or reassign access rows first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /projects/{id}/access:
     get:
       tags: [Access]
@@ -1114,16 +1189,78 @@ components:
           items:
             $ref: '#/components/schemas/ReorderProjectServiceItem'
 
+    SecurityGroup:
+      type: object
+      required: [id, name, canViewSummary, canEditEntries, canResetApproval, assignmentCount, createdAt]
+      description: |
+        A reusable named bundle of permission flags. When a `project_access` row
+        references a security group, the user's effective permissions are the
+        OR-merge of the group's flags and the row's own flags.
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: string, nullable: true }
+        canViewSummary: { type: boolean }
+        canEditEntries: { type: boolean }
+        canResetApproval: { type: boolean }
+        assignmentCount:
+          type: integer
+          minimum: 0
+          description: How many project_access rows currently reference this group.
+        createdAt: { type: string, format: date-time }
+    CreateSecurityGroupBody:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: string, nullable: true }
+        canViewSummary: { type: boolean, default: false }
+        canEditEntries: { type: boolean, default: false }
+        canResetApproval: { type: boolean, default: false }
+    UpdateSecurityGroupBody:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: string, nullable: true }
+        canViewSummary: { type: boolean }
+        canEditEntries: { type: boolean }
+        canResetApproval: { type: boolean }
+
     ProjectAccess:
       type: object
-      required: [id, projectId, userId, canViewSummary, canEditEntries, canResetApproval, grantedAt, user]
+      required:
+        - id
+        - projectId
+        - userId
+        - canViewSummary
+        - canEditEntries
+        - canResetApproval
+        - effectiveCanViewSummary
+        - effectiveCanEditEntries
+        - effectiveCanResetApproval
+        - grantedAt
+        - user
       properties:
         id: { type: string }
         projectId: { type: string }
         userId: { type: string }
-        canViewSummary: { type: boolean }
+        securityGroupId:
+          type: string
+          nullable: true
+          description: When set, the linked group's flags are OR-merged with this row's flags.
+        securityGroup:
+          $ref: '#/components/schemas/SecurityGroup'
+          nullable: true
+        canViewSummary:
+          type: boolean
+          description: Per-row "extra" flag, granted in addition to the group's flag (if any).
         canEditEntries: { type: boolean }
         canResetApproval: { type: boolean }
+        effectiveCanViewSummary:
+          type: boolean
+          description: Final permission used for authorization checks (group OR row).
+        effectiveCanEditEntries: { type: boolean }
+        effectiveCanResetApproval: { type: boolean }
         grantedAt: { type: string, format: date-time }
         user:
           $ref: '#/components/schemas/AppUser'
@@ -1132,6 +1269,9 @@ components:
       required: [userId]
       properties:
         userId: { type: string }
+        securityGroupId:
+          type: string
+          nullable: true
         canViewSummary:
           type: boolean
           default: true
@@ -1144,6 +1284,9 @@ components:
     UpdateAccessBody:
       type: object
       properties:
+        securityGroupId:
+          type: string
+          nullable: true
         canViewSummary: { type: boolean }
         canEditEntries: { type: boolean }
         canResetApproval: { type: boolean }

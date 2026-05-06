@@ -18,6 +18,13 @@ service contracts (catering, cleaning, security, transport, etc.).
 - **Security field** (key feature): each project has a per-user access list. Admins decide who
   can view that project's summary report, who can edit its daily entries, and who can reset an
   entry to draft.
+- **Security groups**: reusable named permission templates (e.g. "Site Manager") live in
+  `security_groups` and are managed at `/admin/security-groups`. Each `project_access` row
+  has a nullable `security_group_id`; the user's effective permission is the **OR-merge** of
+  the group's flags and the row's own "extra" flags. Group changes propagate live (no
+  snapshot) and deletion is blocked while any access row references it (`409`). Backend
+  authorization (`getProjectVisibility`, `listVisibleProjects`) does the OR-merge; the
+  `/projects/:id/access` response surfaces both the row flags and `effectiveCan*` fields.
 - **Sequential approval** with a **per-project, reorderable approval chain** (default
   `OP → SOP → COO → CC → Additional`). Admins reorder freely on the *Approvers* tab; the chain
   lives in `project_approval_chain` and is exposed as `project.approvalChain`. Each position
@@ -65,6 +72,8 @@ Shared libs:
 - `PATCH /api/services/:id`, `DELETE /api/services/:id` (admin)
 - `GET /api/projects/:id/access` (admin), `POST /api/projects/:id/access` (admin)
 - `PATCH /api/access/:id` (admin), `DELETE /api/access/:id` (admin)
+- `GET /api/security-groups` (admin), `POST /api/security-groups` (admin)
+- `PATCH /api/security-groups/:id` (admin), `DELETE /api/security-groups/:id` (admin, blocks 409 if in use)
 - `GET /api/projects/:id/entries`, `POST /api/projects/:id/entries`
 - `GET /api/entries/:id`, `PATCH /api/entries/:id`, `DELETE /api/entries/:id`
 - `POST /api/entries/:id/approve`, `POST /api/entries/:id/reject` (assigned approver or admin)
@@ -99,6 +108,7 @@ Shared libs:
 - `/projects/:id/entries/:entryId` — Edit / view daily entry
 - `/reports` — Aggregate report with date range + project filter + CSV exports
 - `/admin/users` — Admin role management
+- `/admin/security-groups` — Admin security-group templates (create / edit / delete)
 
 ## Visual identity
 

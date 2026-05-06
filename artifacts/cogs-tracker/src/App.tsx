@@ -12,6 +12,7 @@ import EntryForm from "@/pages/EntryForm";
 import ProjectSummary from "@/pages/ProjectSummary";
 import Reports from "@/pages/Reports";
 import AdminUsers from "@/pages/AdminUsers";
+import AdminSecurityGroups from "@/pages/AdminSecurityGroups";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,6 +44,7 @@ function Gate() {
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/reports" component={Reports} />
       <Route path="/admin/users" component={AdminUsers} />
+      <Route path="/admin/security-groups" component={AdminSecurityGroups} />
       <Route component={NotFound} />
     </Switch>
   );

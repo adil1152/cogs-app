@@ -191,25 +191,84 @@ export interface ReorderProjectServicesBody {
   services: ReorderProjectServiceItem[];
 }
 
+/**
+ * A reusable named bundle of permission flags. When a `project_access` row
+references a security group, the user's effective permissions are the
+OR-merge of the group's flags and the row's own flags.
+
+ */
+export interface SecurityGroup {
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 64
+   */
+  name: string;
+  description?: string | null;
+  canViewSummary: boolean;
+  canEditEntries: boolean;
+  canResetApproval: boolean;
+  /**
+   * How many project_access rows currently reference this group.
+   * @minimum 0
+   */
+  assignmentCount: number;
+  createdAt: string;
+}
+
+export interface CreateSecurityGroupBody {
+  /**
+   * @minLength 1
+   * @maxLength 64
+   */
+  name: string;
+  description?: string | null;
+  canViewSummary?: boolean;
+  canEditEntries?: boolean;
+  canResetApproval?: boolean;
+}
+
+export interface UpdateSecurityGroupBody {
+  /**
+   * @minLength 1
+   * @maxLength 64
+   */
+  name?: string;
+  description?: string | null;
+  canViewSummary?: boolean;
+  canEditEntries?: boolean;
+  canResetApproval?: boolean;
+}
+
 export interface ProjectAccess {
   id: string;
   projectId: string;
   userId: string;
+  /** When set, the linked group's flags are OR-merged with this row's flags. */
+  securityGroupId?: string | null;
+  securityGroup?: SecurityGroup | null;
+  /** Per-row "extra" flag, granted in addition to the group's flag (if any). */
   canViewSummary: boolean;
   canEditEntries: boolean;
   canResetApproval: boolean;
+  /** Final permission used for authorization checks (group OR row). */
+  effectiveCanViewSummary: boolean;
+  effectiveCanEditEntries: boolean;
+  effectiveCanResetApproval: boolean;
   grantedAt: string;
   user: AuthUser;
 }
 
 export interface GrantAccessBody {
   userId: string;
+  securityGroupId?: string | null;
   canViewSummary?: boolean;
   canEditEntries?: boolean;
   canResetApproval?: boolean;
 }
 
 export interface UpdateAccessBody {
+  securityGroupId?: string | null;
   canViewSummary?: boolean;
   canEditEntries?: boolean;
   canResetApproval?: boolean;

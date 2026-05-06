@@ -6,8 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface UpdateAccessBody {
-  securityGroupId?: string | null;
+export interface CreateSecurityGroupBody {
+  /**
+   * @minLength 1
+   * @maxLength 64
+   */
+  name: string;
+  description?: string | null;
   canViewSummary?: boolean;
   canEditEntries?: boolean;
   canResetApproval?: boolean;

@@ -1,5 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, projectAccessTable, usersTable } from "@workspace/db";
+import {
+  db,
+  projectAccessTable,
+  securityGroupsTable,
+  usersTable,
+} from "@workspace/db";
 import { eq } from "drizzle-orm";
 import {
   GrantProjectAccessBody,
@@ -15,13 +20,45 @@ async function serializeAccess(a: typeof projectAccessTable.$inferSelect) {
     .select()
     .from(usersTable)
     .where(eq(usersTable.id, a.userId));
+  let group: typeof securityGroupsTable.$inferSelect | undefined;
+  if (a.securityGroupId) {
+    const [g] = await db
+      .select()
+      .from(securityGroupsTable)
+      .where(eq(securityGroupsTable.id, a.securityGroupId));
+    group = g;
+  }
+  // OR-merge: effective = group's flag OR row's flag.
+  const effectiveCanViewSummary =
+    (group?.canViewSummary ?? false) || a.canViewSummary;
+  const effectiveCanEditEntries =
+    (group?.canEditEntries ?? false) || a.canEditEntries;
+  const effectiveCanResetApproval =
+    (group?.canResetApproval ?? false) || a.canResetApproval;
   return {
     id: a.id,
     projectId: a.projectId,
     userId: a.userId,
+    securityGroupId: a.securityGroupId,
+    securityGroup: group
+      ? {
+          id: group.id,
+          name: group.name,
+          description: group.description,
+          canViewSummary: group.canViewSummary,
+          canEditEntries: group.canEditEntries,
+          canResetApproval: group.canResetApproval,
+          // assignmentCount is not used by the client when nested here.
+          assignmentCount: 0,
+          createdAt: group.createdAt.toISOString(),
+        }
+      : null,
     canViewSummary: a.canViewSummary,
     canEditEntries: a.canEditEntries,
     canResetApproval: a.canResetApproval,
+    effectiveCanViewSummary,
+    effectiveCanEditEntries,
+    effectiveCanResetApproval,
     grantedAt: a.grantedAt.toISOString(),
     user: u
       ? {
@@ -43,13 +80,12 @@ router.get(
     const v = await getProjectVisibility(
       req.user!.id,
       req.user!.role,
-      (req.params.id as string),
+      req.params.id as string,
     );
     if (!v.project) {
       res.status(404).json({ error: "Project not found" });
       return;
     }
-    // Only admins or summary-viewers can see the access list
     if (req.user!.role !== "admin" && !v.canViewSummary) {
       res.status(403).json({ error: "No access" });
       return;
@@ -57,7 +93,7 @@ router.get(
     const rows = await db
       .select()
       .from(projectAccessTable)
-      .where(eq(projectAccessTable.projectId, (req.params.id as string)));
+      .where(eq(projectAccessTable.projectId, req.params.id as string));
     res.json(await Promise.all(rows.map(serializeAccess)));
   },
 );
@@ -71,22 +107,25 @@ router.post(
       res.status(400).json({ error: "Invalid body" });
       return;
     }
+    const values = {
+      projectId: req.params.id as string,
+      userId: parsed.data.userId,
+      securityGroupId: parsed.data.securityGroupId ?? null,
+      canViewSummary: parsed.data.canViewSummary ?? true,
+      canEditEntries: parsed.data.canEditEntries ?? false,
+      canResetApproval: parsed.data.canResetApproval ?? false,
+      grantedById: req.user!.id,
+    };
     const [created] = await db
       .insert(projectAccessTable)
-      .values({
-        projectId: (req.params.id as string),
-        userId: parsed.data.userId,
-        canViewSummary: parsed.data.canViewSummary ?? true,
-        canEditEntries: parsed.data.canEditEntries ?? false,
-        canResetApproval: parsed.data.canResetApproval ?? false,
-        grantedById: req.user!.id,
-      })
+      .values(values)
       .onConflictDoUpdate({
         target: [projectAccessTable.projectId, projectAccessTable.userId],
         set: {
-          canViewSummary: parsed.data.canViewSummary ?? true,
-          canEditEntries: parsed.data.canEditEntries ?? false,
-          canResetApproval: parsed.data.canResetApproval ?? false,
+          securityGroupId: values.securityGroupId,
+          canViewSummary: values.canViewSummary,
+          canEditEntries: values.canEditEntries,
+          canResetApproval: values.canResetApproval,
           grantedById: req.user!.id,
           grantedAt: new Date(),
         },
@@ -106,6 +145,8 @@ router.patch(
       return;
     }
     const data: Record<string, unknown> = {};
+    if (parsed.data.securityGroupId !== undefined)
+      data.securityGroupId = parsed.data.securityGroupId;
     if (parsed.data.canViewSummary !== undefined)
       data.canViewSummary = parsed.data.canViewSummary;
     if (parsed.data.canEditEntries !== undefined)
@@ -115,7 +156,7 @@ router.patch(
     const [updated] = await db
       .update(projectAccessTable)
       .set(data)
-      .where(eq(projectAccessTable.id, (req.params.id as string)))
+      .where(eq(projectAccessTable.id, req.params.id as string))
       .returning();
     if (!updated) {
       res.status(404).json({ error: "Access record not found" });
@@ -131,7 +172,7 @@ router.delete(
   async (req: Request, res: Response): Promise<void> => {
     await db
       .delete(projectAccessTable)
-      .where(eq(projectAccessTable.id, (req.params.id as string)));
+      .where(eq(projectAccessTable.id, req.params.id as string));
     res.status(204).end();
   },
 );

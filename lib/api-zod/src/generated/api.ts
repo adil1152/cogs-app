@@ -355,19 +355,158 @@ export const DeleteProjectServiceParams = zod.object({
 });
 
 /**
+ * @summary List all security groups (admin only).
+ */
+export const listSecurityGroupsResponseNameMax = 64;
+
+export const listSecurityGroupsResponseAssignmentCountMin = 0;
+
+export const ListSecurityGroupsResponseItem = zod
+  .object({
+    id: zod.string(),
+    name: zod.string().min(1).max(listSecurityGroupsResponseNameMax),
+    description: zod.string().nullish(),
+    canViewSummary: zod.boolean(),
+    canEditEntries: zod.boolean(),
+    canResetApproval: zod.boolean(),
+    assignmentCount: zod
+      .number()
+      .min(listSecurityGroupsResponseAssignmentCountMin)
+      .describe("How many project_access rows currently reference this group."),
+    createdAt: zod.coerce.date(),
+  })
+  .describe(
+    "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags.\n",
+  );
+export const ListSecurityGroupsResponse = zod.array(
+  ListSecurityGroupsResponseItem,
+);
+
+/**
+ * @summary Create a new security group (admin only).
+ */
+export const createSecurityGroupBodyNameMax = 64;
+
+export const createSecurityGroupBodyCanViewSummaryDefault = false;
+export const createSecurityGroupBodyCanEditEntriesDefault = false;
+export const createSecurityGroupBodyCanResetApprovalDefault = false;
+
+export const CreateSecurityGroupBody = zod.object({
+  name: zod.string().min(1).max(createSecurityGroupBodyNameMax),
+  description: zod.string().nullish(),
+  canViewSummary: zod
+    .boolean()
+    .default(createSecurityGroupBodyCanViewSummaryDefault),
+  canEditEntries: zod
+    .boolean()
+    .default(createSecurityGroupBodyCanEditEntriesDefault),
+  canResetApproval: zod
+    .boolean()
+    .default(createSecurityGroupBodyCanResetApprovalDefault),
+});
+
+/**
+ * @summary Edit a security group (admin only). Changes propagate to all access rows that reference it.
+ */
+export const UpdateSecurityGroupParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateSecurityGroupBodyNameMax = 64;
+
+export const UpdateSecurityGroupBody = zod.object({
+  name: zod.string().min(1).max(updateSecurityGroupBodyNameMax).optional(),
+  description: zod.string().nullish(),
+  canViewSummary: zod.boolean().optional(),
+  canEditEntries: zod.boolean().optional(),
+  canResetApproval: zod.boolean().optional(),
+});
+
+export const updateSecurityGroupResponseNameMax = 64;
+
+export const updateSecurityGroupResponseAssignmentCountMin = 0;
+
+export const UpdateSecurityGroupResponse = zod
+  .object({
+    id: zod.string(),
+    name: zod.string().min(1).max(updateSecurityGroupResponseNameMax),
+    description: zod.string().nullish(),
+    canViewSummary: zod.boolean(),
+    canEditEntries: zod.boolean(),
+    canResetApproval: zod.boolean(),
+    assignmentCount: zod
+      .number()
+      .min(updateSecurityGroupResponseAssignmentCountMin)
+      .describe("How many project_access rows currently reference this group."),
+    createdAt: zod.coerce.date(),
+  })
+  .describe(
+    "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags.\n",
+  );
+
+/**
+ * @summary Delete a security group (admin only). Blocked while any access row still references it.
+ */
+export const DeleteSecurityGroupParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
  * @summary List users with security access to this project
  */
 export const ListProjectAccessParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const listProjectAccessResponseSecurityGroupNameMax = 64;
+
+export const listProjectAccessResponseSecurityGroupAssignmentCountMin = 0;
+
 export const ListProjectAccessResponseItem = zod.object({
   id: zod.string(),
   projectId: zod.string(),
   userId: zod.string(),
-  canViewSummary: zod.boolean(),
+  securityGroupId: zod
+    .string()
+    .nullish()
+    .describe(
+      "When set, the linked group's flags are OR-merged with this row's flags.",
+    ),
+  securityGroup: zod
+    .object({
+      id: zod.string(),
+      name: zod
+        .string()
+        .min(1)
+        .max(listProjectAccessResponseSecurityGroupNameMax),
+      description: zod.string().nullish(),
+      canViewSummary: zod.boolean(),
+      canEditEntries: zod.boolean(),
+      canResetApproval: zod.boolean(),
+      assignmentCount: zod
+        .number()
+        .min(listProjectAccessResponseSecurityGroupAssignmentCountMin)
+        .describe(
+          "How many project_access rows currently reference this group.",
+        ),
+      createdAt: zod.coerce.date(),
+    })
+    .nullish()
+    .describe(
+      "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags.\n",
+    ),
+  canViewSummary: zod
+    .boolean()
+    .describe(
+      'Per-row \"extra\" flag, granted in addition to the group\'s flag (if any).',
+    ),
   canEditEntries: zod.boolean(),
   canResetApproval: zod.boolean(),
+  effectiveCanViewSummary: zod
+    .boolean()
+    .describe("Final permission used for authorization checks (group OR row)."),
+  effectiveCanEditEntries: zod.boolean(),
+  effectiveCanResetApproval: zod.boolean(),
   grantedAt: zod.coerce.date(),
   user: zod.object({
     id: zod.string(),
@@ -395,6 +534,7 @@ export const grantProjectAccessBodyCanResetApprovalDefault = false;
 
 export const GrantProjectAccessBody = zod.object({
   userId: zod.string(),
+  securityGroupId: zod.string().nullish(),
   canViewSummary: zod
     .boolean()
     .default(grantProjectAccessBodyCanViewSummaryDefault),
@@ -411,18 +551,61 @@ export const UpdateProjectAccessParams = zod.object({
 });
 
 export const UpdateProjectAccessBody = zod.object({
+  securityGroupId: zod.string().nullish(),
   canViewSummary: zod.boolean().optional(),
   canEditEntries: zod.boolean().optional(),
   canResetApproval: zod.boolean().optional(),
 });
 
+export const updateProjectAccessResponseSecurityGroupNameMax = 64;
+
+export const updateProjectAccessResponseSecurityGroupAssignmentCountMin = 0;
+
 export const UpdateProjectAccessResponse = zod.object({
   id: zod.string(),
   projectId: zod.string(),
   userId: zod.string(),
-  canViewSummary: zod.boolean(),
+  securityGroupId: zod
+    .string()
+    .nullish()
+    .describe(
+      "When set, the linked group's flags are OR-merged with this row's flags.",
+    ),
+  securityGroup: zod
+    .object({
+      id: zod.string(),
+      name: zod
+        .string()
+        .min(1)
+        .max(updateProjectAccessResponseSecurityGroupNameMax),
+      description: zod.string().nullish(),
+      canViewSummary: zod.boolean(),
+      canEditEntries: zod.boolean(),
+      canResetApproval: zod.boolean(),
+      assignmentCount: zod
+        .number()
+        .min(updateProjectAccessResponseSecurityGroupAssignmentCountMin)
+        .describe(
+          "How many project_access rows currently reference this group.",
+        ),
+      createdAt: zod.coerce.date(),
+    })
+    .nullish()
+    .describe(
+      "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags.\n",
+    ),
+  canViewSummary: zod
+    .boolean()
+    .describe(
+      'Per-row \"extra\" flag, granted in addition to the group\'s flag (if any).',
+    ),
   canEditEntries: zod.boolean(),
   canResetApproval: zod.boolean(),
+  effectiveCanViewSummary: zod
+    .boolean()
+    .describe("Final permission used for authorization checks (group OR row)."),
+  effectiveCanEditEntries: zod.boolean(),
+  effectiveCanResetApproval: zod.boolean(),
   grantedAt: zod.coerce.date(),
   user: zod.object({
     id: zod.string(),

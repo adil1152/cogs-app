@@ -15,6 +15,8 @@ import {
   useGrantProjectAccess,
   useUpdateProjectAccess,
   useRevokeProjectAccess,
+  useListSecurityGroups,
+  getListSecurityGroupsQueryKey,
   useUpdateProject,
   useDeleteProject,
   useListProjectApprovers,
@@ -427,14 +429,18 @@ function ServiceRow({
   );
 }
 
+const NO_GROUP = "__none__";
+
 function SecurityPanel({ projectId, canEdit }: { projectId: string; canEdit: boolean }) {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { data: access } = useListProjectAccess(projectId, {
     query: { enabled: !!projectId && canEdit, queryKey: getListProjectAccessQueryKey(projectId) },
   });
   const { data: users } = useListUsers({
     query: { enabled: canEdit, queryKey: getListUsersQueryKey() },
+  });
+  const { data: groups } = useListSecurityGroups({
+    query: { enabled: canEdit, queryKey: getListSecurityGroupsQueryKey() },
   });
 
   if (!canEdit) {
@@ -461,8 +467,10 @@ function SecurityPanel({ projectId, canEdit }: { projectId: string; canEdit: boo
             <Lock className="h-4 w-4 text-accent" /> Security field
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Choose exactly who can view this project's summary report or edit its daily entries.
-            Admins always have full access; other users see nothing here unless you grant it.
+            Pick a security group to grant a baseline set of permissions, and tick
+            extra boxes to layer additional ones on top. The effective permission
+            shown to the user is the OR-merge of the group and the row's extras.
+            Admins always have full access.
           </p>
         </CardHeader>
         <CardContent className="p-0">
@@ -471,6 +479,7 @@ function SecurityPanel({ projectId, canEdit }: { projectId: string; canEdit: boo
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
+                  <TableHead className="w-[200px]">Security group</TableHead>
                   <TableHead className="text-center">View summary</TableHead>
                   <TableHead className="text-center">Edit entries</TableHead>
                   <TableHead className="text-center">Reset to draft</TableHead>
@@ -479,7 +488,12 @@ function SecurityPanel({ projectId, canEdit }: { projectId: string; canEdit: boo
               </TableHeader>
               <TableBody>
                 {access.map((a) => (
-                  <AccessRow key={a.id} projectId={projectId} access={a} onChange={invalidate} />
+                  <AccessRow
+                    key={a.id}
+                    access={a}
+                    groups={groups ?? []}
+                    onChange={invalidate}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -490,12 +504,62 @@ function SecurityPanel({ projectId, canEdit }: { projectId: string; canEdit: boo
           )}
         </CardContent>
       </Card>
-      <GrantAccessCard projectId={projectId} users={ungranted} onGranted={invalidate} />
+      <GrantAccessCard
+        projectId={projectId}
+        users={ungranted}
+        groups={groups ?? []}
+        onGranted={invalidate}
+      />
     </div>
   );
 }
 
-function AccessRow({ projectId, access, onChange }: { projectId: string; access: any; onChange: () => void }) {
+function PermCell({
+  effective,
+  fromGroup,
+  fromRow,
+  onToggleRow,
+  testid,
+}: {
+  effective: boolean;
+  fromGroup: boolean;
+  fromRow: boolean;
+  onToggleRow: (next: boolean) => void;
+  testid: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <Checkbox
+        checked={fromRow}
+        onCheckedChange={(v) => onToggleRow(!!v)}
+        data-testid={testid}
+        title="Grant this permission as a per-row extra"
+      />
+      {fromGroup ? (
+        <span
+          className="text-[9px] uppercase tracking-wider text-emerald-600"
+          title="Granted by the assigned security group"
+        >
+          via group
+        </span>
+      ) : effective ? null : (
+        <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50">
+          off
+        </span>
+      )}
+    </div>
+  );
+}
+
+function AccessRow({
+  access,
+  groups,
+  onChange,
+}: {
+  access: any;
+  groups: Array<{ id: string; name: string }>;
+  onChange: () => void;
+}) {
   const { toast } = useToast();
   const update = useUpdateProjectAccess({
     mutation: {
@@ -508,37 +572,71 @@ function AccessRow({ projectId, access, onChange }: { projectId: string; access:
       onSuccess: () => { onChange(); toast({ title: "Access revoked" }); },
     },
   });
+  const groupFlags = {
+    view: !!access.securityGroup?.canViewSummary,
+    edit: !!access.securityGroup?.canEditEntries,
+    reset: !!access.securityGroup?.canResetApproval,
+  };
   return (
     <TableRow data-testid={`access-row-${access.userId}`}>
       <TableCell>
         <div className="font-medium">{access.user.firstName ?? access.user.email}</div>
         <div className="text-xs text-muted-foreground">{access.user.email}</div>
       </TableCell>
-      <TableCell className="text-center">
-        <Checkbox
-          checked={access.canViewSummary}
-          onCheckedChange={(v) =>
-            update.mutate({ id: access.id, data: { canViewSummary: !!v } })
+      <TableCell>
+        <Select
+          value={access.securityGroupId ?? NO_GROUP}
+          onValueChange={(v) =>
+            update.mutate({
+              id: access.id,
+              data: { securityGroupId: v === NO_GROUP ? null : v },
+            })
           }
-          data-testid={`access-summary-${access.userId}`}
+        >
+          <SelectTrigger data-testid={`access-group-${access.userId}`} className="h-8">
+            <SelectValue placeholder="None" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_GROUP}>— None —</SelectItem>
+            {groups.map((g) => (
+              <SelectItem key={g.id} value={g.id}>
+                {g.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell className="text-center">
+        <PermCell
+          effective={access.effectiveCanViewSummary}
+          fromGroup={groupFlags.view}
+          fromRow={access.canViewSummary}
+          onToggleRow={(v) =>
+            update.mutate({ id: access.id, data: { canViewSummary: v } })
+          }
+          testid={`access-summary-${access.userId}`}
         />
       </TableCell>
       <TableCell className="text-center">
-        <Checkbox
-          checked={access.canEditEntries}
-          onCheckedChange={(v) =>
-            update.mutate({ id: access.id, data: { canEditEntries: !!v } })
+        <PermCell
+          effective={access.effectiveCanEditEntries}
+          fromGroup={groupFlags.edit}
+          fromRow={access.canEditEntries}
+          onToggleRow={(v) =>
+            update.mutate({ id: access.id, data: { canEditEntries: v } })
           }
-          data-testid={`access-edit-${access.userId}`}
+          testid={`access-edit-${access.userId}`}
         />
       </TableCell>
       <TableCell className="text-center">
-        <Checkbox
-          checked={access.canResetApproval}
-          onCheckedChange={(v) =>
-            update.mutate({ id: access.id, data: { canResetApproval: !!v } })
+        <PermCell
+          effective={access.effectiveCanResetApproval}
+          fromGroup={groupFlags.reset}
+          fromRow={access.canResetApproval}
+          onToggleRow={(v) =>
+            update.mutate({ id: access.id, data: { canResetApproval: v } })
           }
-          data-testid={`access-reset-${access.userId}`}
+          testid={`access-reset-${access.userId}`}
         />
       </TableCell>
       <TableCell className="text-right">
@@ -555,9 +653,20 @@ function AccessRow({ projectId, access, onChange }: { projectId: string; access:
   );
 }
 
-function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; users: Array<any>; onGranted: () => void }) {
+function GrantAccessCard({
+  projectId,
+  users,
+  groups,
+  onGranted,
+}: {
+  projectId: string;
+  users: Array<any>;
+  groups: Array<{ id: string; name: string }>;
+  onGranted: () => void;
+}) {
   const { toast } = useToast();
   const [userId, setUserId] = useState<string>("");
+  const [securityGroupId, setSecurityGroupId] = useState<string>(NO_GROUP);
   const [canViewSummary, setCanViewSummary] = useState(true);
   const [canEditEntries, setCanEditEntries] = useState(false);
   const [canResetApproval, setCanResetApproval] = useState(false);
@@ -566,6 +675,7 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
       onSuccess: () => {
         toast({ title: "Access granted" });
         setUserId("");
+        setSecurityGroupId(NO_GROUP);
         setCanEditEntries(false);
         setCanViewSummary(true);
         setCanResetApproval(false);
@@ -582,7 +692,7 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
         {users.length === 0 ? (
           <div className="text-sm text-muted-foreground">All users already have access.</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_auto_auto_auto_auto] gap-3 items-end">
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">User</Label>
               <Select value={userId} onValueChange={setUserId}>
@@ -590,6 +700,18 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
                 <SelectContent>
                   {users.map((u) => (
                     <SelectItem key={u.id} value={u.id}>{u.firstName ?? u.email} — {u.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Security group</Label>
+              <Select value={securityGroupId} onValueChange={setSecurityGroupId}>
+                <SelectTrigger data-testid="select-grant-group"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_GROUP}>— None —</SelectItem>
+                  {groups.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -617,6 +739,7 @@ function GrantAccessCard({ projectId, users, onGranted }: { projectId: string; u
                   id: projectId,
                   data: {
                     userId,
+                    securityGroupId: securityGroupId === NO_GROUP ? null : securityGroupId,
                     canViewSummary,
                     canEditEntries,
                     canResetApproval,

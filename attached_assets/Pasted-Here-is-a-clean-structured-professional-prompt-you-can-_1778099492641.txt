@@ -1,0 +1,137 @@
+Here is a **clean, structured, professional prompt** you can use to enhance your application (perfect for developers or AI tools):
+
+---
+
+## 🚀 **Application Enhancement Prompt**
+
+Enhance the existing application by implementing the following functional and UI/UX improvements:
+
+---
+
+### 🔹 **Reporting & Dashboard Enhancements**
+
+* Implement **drill-down functionality** in graphs:
+
+  * When a user clicks on any graph element, it should navigate to a **detailed reporting view**.
+  * The dashboard should support **interactive graph exploration**.
+
+* Improve **Excel export functionality**:
+
+  * Exported reports must include:
+
+    * **Project-specific services**
+    * **Selected date range**
+  * Ensure data consistency between UI and exported reports.
+
+* Add **comparison indicators in graphs**:
+
+  * When multiple projects are selected, clearly distinguish them using:
+
+    * Colors
+    * Legends
+    * Labels
+
+---
+
+### 🔹 **User Interface Improvements**
+
+* Make the **menu bar sticky (fixed)**:
+
+  * It should remain visible while scrolling.
+  * Improve usability for expanding/collapsing menus.
+
+* Make **summary and report screens interactive**:
+
+  * Clicking on any entry should open the **detailed record view**.
+
+* Add **filters in the summary page**:
+
+  * Allow filtering by **services**, similar to the report page.
+
+* Align **report page with summary page features**:
+
+  * Maintain consistency in filters and data visibility.
+
+* Add **shortcuts** for quick navigation to frequently used features.
+
+---
+
+### 🔹 **Dashboard Behavior**
+
+* Main dashboard should display:
+
+  * **Current month data only**
+  * Ensure real-time relevance and clarity
+
+---
+
+### 🔹 **Admin & Access Control**
+
+* Extend **user profile details**:
+
+  * Email
+  * Mobile number
+  * Employee ID
+
+* Implement **project-based user roles**:
+
+  * Assign users to specific projects
+
+* Create **custom security groups**:
+
+  * Define access levels:
+
+    * View
+    * Edit
+    * Full control
+  * Control access per screen/module
+
+---
+
+### 🔹 **Workflow & Notifications**
+
+* Implement **entry workflow system**:
+
+  * New entries start as **Draft**
+  * On submission → sent to **selected approvers**
+
+* Add **notifications**:
+
+  * Notify users of **pending entries**
+  * Alerts for approvals and actions required
+
+---
+
+### 🔹 **Data Management & Structure**
+
+* Introduce **separate screens**:
+
+  * One for **project management**
+  * One for **data entry (transactions/records)**
+
+👉 This separation will:
+
+* Improve usability
+* Reduce clutter
+* Enhance performance
+
+---
+
+### 🎯 **Objective**
+
+The goal is to build a **user-friendly, interactive, and scalable system** with:
+
+* Strong reporting capabilities
+* Clear workflows
+* Role-based access control
+* Improved navigation and usability
+
+---
+
+If you want, I can convert this into:
+
+* **Odoo functional specification (FSD)**
+* **Developer task breakdown (technical)**
+* **UI wireframe plan**
+
+Just tell me 👍

@@ -1240,12 +1240,20 @@ export const GetProjectSummaryResponse = zod.object({
     entryCount: zod.number(),
   }),
   serviceBreakdown: zod.array(
-    zod.object({
-      serviceName: zod.string(),
-      kind: zod.enum(["food", "standard"]),
-      totalCost: zod.number(),
-      totalMandayContribution: zod.number(),
-    }),
+    zod
+      .object({
+        projectId: zod.string(),
+        projectName: zod.string(),
+        serviceId: zod.string(),
+        serviceName: zod.string(),
+        kind: zod.enum(["food", "standard"]),
+        totalCost: zod.number(),
+        totalMandayContribution: zod.number(),
+        costPerManday: zod.number(),
+      })
+      .describe(
+        "Per-project, per-service totals for the selected date range. The same\nservice NAME in different projects is reported as separate rows\n(keyed on projectId + serviceId).\n",
+      ),
   ),
   dailyEntries: zod.array(
     zod.object({
@@ -1296,12 +1304,20 @@ export const GetAggregateReportResponse = zod.object({
     entryCount: zod.number(),
   }),
   serviceBreakdown: zod.array(
-    zod.object({
-      serviceName: zod.string(),
-      kind: zod.enum(["food", "standard"]),
-      totalCost: zod.number(),
-      totalMandayContribution: zod.number(),
-    }),
+    zod
+      .object({
+        projectId: zod.string(),
+        projectName: zod.string(),
+        serviceId: zod.string(),
+        serviceName: zod.string(),
+        kind: zod.enum(["food", "standard"]),
+        totalCost: zod.number(),
+        totalMandayContribution: zod.number(),
+        costPerManday: zod.number(),
+      })
+      .describe(
+        "Per-project, per-service totals for the selected date range. The same\nservice NAME in different projects is reported as separate rows\n(keyed on projectId + serviceId).\n",
+      ),
   ),
   projectBreakdown: zod.array(
     zod.object({
@@ -1345,6 +1361,46 @@ export const GetTrendsReportResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary Drill-down view: list every (entry × service) row matching the filters.
+Used by the services-breakdown drill-down on Reports and Project Summary.
+
+ */
+export const ListServiceEntriesQueryParams = zod.object({
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+  projectIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated list of project ids to include."),
+  serviceIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated list of service ids to include."),
+});
+
+export const ListServiceEntriesResponseItem = zod
+  .object({
+    entryId: zod.string(),
+    projectId: zod.string(),
+    projectName: zod.string(),
+    serviceId: zod.string(),
+    serviceName: zod.string(),
+    kind: zod.enum(["food", "standard"]),
+    entryDate: zod.coerce.date(),
+    location: zod.string(),
+    cost: zod.number(),
+    mandayContribution: zod.number(),
+    costPerManday: zod.number(),
+    sequenceCode: zod.string().nullish(),
+  })
+  .describe(
+    "One row per (daily entry × service) used by the service drill-down view.\n",
+  );
+export const ListServiceEntriesResponse = zod.array(
+  ListServiceEntriesResponseItem,
+);
 
 /**
  * @summary List services across visible projects, optionally filtered by project ids

@@ -484,6 +484,59 @@ export interface ServiceTotal {
   totalMandayContribution: number;
 }
 
+export type ProjectServiceTotalKind =
+  (typeof ProjectServiceTotalKind)[keyof typeof ProjectServiceTotalKind];
+
+export const ProjectServiceTotalKind = {
+  food: "food",
+  standard: "standard",
+} as const;
+
+/**
+ * Per-project, per-service totals for the selected date range. The same
+service NAME in different projects is reported as separate rows
+(keyed on projectId + serviceId).
+
+ */
+export interface ProjectServiceTotal {
+  projectId: string;
+  projectName: string;
+  serviceId: string;
+  serviceName: string;
+  kind: ProjectServiceTotalKind;
+  totalCost: number;
+  totalMandayContribution: number;
+  costPerManday: number;
+}
+
+export type ServiceEntryRowKind =
+  (typeof ServiceEntryRowKind)[keyof typeof ServiceEntryRowKind];
+
+export const ServiceEntryRowKind = {
+  food: "food",
+  standard: "standard",
+} as const;
+
+/**
+ * One row per (daily entry × service) used by the service drill-down view.
+
+ */
+export interface ServiceEntryRow {
+  entryId: string;
+  projectId: string;
+  projectName: string;
+  serviceId: string;
+  serviceName: string;
+  kind: ServiceEntryRowKind;
+  entryDate: string;
+  location: string;
+  cost: number;
+  mandayContribution: number;
+  costPerManday: number;
+  /** @nullable */
+  sequenceCode?: string | null;
+}
+
 export interface ProjectTotal {
   projectId: string;
   projectName: string;
@@ -522,7 +575,7 @@ export interface ProjectSummaryReport {
   project: Project;
   range: ProjectSummaryReportRange;
   kpi: DashboardKpi;
-  serviceBreakdown: ServiceTotal[];
+  serviceBreakdown: ProjectServiceTotal[];
   dailyEntries: DailyEntrySummary[];
 }
 
@@ -534,7 +587,7 @@ export type AggregateReportRange = {
 export interface AggregateReport {
   range: AggregateReportRange;
   kpi: DashboardKpi;
-  serviceBreakdown: ServiceTotal[];
+  serviceBreakdown: ProjectServiceTotal[];
   projectBreakdown: ProjectTotal[];
 }
 
@@ -598,6 +651,19 @@ export type GetAggregateReportParams = {
 };
 
 export type GetTrendsReportParams = {
+  from?: string;
+  to?: string;
+  /**
+   * Comma-separated list of project ids to include.
+   */
+  projectIds?: string;
+  /**
+   * Comma-separated list of service ids to include.
+   */
+  serviceIds?: string;
+};
+
+export type ListServiceEntriesParams = {
   from?: string;
   to?: string;
   /**

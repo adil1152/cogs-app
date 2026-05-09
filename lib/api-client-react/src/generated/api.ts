@@ -40,6 +40,7 @@ import type {
   HandleBrowserLoginCallbackParams,
   HealthStatus,
   ListProjectEntriesParams,
+  ListServiceEntriesParams,
   ListVisibleServicesParams,
   LogoutSuccess,
   MobileTokenExchangeRequest,
@@ -53,6 +54,7 @@ import type {
   ReorderProjectServicesBody,
   SecurityGroup,
   ServiceCatalogItem,
+  ServiceEntryRow,
   SetApprovalChainBody,
   SetProjectApproversBody,
   TrendsReport,
@@ -3775,6 +3777,107 @@ export function useGetTrendsReport<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTrendsReportQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Drill-down view: list every (entry × service) row matching the filters.
+Used by the services-breakdown drill-down on Reports and Project Summary.
+
+ */
+export const getListServiceEntriesUrl = (params?: ListServiceEntriesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/reports/service-entries?${stringifiedParams}`
+    : `/api/reports/service-entries`;
+};
+
+export const listServiceEntries = async (
+  params?: ListServiceEntriesParams,
+  options?: RequestInit,
+): Promise<ServiceEntryRow[]> => {
+  return customFetch<ServiceEntryRow[]>(getListServiceEntriesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListServiceEntriesQueryKey = (
+  params?: ListServiceEntriesParams,
+) => {
+  return [`/api/reports/service-entries`, ...(params ? [params] : [])] as const;
+};
+
+export const getListServiceEntriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listServiceEntries>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListServiceEntriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listServiceEntries>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListServiceEntriesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listServiceEntries>>
+  > = ({ signal }) => listServiceEntries(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listServiceEntries>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListServiceEntriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listServiceEntries>>
+>;
+export type ListServiceEntriesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Drill-down view: list every (entry × service) row matching the filters.
+Used by the services-breakdown drill-down on Reports and Project Summary.
+
+ */
+
+export function useListServiceEntries<
+  TData = Awaited<ReturnType<typeof listServiceEntries>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListServiceEntriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listServiceEntries>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListServiceEntriesQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

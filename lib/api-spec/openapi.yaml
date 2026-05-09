@@ -935,6 +935,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TrendsReport'
+  /reports/service-entries:
+    get:
+      tags: [Reports]
+      operationId: listServiceEntries
+      summary: |
+        Drill-down view: list every (entry × service) row matching the filters.
+        Used by the services-breakdown drill-down on Reports and Project Summary.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: projectIds
+          in: query
+          required: false
+          description: Comma-separated list of project ids to include.
+          schema:
+            type: string
+        - name: serviceIds
+          in: query
+          required: false
+          description: Comma-separated list of service ids to include.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceEntryRow'
   /services:
     get:
       tags: [Reports]
@@ -1535,6 +1576,64 @@ components:
           enum: [food, standard]
         totalCost: { type: number }
         totalMandayContribution: { type: number }
+    ProjectServiceTotal:
+      type: object
+      description: |
+        Per-project, per-service totals for the selected date range. The same
+        service NAME in different projects is reported as separate rows
+        (keyed on projectId + serviceId).
+      required:
+        - projectId
+        - projectName
+        - serviceId
+        - serviceName
+        - kind
+        - totalCost
+        - totalMandayContribution
+        - costPerManday
+      properties:
+        projectId: { type: string }
+        projectName: { type: string }
+        serviceId: { type: string }
+        serviceName: { type: string }
+        kind:
+          type: string
+          enum: [food, standard]
+        totalCost: { type: number }
+        totalMandayContribution: { type: number }
+        costPerManday: { type: number }
+    ServiceEntryRow:
+      type: object
+      description: |
+        One row per (daily entry × service) used by the service drill-down view.
+      required:
+        - entryId
+        - projectId
+        - projectName
+        - serviceId
+        - serviceName
+        - kind
+        - entryDate
+        - location
+        - cost
+        - mandayContribution
+        - costPerManday
+      properties:
+        entryId: { type: string }
+        projectId: { type: string }
+        projectName: { type: string }
+        serviceId: { type: string }
+        serviceName: { type: string }
+        kind:
+          type: string
+          enum: [food, standard]
+        entryDate: { type: string, format: date }
+        location: { type: string }
+        cost: { type: number }
+        mandayContribution: { type: number }
+        costPerManday: { type: number }
+        sequenceCode:
+          type: [string, 'null']
     ProjectTotal:
       type: object
       required: [projectId, projectName, location, totalCost, totalMandays, costPerManday]
@@ -1594,7 +1693,7 @@ components:
         serviceBreakdown:
           type: array
           items:
-            $ref: '#/components/schemas/ServiceTotal'
+            $ref: '#/components/schemas/ProjectServiceTotal'
         dailyEntries:
           type: array
           items:
@@ -1615,7 +1714,7 @@ components:
         serviceBreakdown:
           type: array
           items:
-            $ref: '#/components/schemas/ServiceTotal'
+            $ref: '#/components/schemas/ProjectServiceTotal'
         projectBreakdown:
           type: array
           items:

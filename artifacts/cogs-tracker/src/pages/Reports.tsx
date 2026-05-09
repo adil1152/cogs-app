@@ -13,13 +13,10 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
-  Cell,
 } from "recharts";
 import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,22 +28,19 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  ServiceDrilldownDialog,
+  type ServiceDrilldownTarget,
+} from "@/components/ServiceDrilldownDialog";
 import { downloadCsv } from "@/lib/csv";
 import { formatCurrency, formatNumber, daysAgoISO, todayISO } from "@/lib/format";
 import { Download } from "lucide-react";
 import { useLocation } from "wouter";
-
-const CHART_COLORS = [
-  "hsl(var(--accent))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-  "hsl(var(--primary))",
-];
 
 export default function Reports() {
   const [, navigate] = useLocation();
@@ -54,6 +48,7 @@ export default function Reports() {
   const [to, setTo] = useState(todayISO());
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const [drilldown, setDrilldown] = useState<ServiceDrilldownTarget | null>(null);
 
   const { data: projects } = useListProjects({
     query: { queryKey: getListProjectsQueryKey() },
@@ -133,15 +128,27 @@ export default function Reports() {
     if (!agg) return;
     downloadCsv(
       `report-services-${from}-to-${to}.csv`,
-      ["Service", "Kind", "Total cost", "Manday contribution"],
+      ["Project", "Service", "Kind", "Cost (SAR)", "Mandays", "SAR/manday"],
       agg.serviceBreakdown.map((s) => [
+        s.projectName,
         s.serviceName,
         s.kind,
         s.totalCost,
         s.totalMandayContribution,
+        s.totalMandayContribution > 0 ? s.costPerManday : "",
       ]),
     );
   }
+
+  const serviceTotals = (agg?.serviceBreakdown ?? []).reduce(
+    (acc, s) => ({
+      cost: acc.cost + s.totalCost,
+      mandays: acc.mandays + s.totalMandayContribution,
+    }),
+    { cost: 0, mandays: 0 },
+  );
+  const serviceAvg =
+    serviceTotals.mandays > 0 ? serviceTotals.cost / serviceTotals.mandays : 0;
 
   return (
     <AppLayout>
@@ -339,63 +346,105 @@ export default function Reports() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-base">Service breakdown</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportServicesCsv}
-                disabled={!agg}
-                data-testid="button-export-services"
-              >
-                <Download className="mr-2 h-3.5 w-3.5" /> CSV
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64 mb-3">
-                {agg && agg.serviceBreakdown.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      layout="vertical"
-                      data={agg.serviceBreakdown}
-                      margin={{ top: 5, right: 12, left: 8, bottom: 0 }}
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle className="text-base">Services breakdown</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                One row per (project × service). Click a row to drill down to its
+                entries.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportServicesCsv}
+              disabled={!agg || agg.serviceBreakdown.length === 0}
+              data-testid="button-export-services"
+            >
+              <Download className="mr-2 h-3.5 w-3.5" /> CSV
+            </Button>
+          </CardHeader>
+          <CardContent className="p-0">
+            {agg && agg.serviceBreakdown.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Project</TableHead>
+                    <TableHead>Service</TableHead>
+                    <TableHead className="text-right">Cost (SAR)</TableHead>
+                    <TableHead className="text-right">Mandays</TableHead>
+                    <TableHead className="text-right">SAR / manday</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agg.serviceBreakdown.map((s) => (
+                    <TableRow
+                      key={`${s.projectId}-${s.serviceId}`}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() =>
+                        setDrilldown({
+                          serviceId: s.serviceId,
+                          serviceName: s.serviceName,
+                          projectId: s.projectId,
+                          projectName: s.projectName,
+                          from,
+                          to,
+                          scopeToProject: true,
+                        })
+                      }
+                      data-testid={`report-service-row-${s.projectId}-${s.serviceId}`}
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                      <YAxis
-                        type="category"
-                        dataKey="serviceName"
-                        width={110}
-                        tick={{ fontSize: 11 }}
-                        stroke="hsl(var(--muted-foreground))"
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: "hsl(var(--popover))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: 6,
-                          fontSize: 12,
-                        }}
-                        formatter={(v: number) => formatCurrency(v)}
-                      />
-                      <Bar dataKey="totalCost">
-                        {agg.serviceBreakdown.map((_, i) => (
-                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full grid place-items-center text-sm text-muted-foreground">
-                    No service data.
-                  </div>
-                )}
+                      <TableCell>{s.projectName}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{s.serviceName}</div>
+                        <div className="text-xs text-muted-foreground capitalize">
+                          {s.kind}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(s.totalCost)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatNumber(s.totalMandayContribution, 2)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {s.totalMandayContribution > 0
+                          ? formatCurrency(s.costPerManday)
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell colSpan={2} className="font-medium">
+                      Totals · {agg.serviceBreakdown.length} service
+                      {agg.serviceBreakdown.length === 1 ? "" : "s"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold">
+                      {formatCurrency(serviceTotals.cost)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold">
+                      {formatNumber(serviceTotals.mandays, 2)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold">
+                      {serviceTotals.mandays > 0
+                        ? formatCurrency(serviceAvg)
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            ) : (
+              <div className="px-6 py-10 text-sm text-muted-foreground text-center">
+                No service data.
               </div>
-            </CardContent>
-          </Card>
+            )}
+          </CardContent>
+        </Card>
 
+        <div className="grid grid-cols-1 gap-4">
           <Card>
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">By project</CardTitle>
@@ -454,6 +503,11 @@ export default function Reports() {
           </Card>
         </div>
       </div>
+
+      <ServiceDrilldownDialog
+        target={drilldown}
+        onClose={() => setDrilldown(null)}
+      />
     </AppLayout>
   );
 }

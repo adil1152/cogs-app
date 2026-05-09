@@ -7,12 +7,12 @@
  */
 import type { AggregateReportRange } from "./aggregateReportRange";
 import type { DashboardKpi } from "./dashboardKpi";
+import type { ProjectServiceTotal } from "./projectServiceTotal";
 import type { ProjectTotal } from "./projectTotal";
-import type { ServiceTotal } from "./serviceTotal";
 
 export interface AggregateReport {
   range: AggregateReportRange;
   kpi: DashboardKpi;
-  serviceBreakdown: ServiceTotal[];
+  serviceBreakdown: ProjectServiceTotal[];
   projectBreakdown: ProjectTotal[];
 }

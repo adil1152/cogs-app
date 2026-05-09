@@ -8,13 +8,13 @@
 import type { DailyEntrySummary } from "./dailyEntrySummary";
 import type { DashboardKpi } from "./dashboardKpi";
 import type { Project } from "./project";
+import type { ProjectServiceTotal } from "./projectServiceTotal";
 import type { ProjectSummaryReportRange } from "./projectSummaryReportRange";
-import type { ServiceTotal } from "./serviceTotal";
 
 export interface ProjectSummaryReport {
   project: Project;
   range: ProjectSummaryReportRange;
   kpi: DashboardKpi;
-  serviceBreakdown: ServiceTotal[];
+  serviceBreakdown: ProjectServiceTotal[];
   dailyEntries: DailyEntrySummary[];
 }

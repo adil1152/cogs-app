@@ -8,21 +8,17 @@ import {
   getGetProjectSummaryQueryKey,
   getListProjectServicesQueryKey,
 } from "@workspace/api-client-react";
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell,
-} from "recharts";
 import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ServiceDrilldownDialog, type ServiceDrilldownTarget } from "@/components/ServiceDrilldownDialog";
 import { downloadCsv } from "@/lib/csv";
 import { formatCurrency, formatNumber, formatDate, daysAgoISO, todayISO } from "@/lib/format";
 import { ArrowLeft, ArrowRight, Download, Lock } from "lucide-react";
-
-const CHART_COLORS = ["hsl(var(--accent))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "hsl(var(--primary))"];
 
 export default function ProjectSummary() {
   const [, params] = useRoute("/projects/:id/summary");
@@ -31,6 +27,7 @@ export default function ProjectSummary() {
   const [from, setFrom] = useState(daysAgoISO(29));
   const [to, setTo] = useState(todayISO());
   const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const [drilldown, setDrilldown] = useState<ServiceDrilldownTarget | null>(null);
 
   const { data: project } = useGetProject(id, {
     query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) },
@@ -174,32 +171,98 @@ export default function ProjectSummary() {
               <Kpi label="Entries" value={formatNumber(summary?.kpi.entryCount ?? 0, 0)} />
             </div>
             <Card>
-              <CardHeader><CardTitle className="text-base">Service breakdown</CardTitle></CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  {summary && summary.serviceBreakdown.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart layout="vertical" data={summary.serviceBreakdown} margin={{ top: 5, right: 12, left: 8, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                        <YAxis type="category" dataKey="serviceName" width={110} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                        <Tooltip
-                          contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 6, fontSize: 12 }}
-                          formatter={(v: number) => formatCurrency(v)}
-                        />
-                        <Bar dataKey="totalCost">
-                          {summary.serviceBreakdown.map((_, i) => (
-                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full grid place-items-center text-sm text-muted-foreground">
-                      {isLoading ? "Loading…" : "No service spend in this range."}
-                    </div>
-                  )}
-                </div>
+              <CardHeader>
+                <CardTitle className="text-base">Services breakdown</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Click a service to see every entry it appears in.
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                {summary && summary.serviceBreakdown.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Project</TableHead>
+                        <TableHead>Service</TableHead>
+                        <TableHead className="text-right">Cost (SAR)</TableHead>
+                        <TableHead className="text-right">Mandays</TableHead>
+                        <TableHead className="text-right">SAR / manday</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {summary.serviceBreakdown.map((s) => (
+                        <TableRow
+                          key={`${s.projectId}-${s.serviceId}`}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() =>
+                            setDrilldown({
+                              serviceId: s.serviceId,
+                              serviceName: s.serviceName,
+                              projectId: s.projectId,
+                              projectName: s.projectName,
+                              from,
+                              to,
+                              scopeToProject: true,
+                            })
+                          }
+                          data-testid={`summary-service-row-${s.serviceId}`}
+                        >
+                          <TableCell>{s.projectName}</TableCell>
+                          <TableCell>
+                            <div className="font-medium">{s.serviceName}</div>
+                            <div className="text-xs text-muted-foreground capitalize">
+                              {s.kind}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatCurrency(s.totalCost)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatNumber(s.totalMandayContribution, 2)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {s.totalMandayContribution > 0
+                              ? formatCurrency(s.costPerManday)
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooter>
+                      {(() => {
+                        const t = summary.serviceBreakdown.reduce(
+                          (a, s) => ({
+                            cost: a.cost + s.totalCost,
+                            mandays: a.mandays + s.totalMandayContribution,
+                          }),
+                          { cost: 0, mandays: 0 },
+                        );
+                        const avg = t.mandays > 0 ? t.cost / t.mandays : 0;
+                        return (
+                          <TableRow>
+                            <TableCell colSpan={2} className="font-medium">
+                              Totals · {summary.serviceBreakdown.length} service
+                              {summary.serviceBreakdown.length === 1 ? "" : "s"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold">
+                              {formatCurrency(t.cost)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold">
+                              {formatNumber(t.mandays, 2)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-semibold">
+                              {t.mandays > 0 ? formatCurrency(avg) : "—"}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })()}
+                    </TableFooter>
+                  </Table>
+                ) : (
+                  <div className="px-6 py-10 text-center text-sm text-muted-foreground">
+                    {isLoading ? "Loading…" : "No service spend in this range."}
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -250,6 +313,11 @@ export default function ProjectSummary() {
           </>
         )}
       </div>
+
+      <ServiceDrilldownDialog
+        target={drilldown}
+        onClose={() => setDrilldown(null)}
+      />
     </AppLayout>
   );
 }

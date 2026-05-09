@@ -88,6 +88,13 @@ Shared libs:
   the chosen services' cost rows (same semantics as `/reports/aggregate`).
 - `GET /api/reports/aggregate`, `GET /api/reports/trends` — both accept `projectIds` and
   `serviceIds` CSV filters; service filter recomputes mandays from filtered cost rows.
+  `aggregate.serviceBreakdown` is now keyed by `(projectId, serviceId)` and includes
+  `projectName`, `serviceId`, and `costPerManday` so the UI can show a real per-(project ×
+  service) table.
+- `GET /api/reports/service-entries?from&to&projectIds&serviceIds` — drill-down endpoint
+  used by the Reports/Project Summary "Services breakdown" table. Returns one row per
+  (entry × service) with project name, service name, location, sequence code, cost,
+  manday contribution and SAR/manday. Visibility = projects with `canViewSummary`.
 
 ## Visibility / authorization rules
 

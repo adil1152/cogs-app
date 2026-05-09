@@ -327,7 +327,15 @@ router.get(
     const kpi = newKpi();
     const serviceTotals = new Map<
       string,
-      { name: string; kind: "food" | "standard"; totalCost: number; mandayContribution: number }
+      {
+        projectId: string;
+        projectName: string;
+        serviceId: string;
+        name: string;
+        kind: "food" | "standard";
+        totalCost: number;
+        mandayContribution: number;
+      }
     >();
     const entriesById = new Map<
       string,
@@ -351,6 +359,9 @@ router.get(
       if (hasUsableCost && row.service) {
         const key = row.service.id;
         const prev = serviceTotals.get(key) ?? {
+          projectId: v.project!.id,
+          projectName: v.project!.name,
+          serviceId: row.service.id,
           name: row.service.name,
           kind: row.service.kind as "food" | "standard",
           totalCost: 0,
@@ -389,10 +400,14 @@ router.get(
       range: { from, to },
       kpi: kpiOut(kpi, useEntryMandays),
       serviceBreakdown: Array.from(serviceTotals.values()).map((s) => ({
+        projectId: s.projectId,
+        projectName: s.projectName,
+        serviceId: s.serviceId,
         serviceName: s.name,
         kind: s.kind,
         totalCost: s.totalCost,
         totalMandayContribution: s.mandayContribution,
+        costPerManday: safeDivide(s.totalCost, s.mandayContribution),
       })),
       dailyEntries: Array.from(entriesById.values())
         // When service-filtered, omit entries whose costs were all filtered out.
@@ -457,7 +472,15 @@ router.get(
     const kpi = newKpi();
     const serviceTotals = new Map<
       string,
-      { name: string; kind: "food" | "standard"; totalCost: number; mandayContribution: number }
+      {
+        projectId: string;
+        projectName: string;
+        serviceId: string;
+        name: string;
+        kind: "food" | "standard";
+        totalCost: number;
+        mandayContribution: number;
+      }
     >();
     const projectTotals = new Map<
       string,
@@ -480,9 +503,14 @@ router.get(
         accumulate(kpi, row, useEntryMandays);
       }
 
-      if (hasUsableCost && row.service) {
-        const key = row.service.id;
+      if (hasUsableCost && row.service && row.project) {
+        // Group per (project, service) so the same service NAME in different
+        // projects shows up as separate rows in the breakdown.
+        const key = `${row.project.id}::${row.service.id}`;
         const prev = serviceTotals.get(key) ?? {
+          projectId: row.project.id,
+          projectName: row.project.name,
+          serviceId: row.service.id,
           name: row.service.name,
           kind: row.service.kind as "food" | "standard",
           totalCost: 0,
@@ -516,10 +544,14 @@ router.get(
       range: { from, to },
       kpi: kpiOut(kpi, useEntryMandays),
       serviceBreakdown: Array.from(serviceTotals.values()).map((s) => ({
+        projectId: s.projectId,
+        projectName: s.projectName,
+        serviceId: s.serviceId,
         serviceName: s.name,
         kind: s.kind,
         totalCost: s.totalCost,
         totalMandayContribution: s.mandayContribution,
+        costPerManday: safeDivide(s.totalCost, s.mandayContribution),
       })),
       projectBreakdown: Array.from(projectTotals.values())
         .filter((p) => p.totalCost > 0 || p.entryMandays.size > 0 || p.contributedMandays > 0)
@@ -608,6 +640,76 @@ router.get(
       });
 
     res.json({ range: { from, to }, points });
+  },
+);
+
+router.get(
+  "/reports/service-entries",
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const visible = await listVisibleProjects(req.user!.id, req.user!.role);
+    let ids = visible.filter((v) => v.canViewSummary).map((v) => v.project.id);
+
+    const projectFilter = parseCsv(req.query.projectIds);
+    if (projectFilter) {
+      const wanted = new Set(projectFilter);
+      ids = ids.filter((id) => wanted.has(id));
+    }
+
+    const serviceFilter = parseCsv(req.query.serviceIds);
+    const serviceFilterSet = serviceFilter ? new Set(serviceFilter) : null;
+
+    const from =
+      typeof req.query.from === "string"
+        ? req.query.from
+        : dateOnly(startOfMonth(new Date()));
+    const to =
+      typeof req.query.to === "string"
+        ? req.query.to
+        : dateOnly(new Date());
+
+    if (ids.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const rows = await fetchJoined(ids, from, to);
+
+    const out = rows
+      .filter(
+        (r) =>
+          r.cost &&
+          r.service &&
+          r.project &&
+          (!serviceFilterSet || serviceFilterSet.has(r.service.id)),
+      )
+      .map((r) => {
+        const cost = Number(r.cost!.cost ?? 0);
+        const mandayContribution = rowMandayContribution(r);
+        return {
+          entryId: r.entry.id,
+          projectId: r.project!.id,
+          projectName: r.project!.name,
+          serviceId: r.service!.id,
+          serviceName: r.service!.name,
+          kind: r.service!.kind as "food" | "standard",
+          entryDate: r.entry.entryDate,
+          location: r.entry.location,
+          cost,
+          mandayContribution,
+          costPerManday: safeDivide(cost, mandayContribution),
+          sequenceCode: r.entry.sequenceCode ?? null,
+        };
+      })
+      .sort((a, b) =>
+        a.entryDate < b.entryDate
+          ? 1
+          : a.entryDate > b.entryDate
+            ? -1
+            : a.projectName.localeCompare(b.projectName),
+      );
+
+    res.json(out);
   },
 );
 

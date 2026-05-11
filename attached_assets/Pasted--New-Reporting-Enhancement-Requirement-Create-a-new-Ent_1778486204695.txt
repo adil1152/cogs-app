@@ -1,0 +1,107 @@
+## 🚀 New Reporting Enhancement Requirement
+
+Create a new **Entry-Wise Dynamic Report Table** based on the selected:
+
+* Project
+* Date Range
+
+The report should display all services horizontally in table format for easier comparison, analysis, and management reporting.
+
+---
+
+### 🔹 Report Structure
+
+The report should clearly display:
+
+* Entry Details
+* Service Name
+* Service Cost
+* Mandays
+* Average Manday Cost
+
+All services related to the selected project should appear horizontally in the report.
+
+Example structure:
+
+| Entry | Service Name | Service 1 Cost | Service 1 Manday | Service 1 Avg Manday | Service 2 Name | Service 2 Cost | Service 2 Manday | Service 2 Avg Manday |
+| ----- | ------------ | -------------- | ---------------- | -------------------- | -------------- | -------------- | ---------------- | -------------------- |
+
+Each service section should clearly identify:
+
+* Service Name
+* Cost
+* Manday
+* Average Manday Cost
+
+---
+
+### 🔹 Totals Section
+
+At the bottom of the report, display:
+
+* Total Cost for each service
+* Total Mandays for each service
+* Average Manday Cost summary for each service
+
+This should help management easily compare:
+
+* Service performance
+* Cost distribution
+* Resource utilization
+* Average service efficiency
+
+---
+
+### 🔹 Dynamic Column Selection
+
+Add an option allowing users to:
+
+* Select columns
+* Unselect columns
+* Customize visible fields dynamically
+
+Users should be able to:
+
+* Show/hide specific services
+* Show only cost-related columns
+* Hide manday columns
+* Customize report layout without developer support
+
+---
+
+### 🔹 Interactive Reporting
+
+Implement drill-down functionality:
+
+* When clicking on any service, cost, or manday value,
+  it should open the related detailed entries for that service.
+
+---
+
+### 🔹 Export Functionality
+
+The report should support Excel export with complete report details.
+
+The exported Excel file must include:
+
+* Selected Project Name
+* Selected Date Range
+* Generated Report Date
+* Same table structure as displayed in the system
+* Selected/customized columns
+* Service names
+* Totals and summaries
+
+Ensure the Excel report is properly formatted and suitable for management reporting and printing.
+
+---
+
+### 🎯 Objective
+
+The objective of this enhancement is to provide:
+
+* Advanced interactive reporting
+* Better visibility of project/service performance
+* Flexible report customization
+* Easier management analysis
+* Improved operational and financial tracking

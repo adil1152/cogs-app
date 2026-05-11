@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { downloadCsv } from "@/lib/csv";
 import { formatCurrency, formatNumber, formatDate } from "@/lib/format";
+import { buildUrl } from "@/lib/return-to";
 import { Download } from "lucide-react";
 
 export interface ServiceDrilldownTarget {
@@ -38,6 +39,11 @@ export interface ServiceDrilldownTarget {
    * use case) and we still scope to the clicked service.
    */
   scopeToProject?: boolean;
+  /**
+   * When set, clicking through to an entry appends `?returnTo=<this>` so the
+   * entry page can show a "Back to <report>" button.
+   */
+  returnTo?: string;
 }
 
 interface Props {
@@ -141,7 +147,12 @@ export function ServiceDrilldownDialog({ target, onClose }: Props) {
                   className="cursor-pointer hover:bg-muted/50"
                   onClick={() => {
                     onClose();
-                    navigate(`/projects/${r.projectId}/entries/${r.entryId}`);
+                    navigate(
+                      buildUrl(
+                        `/projects/${r.projectId}/entries/${r.entryId}`,
+                        target?.returnTo ? { returnTo: target.returnTo } : {},
+                      ),
+                    );
                   }}
                   data-testid={`drilldown-row-${r.entryId}`}
                 >

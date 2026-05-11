@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatNumber, todayISO } from "@/lib/format";
+import { readReturnTo } from "@/lib/return-to";
 import { MEAL_WEIGHTS, computeMealMandays } from "@/lib/cogs-formula";
 import {
   ArrowLeft,
@@ -102,6 +103,11 @@ export default function EntryForm() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+
+  // Captured once on mount: if the user landed here via a "drill-in" from a
+  // report page, returnTo holds the encoded URL we should send them back to.
+  const [back] = useState(() => readReturnTo());
+  const exitUrl = back?.url ?? `/projects/${projectId}`;
 
   const { data: project } = useGetProject(projectId, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId) },
@@ -216,7 +222,7 @@ export default function EntryForm() {
       onSuccess: () => {
         toast({ title: "Entry saved" });
         invalidateAll();
-        navigate(`/projects/${projectId}`);
+        navigate(exitUrl);
       },
       onError: (err: any) => toast({ title: "Could not save", description: err.message, variant: "destructive" }),
     },
@@ -226,7 +232,7 @@ export default function EntryForm() {
       onSuccess: () => {
         toast({ title: "Entry updated" });
         invalidateAll();
-        navigate(`/projects/${projectId}`);
+        navigate(exitUrl);
       },
       onError: (err: any) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
     },
@@ -236,7 +242,7 @@ export default function EntryForm() {
       onSuccess: () => {
         toast({ title: "Entry deleted" });
         invalidateAll();
-        navigate(`/projects/${projectId}`);
+        navigate(exitUrl);
       },
       onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
     },
@@ -360,8 +366,11 @@ export default function EntryForm() {
           )
         }
         actions={
-          <Link href={`/projects/${projectId}`}>
-            <Button variant="outline" data-testid="button-back"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
+          <Link href={exitUrl}>
+            <Button variant="outline" data-testid="button-back">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              {back ? `Back to ${back.label}` : "Back"}
+            </Button>
           </Link>
         }
       />

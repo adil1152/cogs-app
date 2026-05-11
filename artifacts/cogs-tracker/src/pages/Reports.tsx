@@ -39,16 +39,32 @@ import {
 } from "@/components/ServiceDrilldownDialog";
 import { downloadCsv } from "@/lib/csv";
 import { formatCurrency, formatNumber, daysAgoISO, todayISO } from "@/lib/format";
+import { buildUrl, readSearch, useSyncUrlParams } from "@/lib/return-to";
 import { Download } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function Reports() {
   const [, navigate] = useLocation();
-  const [from, setFrom] = useState(daysAgoISO(29));
-  const [to, setTo] = useState(todayISO());
-  const [projectIds, setProjectIds] = useState<string[]>([]);
-  const [serviceIds, setServiceIds] = useState<string[]>([]);
+  // Filters hydrate from URL on mount so the page is bookmarkable and so
+  // "Back to Reports" from a drilled-into entry restores the same view.
+  const [from, setFrom] = useState<string>(
+    () => readSearch().get("from") ?? daysAgoISO(29),
+  );
+  const [to, setTo] = useState<string>(
+    () => readSearch().get("to") ?? todayISO(),
+  );
+  const [projectIds, setProjectIds] = useState<string[]>(() => {
+    const v = readSearch().get("projectIds");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
+  const [serviceIds, setServiceIds] = useState<string[]>(() => {
+    const v = readSearch().get("serviceIds");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
   const [drilldown, setDrilldown] = useState<ServiceDrilldownTarget | null>(null);
+
+  useSyncUrlParams("/reports", { from, to, projectIds, serviceIds });
+  const returnUrl = buildUrl("/reports", { from, to, projectIds, serviceIds });
 
   const { data: projects } = useListProjects({
     query: { queryKey: getListProjectsQueryKey() },
@@ -391,6 +407,7 @@ export default function Reports() {
                           from,
                           to,
                           scopeToProject: true,
+                          returnTo: returnUrl,
                         })
                       }
                       data-testid={`report-service-row-${s.projectId}-${s.serviceId}`}

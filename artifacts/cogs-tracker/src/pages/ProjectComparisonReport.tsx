@@ -35,6 +35,7 @@ import {
   daysAgoISO,
   todayISO,
 } from "@/lib/format";
+import { readSearch, useSyncUrlParams } from "@/lib/return-to";
 import { Download, SlidersHorizontal } from "lucide-react";
 
 type Metric = "cost" | "mandays" | "avg";
@@ -50,10 +51,28 @@ function safeAvg(cost: number, mandays: number): number | null {
 }
 
 export default function ProjectComparisonReport() {
-  const [from, setFrom] = useState(daysAgoISO(29));
-  const [to, setTo] = useState(todayISO());
-  const [projectIds, setProjectIds] = useState<string[]>([]);
-  const [serviceIds, setServiceIds] = useState<string[]>([]);
+  // Filters hydrate from URL on mount so the page is bookmarkable / shareable.
+  const [from, setFrom] = useState<string>(
+    () => readSearch().get("from") ?? daysAgoISO(29),
+  );
+  const [to, setTo] = useState<string>(
+    () => readSearch().get("to") ?? todayISO(),
+  );
+  const [projectIds, setProjectIds] = useState<string[]>(() => {
+    const v = readSearch().get("projectIds");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
+  const [serviceIds, setServiceIds] = useState<string[]>(() => {
+    const v = readSearch().get("serviceIds");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
+
+  useSyncUrlParams("/reports/comparison", {
+    from,
+    to,
+    projectIds,
+    serviceIds,
+  });
   const [metrics, setMetrics] = useState<Set<Metric>>(
     new Set(["cost", "mandays", "avg"]),
   );

@@ -44,6 +44,7 @@ import {
   daysAgoISO,
   todayISO,
 } from "@/lib/format";
+import { buildUrl, readSearch, useSyncUrlParams } from "@/lib/return-to";
 import { Download, SlidersHorizontal, Lock } from "lucide-react";
 
 type Metric = "cost" | "mandays" | "avg";
@@ -56,9 +57,25 @@ const METRIC_LABEL: Record<Metric, string> = {
 
 export default function EntryWiseReport() {
   const [, navigate] = useLocation();
-  const [projectId, setProjectId] = useState<string>("");
-  const [from, setFrom] = useState(daysAgoISO(29));
-  const [to, setTo] = useState(todayISO());
+  // Hydrate filters from the URL on mount so that "Back to Entry-wise report"
+  // from an entry page restores the exact same view, and so the page can be
+  // bookmarked / shared.
+  const [projectId, setProjectId] = useState<string>(
+    () => readSearch().get("projectId") ?? "",
+  );
+  const [from, setFrom] = useState<string>(
+    () => readSearch().get("from") ?? daysAgoISO(29),
+  );
+  const [to, setTo] = useState<string>(
+    () => readSearch().get("to") ?? todayISO(),
+  );
+
+  // Mirror current filter state back into the URL (replace, no history spam).
+  useSyncUrlParams("/reports/entry-wise", { projectId, from, to });
+
+  // The "back to here" link we hand to entry pages and the drilldown dialog.
+  const returnUrl = buildUrl("/reports/entry-wise", { projectId, from, to });
+
   const [hiddenServices, setHiddenServices] = useState<Set<string>>(new Set());
   const [metrics, setMetrics] = useState<Set<Metric>>(
     new Set(["cost", "mandays", "avg"]),
@@ -562,7 +579,10 @@ export default function EntryWiseReport() {
                           className="font-mono text-xs whitespace-nowrap sticky left-0 bg-background z-10 cursor-pointer hover:underline"
                           onClick={() =>
                             navigate(
-                              `/projects/${matrix.project.id}/entries/${e.entryId}`,
+                              buildUrl(
+                                `/projects/${matrix.project.id}/entries/${e.entryId}`,
+                                { returnTo: returnUrl },
+                              ),
                             )
                           }
                         >
@@ -617,6 +637,7 @@ export default function EntryWiseReport() {
                                     from: matrix.range.from,
                                     to: matrix.range.to,
                                     scopeToProject: true,
+                                    returnTo: returnUrl,
                                   });
                                 }}
                               >

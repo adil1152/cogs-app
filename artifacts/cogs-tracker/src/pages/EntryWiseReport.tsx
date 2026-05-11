@@ -92,6 +92,10 @@ export default function EntryWiseReport() {
     () => (["cost", "mandays", "avg"] as Metric[]).filter((m) => metrics.has(m)),
     [metrics],
   );
+  const grandTotalCost = useMemo(
+    () => (matrix?.entries ?? []).reduce((sum, e) => sum + e.totalCost, 0),
+    [matrix],
+  );
 
   function toggleService(id: string) {
     setHiddenServices((prev) => {
@@ -126,7 +130,8 @@ export default function EntryWiseReport() {
     wb.created = new Date();
     const ws = wb.addWorksheet("Entry-wise report");
 
-    const totalCols = 3 + visibleServices.length * visibleMetrics.length;
+    const totalCols = 3 + visibleServices.length * visibleMetrics.length + 1;
+    const totalColIdx = totalCols;
 
     // Title block
     ws.mergeCells(1, 1, 1, totalCols);
@@ -164,6 +169,14 @@ export default function EntryWiseReport() {
         ws.getCell(headerRow2Idx, startCol + j).value = METRIC_LABEL[m];
       });
     });
+
+    // Entry total column header (rightmost, spanning both header rows)
+    ws.mergeCells(headerRow1Idx, totalColIdx, headerRow2Idx, totalColIdx);
+    ws.getCell(headerRow1Idx, totalColIdx).value = "Entry total (SAR)";
+    ws.getCell(headerRow1Idx, totalColIdx).alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
 
     // Style headers
     for (let c = 1; c <= totalCols; c++) {
@@ -210,6 +223,10 @@ export default function EntryWiseReport() {
           }
         });
       });
+      const totalCell = ws.getCell(rowIdx, totalColIdx);
+      totalCell.value = entry.totalCost;
+      totalCell.numFmt = '#,##0.00';
+      totalCell.font = { bold: true };
       rowIdx++;
     });
 
@@ -234,6 +251,9 @@ export default function EntryWiseReport() {
         c.numFmt = '#,##0.00';
       });
     });
+    const grandTotalCell = ws.getCell(totalsRow, totalColIdx);
+    grandTotalCell.value = grandTotalCost;
+    grandTotalCell.numFmt = '#,##0.00';
     for (let c = 1; c <= totalCols; c++) {
       const cell = ws.getCell(totalsRow, c);
       cell.font = { bold: true };
@@ -254,6 +274,15 @@ export default function EntryWiseReport() {
     for (let c = 4; c <= totalCols; c++) {
       ws.getColumn(c).width = 16;
     }
+
+    // Freeze the first three columns (#, Date, Location) and header rows
+    ws.views = [
+      {
+        state: "frozen",
+        xSplit: 3,
+        ySplit: headerRow2Idx,
+      },
+    ];
 
     const buf = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], {
@@ -469,19 +498,22 @@ export default function EntryWiseReport() {
                     <TableRow>
                       <TableHead
                         rowSpan={2}
-                        className="align-bottom whitespace-nowrap sticky left-0 bg-background z-10"
+                        className="align-bottom whitespace-nowrap sticky left-0 bg-background z-20"
+                        style={{ minWidth: 110, width: 110 }}
                       >
                         #
                       </TableHead>
                       <TableHead
                         rowSpan={2}
-                        className="align-bottom whitespace-nowrap"
+                        className="align-bottom whitespace-nowrap sticky bg-background z-20"
+                        style={{ left: 110, minWidth: 110, width: 110 }}
                       >
                         Date
                       </TableHead>
                       <TableHead
                         rowSpan={2}
-                        className="align-bottom whitespace-nowrap"
+                        className="align-bottom whitespace-nowrap sticky bg-background z-20 border-r border-border shadow-[inset_-1px_0_0_0_var(--border)]"
+                        style={{ left: 220, minWidth: 200, width: 200 }}
                       >
                         Location
                       </TableHead>
@@ -497,6 +529,12 @@ export default function EntryWiseReport() {
                           </div>
                         </TableHead>
                       ))}
+                      <TableHead
+                        rowSpan={2}
+                        className="align-bottom text-right whitespace-nowrap border-l-2 border-border bg-muted/30"
+                      >
+                        Entry total
+                      </TableHead>
                     </TableRow>
                     <TableRow>
                       {visibleServices.map((s) =>
@@ -535,10 +573,16 @@ export default function EntryWiseReport() {
                             {e.sequenceCode ?? e.entryId.slice(0, 6)}
                           </span>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
+                        <TableCell
+                          className="whitespace-nowrap sticky bg-background z-10"
+                          style={{ left: 110, minWidth: 110, width: 110 }}
+                        >
                           {formatDate(e.entryDate)}
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
+                        <TableCell
+                          className="whitespace-nowrap sticky bg-background z-10 border-r border-border shadow-[inset_-1px_0_0_0_var(--border)]"
+                          style={{ left: 220, minWidth: 200, width: 200 }}
+                        >
                           {e.location}
                         </TableCell>
                         {visibleServices.map((s) => {
@@ -581,6 +625,9 @@ export default function EntryWiseReport() {
                             );
                           });
                         })}
+                        <TableCell className="text-right tabular-nums font-semibold whitespace-nowrap border-l-2 border-border bg-muted/30">
+                          {formatCurrency(e.totalCost)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -588,7 +635,7 @@ export default function EntryWiseReport() {
                     <TableRow>
                       <TableCell
                         colSpan={3}
-                        className="font-semibold sticky left-0 bg-muted/40 z-10"
+                        className="font-semibold sticky left-0 bg-muted/40 z-10 border-r border-border"
                       >
                         Totals
                       </TableCell>
@@ -619,6 +666,9 @@ export default function EntryWiseReport() {
                           );
                         });
                       })}
+                      <TableCell className="text-right tabular-nums font-bold whitespace-nowrap border-l-2 border-border bg-muted/50">
+                        {formatCurrency(grandTotalCost)}
+                      </TableCell>
                     </TableRow>
                   </TableFooter>
                 </Table>

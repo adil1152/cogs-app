@@ -120,8 +120,15 @@ Shared libs:
 - `/reports` — Aggregate report with date range + project filter + CSV exports
 - `/reports/entry-wise` — Single-project pivot: services laid out horizontally as
   (Cost / Mandays / Avg) column groups per entry. Per-service and per-metric column
-  toggles, footer totals, click any cell to drill into that service's entries, and
-  styled .xlsx export (project name, date range, generated-at header).
+  toggles, footer totals, per-row Entry total + grand total column, frozen
+  `#`/Date/Location columns, click any cell to drill into that service's entries,
+  and styled .xlsx export with frozen panes (project name, date range,
+  generated-at header).
+- `/reports/comparison` — Cross-project pivot: rows = projects, column groups =
+  services collapsed by service NAME (Cost / Mandays / Avg per service), plus a
+  Project total column and a Totals row across projects. Date range + project +
+  service multi-select filters, metric toggles, frozen Project/Location columns,
+  styled .xlsx export.
 - `/admin/users` — Admin role management
 - `/admin/security-groups` — Admin security-group templates (create / edit / delete)
 

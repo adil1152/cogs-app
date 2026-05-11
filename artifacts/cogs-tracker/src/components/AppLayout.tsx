@@ -5,6 +5,7 @@ import {
   FolderKanban,
   BarChart3,
   TableProperties,
+  GitCompareArrows,
   Users,
   ShieldCheck,
   LogOut,
@@ -55,6 +56,13 @@ const NAV: NavItem[] = [
     icon: TableProperties,
     iconColor: "text-teal-500",
     match: (p) => p.startsWith("/reports/entry-wise"),
+  },
+  {
+    label: "Comparison",
+    href: "/reports/comparison",
+    icon: GitCompareArrows,
+    iconColor: "text-fuchsia-500",
+    match: (p) => p.startsWith("/reports/comparison"),
   },
   {
     label: "Users",

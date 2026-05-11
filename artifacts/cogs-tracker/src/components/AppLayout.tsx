@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   BarChart3,
+  TableProperties,
   Users,
   ShieldCheck,
   LogOut,
@@ -46,7 +47,14 @@ const NAV: NavItem[] = [
     href: "/reports",
     icon: BarChart3,
     iconColor: "text-emerald-500",
-    match: (p) => p.startsWith("/reports"),
+    match: (p) => p === "/reports",
+  },
+  {
+    label: "Entry-wise",
+    href: "/reports/entry-wise",
+    icon: TableProperties,
+    iconColor: "text-teal-500",
+    match: (p) => p.startsWith("/reports/entry-wise"),
   },
   {
     label: "Users",

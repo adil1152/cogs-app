@@ -1123,6 +1123,105 @@ export const SetProjectApproversResponse = zod.array(
 );
 
 /**
+ * @summary Entry-wise pivot for a single project: returns the project's services and
+every entry in the date range with each entry's per-service cost and
+manday contribution. Used by the /reports/entry-wise screen.
+Requires canViewSummary on the project (or admin).
+
+ */
+export const GetProjectEntryMatrixParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetProjectEntryMatrixQueryParams = zod.object({
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+});
+
+export const getProjectEntryMatrixResponseProjectApprovalChainItemLevelNameMax = 32;
+
+export const GetProjectEntryMatrixResponse = zod
+  .object({
+    project: zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      code: zod.string().nullish(),
+      location: zod.string(),
+      contractStart: zod.coerce.date(),
+      contractEnd: zod.coerce.date(),
+      notes: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      isAdminOwned: zod.boolean(),
+      currentUserCanViewSummary: zod.boolean(),
+      currentUserCanEditEntries: zod.boolean(),
+      currentUserCanResetApproval: zod.boolean(),
+      approvalChain: zod
+        .array(
+          zod.object({
+            position: zod.number().min(1),
+            levelName: zod
+              .string()
+              .min(1)
+              .max(
+                getProjectEntryMatrixResponseProjectApprovalChainItemLevelNameMax,
+              ),
+          }),
+        )
+        .describe(
+          "Ordered approval chain for this project (position 1 is first, last is final lock).",
+        ),
+    }),
+    range: zod.object({
+      from: zod.coerce.date(),
+      to: zod.coerce.date(),
+    }),
+    services: zod.array(
+      zod.object({
+        id: zod.string(),
+        projectId: zod.string(),
+        name: zod.string(),
+        kind: zod.enum(["food", "standard"]),
+        sortOrder: zod.number(),
+      }),
+    ),
+    entries: zod.array(
+      zod.object({
+        entryId: zod.string(),
+        entryDate: zod.coerce.date(),
+        location: zod.string(),
+        totalCost: zod.number(),
+        totalMandays: zod.number(),
+        costPerManday: zod.number(),
+        sequenceCode: zod.string().nullish(),
+        sequenceNumber: zod.number().nullish(),
+        currentApprovalLevel: zod.number().optional(),
+        isLocked: zod.boolean().optional(),
+        costs: zod.array(
+          zod
+            .object({
+              serviceId: zod.string(),
+              cost: zod.number(),
+              mandayContribution: zod.number(),
+              costPerManday: zod.number(),
+            })
+            .describe("One service's cost contribution on a given entry."),
+        ),
+      }),
+    ),
+    serviceTotals: zod.array(
+      zod.object({
+        serviceId: zod.string(),
+        totalCost: zod.number(),
+        totalMandayContribution: zod.number(),
+        costPerManday: zod.number(),
+      }),
+    ),
+  })
+  .describe(
+    "Entry-wise pivot for a single project. `services` are the project's\nservices (in display order) used as horizontal columns. `entries` is\none row per daily entry in the date range with sparse `costs[]`\nkeyed by serviceId. `serviceTotals` lets the UI render a footer.\n",
+  );
+
+/**
  * @summary Headline numbers for today, week, month
  */
 export const GetDashboardResponse = zod.object({

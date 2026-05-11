@@ -11,6 +11,7 @@ import ProjectDetail from "@/pages/ProjectDetail";
 import EntryForm from "@/pages/EntryForm";
 import ProjectSummary from "@/pages/ProjectSummary";
 import Reports from "@/pages/Reports";
+import EntryWiseReport from "@/pages/EntryWiseReport";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminSecurityGroups from "@/pages/AdminSecurityGroups";
 
@@ -42,6 +43,7 @@ function Gate() {
       <Route path="/projects/:id/entries/:entryId" component={EntryForm} />
       <Route path="/projects/:id/summary" component={ProjectSummary} />
       <Route path="/projects/:id" component={ProjectDetail} />
+      <Route path="/reports/entry-wise" component={EntryWiseReport} />
       <Route path="/reports" component={Reports} />
       <Route path="/admin/users" component={AdminUsers} />
       <Route path="/admin/security-groups" component={AdminSecurityGroups} />

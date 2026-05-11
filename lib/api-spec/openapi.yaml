@@ -791,6 +791,46 @@ paths:
                 items:
                   $ref: '#/components/schemas/ApproverAssignment'
 
+  /reports/projects/{id}/entry-matrix:
+    get:
+      tags: [Reports]
+      operationId: getProjectEntryMatrix
+      summary: |
+        Entry-wise pivot for a single project: returns the project's services and
+        every entry in the date range with each entry's per-service cost and
+        manday contribution. Used by the /reports/entry-wise screen.
+        Requires canViewSummary on the project (or admin).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryMatrixReport'
+        '403':
+          description: Forbidden — user lacks summary access for this project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /reports/dashboard:
     get:
       tags: [Reports]
@@ -1634,6 +1674,79 @@ components:
         costPerManday: { type: number }
         sequenceCode:
           type: [string, 'null']
+    EntryMatrixCostCell:
+      type: object
+      description: One service's cost contribution on a given entry.
+      required: [serviceId, cost, mandayContribution, costPerManday]
+      properties:
+        serviceId: { type: string }
+        cost: { type: number }
+        mandayContribution: { type: number }
+        costPerManday: { type: number }
+    EntryMatrixRow:
+      type: object
+      required:
+        - entryId
+        - entryDate
+        - location
+        - totalCost
+        - totalMandays
+        - costPerManday
+        - costs
+      properties:
+        entryId: { type: string }
+        entryDate: { type: string, format: date }
+        location: { type: string }
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        costPerManday: { type: number }
+        sequenceCode:
+          type: [string, 'null']
+        sequenceNumber:
+          type: [integer, 'null']
+        currentApprovalLevel: { type: integer }
+        isLocked: { type: boolean }
+        costs:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryMatrixCostCell'
+    EntryMatrixServiceTotal:
+      type: object
+      required: [serviceId, totalCost, totalMandayContribution, costPerManday]
+      properties:
+        serviceId: { type: string }
+        totalCost: { type: number }
+        totalMandayContribution: { type: number }
+        costPerManday: { type: number }
+    EntryMatrixReport:
+      type: object
+      description: |
+        Entry-wise pivot for a single project. `services` are the project's
+        services (in display order) used as horizontal columns. `entries` is
+        one row per daily entry in the date range with sparse `costs[]`
+        keyed by serviceId. `serviceTotals` lets the UI render a footer.
+      required: [project, range, services, entries, serviceTotals]
+      properties:
+        project:
+          $ref: '#/components/schemas/Project'
+        range:
+          type: object
+          required: [from, to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectService'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryMatrixRow'
+        serviceTotals:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryMatrixServiceTotal'
     ProjectTotal:
       type: object
       required: [projectId, projectName, location, totalCost, totalMandays, costPerManday]

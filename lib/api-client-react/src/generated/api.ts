@@ -32,8 +32,10 @@ import type {
   DailyEntrySummary,
   DashboardReport,
   EntryApproval,
+  EntryMatrixReport,
   ErrorEnvelope,
   GetAggregateReportParams,
+  GetProjectEntryMatrixParams,
   GetProjectSummaryParams,
   GetTrendsReportParams,
   GrantAccessBody,
@@ -3327,6 +3329,134 @@ export const useSetProjectApprovers = <
 > => {
   return useMutation(getSetProjectApproversMutationOptions(options));
 };
+
+/**
+ * @summary Entry-wise pivot for a single project: returns the project's services and
+every entry in the date range with each entry's per-service cost and
+manday contribution. Used by the /reports/entry-wise screen.
+Requires canViewSummary on the project (or admin).
+
+ */
+export const getGetProjectEntryMatrixUrl = (
+  id: string,
+  params?: GetProjectEntryMatrixParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/reports/projects/${id}/entry-matrix?${stringifiedParams}`
+    : `/api/reports/projects/${id}/entry-matrix`;
+};
+
+export const getProjectEntryMatrix = async (
+  id: string,
+  params?: GetProjectEntryMatrixParams,
+  options?: RequestInit,
+): Promise<EntryMatrixReport> => {
+  return customFetch<EntryMatrixReport>(
+    getGetProjectEntryMatrixUrl(id, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetProjectEntryMatrixQueryKey = (
+  id: string,
+  params?: GetProjectEntryMatrixParams,
+) => {
+  return [
+    `/api/reports/projects/${id}/entry-matrix`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetProjectEntryMatrixQueryOptions = <
+  TData = Awaited<ReturnType<typeof getProjectEntryMatrix>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  params?: GetProjectEntryMatrixParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProjectEntryMatrix>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetProjectEntryMatrixQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getProjectEntryMatrix>>
+  > = ({ signal }) =>
+    getProjectEntryMatrix(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getProjectEntryMatrix>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetProjectEntryMatrixQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getProjectEntryMatrix>>
+>;
+export type GetProjectEntryMatrixQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Entry-wise pivot for a single project: returns the project's services and
+every entry in the date range with each entry's per-service cost and
+manday contribution. Used by the /reports/entry-wise screen.
+Requires canViewSummary on the project (or admin).
+
+ */
+
+export function useGetProjectEntryMatrix<
+  TData = Awaited<ReturnType<typeof getProjectEntryMatrix>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  id: string,
+  params?: GetProjectEntryMatrixParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProjectEntryMatrix>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetProjectEntryMatrixQueryOptions(
+    id,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Headline numbers for today, week, month

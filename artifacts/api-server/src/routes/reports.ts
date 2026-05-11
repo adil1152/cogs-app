@@ -713,4 +713,153 @@ router.get(
   },
 );
 
+router.get(
+  "/reports/projects/:id/entry-matrix",
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const v = await getProjectVisibility(
+      req.user!.id,
+      req.user!.role,
+      (req.params.id as string),
+    );
+    if (!v.project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    if (req.user!.role !== "admin" && !v.canViewSummary) {
+      res.status(403).json({ error: "Summary access not granted" });
+      return;
+    }
+
+    const from =
+      typeof req.query.from === "string"
+        ? req.query.from
+        : dateOnly(startOfMonth(new Date()));
+    const to =
+      typeof req.query.to === "string"
+        ? req.query.to
+        : dateOnly(new Date());
+
+    const [services, chain] = await Promise.all([
+      db
+        .select()
+        .from(projectServicesTable)
+        .where(eq(projectServicesTable.projectId, v.project.id))
+        .orderBy(projectServicesTable.sortOrder),
+      getProjectChain(v.project.id),
+    ]);
+
+    const rows = await fetchJoined([v.project.id], from, to);
+
+    const entryMap = new Map<
+      string,
+      {
+        entry: typeof dailyEntriesTable.$inferSelect;
+        costs: Map<
+          string,
+          { cost: number; mandayContribution: number }
+        >;
+      }
+    >();
+    for (const r of rows) {
+      let bucket = entryMap.get(r.entry.id);
+      if (!bucket) {
+        bucket = { entry: r.entry, costs: new Map() };
+        entryMap.set(r.entry.id, bucket);
+      }
+      if (r.cost && r.service) {
+        const c = bucket.costs.get(r.service.id) ?? {
+          cost: 0,
+          mandayContribution: 0,
+        };
+        c.cost += Number(r.cost.cost ?? 0);
+        c.mandayContribution += rowMandayContribution(r);
+        bucket.costs.set(r.service.id, c);
+      }
+    }
+
+    const entries = Array.from(entryMap.values())
+      .sort((a, b) =>
+        a.entry.entryDate < b.entry.entryDate
+          ? 1
+          : a.entry.entryDate > b.entry.entryDate
+            ? -1
+            : 0,
+      )
+      .map(({ entry, costs }) => {
+        const totalMandays = Number(entry.totalMandays);
+        const totalCost = Array.from(costs.values()).reduce(
+          (s, c) => s + c.cost,
+          0,
+        );
+        return {
+          entryId: entry.id,
+          entryDate: entry.entryDate,
+          location: entry.location,
+          totalCost,
+          totalMandays,
+          costPerManday: safeDivide(totalCost, totalMandays),
+          sequenceCode: entry.sequenceCode ?? null,
+          sequenceNumber: entry.sequenceNumber ?? null,
+          currentApprovalLevel: entry.currentApprovalLevel ?? 0,
+          isLocked: !!entry.lockedAt,
+          costs: Array.from(costs.entries()).map(([serviceId, c]) => ({
+            serviceId,
+            cost: c.cost,
+            mandayContribution: c.mandayContribution,
+            costPerManday: safeDivide(c.cost, c.mandayContribution),
+          })),
+        };
+      });
+
+    const totalsMap = new Map<
+      string,
+      { cost: number; mandayContribution: number }
+    >();
+    for (const e of entries) {
+      for (const c of e.costs) {
+        const t = totalsMap.get(c.serviceId) ?? {
+          cost: 0,
+          mandayContribution: 0,
+        };
+        t.cost += c.cost;
+        t.mandayContribution += c.mandayContribution;
+        totalsMap.set(c.serviceId, t);
+      }
+    }
+    const serviceTotals = services.map((s) => {
+      const t = totalsMap.get(s.id) ?? { cost: 0, mandayContribution: 0 };
+      return {
+        serviceId: s.id,
+        totalCost: t.cost,
+        totalMandayContribution: t.mandayContribution,
+        costPerManday: safeDivide(t.cost, t.mandayContribution),
+      };
+    });
+
+    res.json({
+      project: serializeProject(
+        {
+          project: v.project,
+          canViewSummary: v.canViewSummary,
+          canEditEntries: v.canEditEntries,
+          canResetApproval: v.canResetApproval,
+          isAdminOwned: v.isAdminOwned,
+        },
+        chain,
+      ),
+      range: { from, to },
+      services: services.map((s) => ({
+        id: s.id,
+        projectId: s.projectId,
+        name: s.name,
+        kind: s.kind as "food" | "standard",
+        sortOrder: s.sortOrder,
+      })),
+      entries,
+      serviceTotals,
+    });
+  },
+);
+
 export default router;

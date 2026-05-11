@@ -537,6 +537,59 @@ export interface ServiceEntryRow {
   sequenceCode?: string | null;
 }
 
+/**
+ * One service's cost contribution on a given entry.
+ */
+export interface EntryMatrixCostCell {
+  serviceId: string;
+  cost: number;
+  mandayContribution: number;
+  costPerManday: number;
+}
+
+export interface EntryMatrixRow {
+  entryId: string;
+  entryDate: string;
+  location: string;
+  totalCost: number;
+  totalMandays: number;
+  costPerManday: number;
+  /** @nullable */
+  sequenceCode?: string | null;
+  /** @nullable */
+  sequenceNumber?: number | null;
+  currentApprovalLevel?: number;
+  isLocked?: boolean;
+  costs: EntryMatrixCostCell[];
+}
+
+export interface EntryMatrixServiceTotal {
+  serviceId: string;
+  totalCost: number;
+  totalMandayContribution: number;
+  costPerManday: number;
+}
+
+export type EntryMatrixReportRange = {
+  from: string;
+  to: string;
+};
+
+/**
+ * Entry-wise pivot for a single project. `services` are the project's
+services (in display order) used as horizontal columns. `entries` is
+one row per daily entry in the date range with sparse `costs[]`
+keyed by serviceId. `serviceTotals` lets the UI render a footer.
+
+ */
+export interface EntryMatrixReport {
+  project: Project;
+  range: EntryMatrixReportRange;
+  services: ProjectService[];
+  entries: EntryMatrixRow[];
+  serviceTotals: EntryMatrixServiceTotal[];
+}
+
 export interface ProjectTotal {
   projectId: string;
   projectName: string;
@@ -624,6 +677,11 @@ export type HandleBrowserLoginCallbackParams = {
 };
 
 export type ListProjectEntriesParams = {
+  from?: string;
+  to?: string;
+};
+
+export type GetProjectEntryMatrixParams = {
   from?: string;
   to?: string;
 };

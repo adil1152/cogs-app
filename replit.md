@@ -95,6 +95,10 @@ Shared libs:
   used by the Reports/Project Summary "Services breakdown" table. Returns one row per
   (entry × service) with project name, service name, location, sequence code, cost,
   manday contribution and SAR/manday. Visibility = projects with `canViewSummary`.
+- `GET /api/reports/projects/:id/entry-matrix?from&to` — returns the project's services
+  and every entry in the date range with sparse `costs[]` keyed by serviceId, plus
+  per-service totals. Powers the `/reports/entry-wise` pivot. Requires `canViewSummary`
+  on the project (or admin).
 
 ## Visibility / authorization rules
 
@@ -114,6 +118,10 @@ Shared libs:
 - `/projects/:id/entries/new` — New daily entry
 - `/projects/:id/entries/:entryId` — Edit / view daily entry
 - `/reports` — Aggregate report with date range + project filter + CSV exports
+- `/reports/entry-wise` — Single-project pivot: services laid out horizontally as
+  (Cost / Mandays / Avg) column groups per entry. Per-service and per-metric column
+  toggles, footer totals, click any cell to drill into that service's entries, and
+  styled .xlsx export (project name, date range, generated-at header).
 - `/admin/users` — Admin role management
 - `/admin/security-groups` — Admin security-group templates (create / edit / delete)
 

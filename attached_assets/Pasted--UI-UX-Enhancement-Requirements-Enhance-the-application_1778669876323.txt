@@ -1,0 +1,104 @@
+## 🔹 UI / UX Enhancement Requirements
+
+Enhance the application user interface with modern and professional interactive effects to improve user experience and system usability.
+
+---
+
+### 👉 Hover Effects in Reports
+
+Add professional hover effects in:
+
+* Reports
+* Summary tables
+* Dashboard cards
+* Graph sections
+
+Hovering should:
+
+* Highlight rows/cards smoothly
+* Improve readability
+* Provide better user interaction feedback
+
+Use subtle and professional transitions only.
+
+---
+
+### 👉 Professional Micro Animations
+
+Add small and smooth animations throughout the application for better interaction and modern user experience.
+
+Animations should include:
+
+* Button hover effects
+* Card transitions
+* Popup/modal appearance
+* Table row highlighting
+* Smooth page transitions
+
+Animations should remain:
+
+* Lightweight
+* Professional
+* Fast and responsive
+
+Avoid excessive or distracting animations.
+
+---
+
+### 👉 Calendar UI / CSS Enhancement
+
+Improve the Calendar screen design and CSS:
+
+* Modern calendar styling
+* Better spacing and alignment
+* Improved color consistency
+* Better visibility for events and schedules
+* Responsive and clean layout
+
+---
+
+### 👉 Menu Bar Animation & Enhancement
+
+Enhance the menu bar with:
+
+* Slight professional animation while expanding/collapsing
+* Smooth transition effects
+* Better hover interaction
+* Sticky/fixed navigation behavior for easier access
+
+The menu should feel modern and responsive without affecting performance.
+
+---
+
+### 👉 Login Screen Enhancement
+
+Enhance the login screen with:
+
+* Light professional animations
+* Smooth transitions
+* Modern UI styling
+* Improved alignment and branding appearance
+
+Possible enhancements:
+
+* Soft fade-in animation
+* Background transition
+* Smooth login form interaction
+
+The login screen should maintain:
+
+* Fast loading speed
+* Professional corporate appearance
+* Clean user experience
+
+---
+
+## 🎯 Objective
+
+The purpose of these UI/UX enhancements is to:
+
+* Improve overall user interaction
+* Make the application feel modern and professional
+* Increase usability and navigation efficiency
+* Improve user engagement and visual consistency
+* Provide a smoother operational experience without affecting performance

@@ -57,7 +57,13 @@ import {
   FileText,
 } from "lucide-react";
 
-const APPROVAL_LEVELS = ["OP", "SOP", "COO", "CC", "Additional"] as const;
+const DEFAULT_APPROVAL_LEVELS = [
+  "OP",
+  "SOP",
+  "COO",
+  "CC",
+  "Additional",
+] as const;
 
 interface ServiceLine {
   projectServiceId: string;
@@ -151,6 +157,17 @@ export default function EntryForm() {
 
   const isLocked = !!existingEntry?.isLocked;
   const currentLevel = existingEntry?.currentApprovalLevel ?? 0;
+  const approvalLevelNames = useMemo<string[]>(() => {
+    const chain = (project as any)?.approvalChain as
+      | Array<{ position: number; levelName: string }>
+      | undefined;
+    if (chain && chain.length > 0) {
+      return [...chain]
+        .sort((a, b) => a.position - b.position)
+        .map((c) => c.levelName);
+    }
+    return [...DEFAULT_APPROVAL_LEVELS];
+  }, [project]);
   const status = (existingEntry?.status ?? "draft") as
     | "draft"
     | "pending"
@@ -539,7 +556,8 @@ export default function EntryForm() {
             <ApprovalStrip
               currentLevel={currentLevel}
               isLocked={isLocked}
-              canApprove={isNextApprover && !isLocked && nextLevel <= APPROVAL_LEVELS.length}
+              canApprove={isNextApprover && !isLocked && nextLevel <= approvalLevelNames.length}
+              levelNames={approvalLevelNames}
               canReject={isCurrentApprover && currentLevel > 0 && !isLocked}
               canReset={canResetApproval && (currentLevel > 0 || isLocked)}
               approvals={approvals ?? []}
@@ -960,6 +978,7 @@ function ApprovalStrip({
   onReject,
   onReset,
   pending,
+  levelNames,
 }: {
   currentLevel: number;
   isLocked: boolean;
@@ -971,8 +990,9 @@ function ApprovalStrip({
   onReject: () => void;
   onReset: () => void;
   pending: boolean;
+  levelNames: string[];
 }) {
-  const nextLevelName = APPROVAL_LEVELS[currentLevel];
+  const nextLevelName = levelNames[currentLevel];
   const byLevel = new Map(approvals.map((a) => [a.level, a]));
   return (
     <Card className={isLocked ? "border-accent/60 bg-accent/10" : ""}>
@@ -985,11 +1005,11 @@ function ApprovalStrip({
               </span>
             ) : (
               <span className="text-sm font-medium text-muted-foreground">
-                Approval progress: {currentLevel} of {APPROVAL_LEVELS.length}
+                Approval progress: {currentLevel} of {levelNames.length}
               </span>
             )}
             <div className="flex items-center gap-1.5">
-              {APPROVAL_LEVELS.map((name, i) => {
+              {levelNames.map((name, i) => {
                 const level = i + 1;
                 const done = level <= currentLevel;
                 const a = byLevel.get(level);

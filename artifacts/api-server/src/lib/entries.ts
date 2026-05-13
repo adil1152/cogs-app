@@ -9,8 +9,6 @@ import {
 import { eq, sql } from "drizzle-orm";
 import { calcFoodMandays, safeDivide } from "./cogsCalc";
 
-export const FINAL_APPROVAL_LEVEL = 5;
-
 export interface ServiceCostInputItem {
   projectServiceId: string;
   kind: "food" | "standard";

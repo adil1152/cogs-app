@@ -4,8 +4,9 @@ import {
   projectsTable,
   projectApprovalChainTable,
   projectApproverAssignmentsTable,
+  dailyEntriesTable,
 } from "@workspace/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { SetProjectApprovalChainBody } from "@workspace/api-zod";
 import { requireAdmin, requireAuth } from "../middlewares/requireAuth";
 import { getProjectVisibility } from "../lib/projectAccess";
@@ -124,31 +125,20 @@ router.put(
               { position: 5, levelName: "Additional" },
             ];
 
-      // Reorder-only: same cardinality AND same level-name set (both
-      // directions). This rejects adds and removes.
-      if (oldChain.length !== sorted.length) {
+      // Existing levels must be preserved (no removes — entry approvals
+      // already reference them by position). New levels may be appended,
+      // and existing levels may be reordered freely.
+      if (sorted.length < oldChain.length) {
         const e = new Error(
-          `Chain length must match existing (${oldChain.length}). Reorder only.`,
+          `Chain length cannot shrink below existing (${oldChain.length}).`,
         ) as Error & { httpStatus: number };
         e.httpStatus = 400;
         throw e;
       }
-      const oldNames = new Set(
-        oldChain.map((c) => c.levelName.toLowerCase()),
-      );
       for (const c of oldChain) {
         if (!newPosByName.has(c.levelName.toLowerCase())) {
           const e = new Error(
-            `Cannot remove level "${c.levelName}" — reorder only.`,
-          ) as Error & { httpStatus: number };
-          e.httpStatus = 400;
-          throw e;
-        }
-      }
-      for (const c of sorted) {
-        if (!oldNames.has(c.levelName.trim().toLowerCase())) {
-          const e = new Error(
-            `Cannot add new level "${c.levelName}" — reorder only.`,
+            `Cannot remove level "${c.levelName}" — existing levels must be kept.`,
           ) as Error & { httpStatus: number };
           e.httpStatus = 400;
           throw e;
@@ -157,9 +147,34 @@ router.put(
 
       // Build oldPosition → newPosition map.
       const remap = new Map<number, number>();
+      let reordered = false;
       for (const c of oldChain) {
         const np = newPosByName.get(c.levelName.toLowerCase())!;
         remap.set(c.position, np);
+        if (np !== c.position) reordered = true;
+      }
+
+      // Reordering existing positions would misroute in-flight approvals
+      // (entry_approvals.level + daily_entries.currentApprovalLevel reference
+      // positions, not names). Pure appends are always safe. Block reorders
+      // while any partially-approved or pending entries exist.
+      if (reordered) {
+        const [inflight] = await tx
+          .select({ n: sql<number>`COUNT(*)::int` })
+          .from(dailyEntriesTable)
+          .where(
+            and(
+              eq(dailyEntriesTable.projectId, projectId),
+              gt(dailyEntriesTable.currentApprovalLevel, 0),
+            ),
+          );
+        if ((inflight?.n ?? 0) > 0) {
+          const e = new Error(
+            "Cannot reorder existing levels while there are entries with approvals in progress. Reset those entries to draft first, or only append new levels.",
+          ) as Error & { httpStatus: number };
+          e.httpStatus = 409;
+          throw e;
+        }
       }
 
       // Two-step assignment level remap to dodge unique(project_id, level, user_id) conflicts.

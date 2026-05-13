@@ -808,9 +808,14 @@ function ApproversPanel({
   }, [users, access]);
 
   // Local edit state, seeded from server.
-  // - chainDraft: ordered array of level names (length matches serverChain.length).
-  // - assignmentsDraft: keyed by ORIGINAL position (1..N) on the SERVER chain.
-  const [chainDraft, setChainDraft] = useState<string[] | null>(null);
+  // - chainDraft: ordered array of { name, isNew }. Rows with isNew=true are
+  //   pending additions (renamable + removable client-side); existing rows are
+  //   locked (the backend rejects removes/renames to preserve audit history).
+  // - assignmentsDraft: keyed by ORIGINAL position (1..N) on the SERVER chain
+  //   for already-saved levels. Newly-added levels are keyed by their
+  //   negative draft index (-1, -2, …) until they're saved.
+  type ChainDraftRow = { name: string; isNew: boolean };
+  const [chainDraft, setChainDraft] = useState<ChainDraftRow[] | null>(null);
   const [assignmentsDraft, setAssignmentsDraft] = useState<
     Record<number, string[]> | null
   >(null);
@@ -829,7 +834,9 @@ function ApproversPanel({
 
   useEffect(() => {
     if (chainDraft === null) {
-      setChainDraft(serverChain.map((c) => c.levelName));
+      setChainDraft(
+        serverChain.map((c) => ({ name: c.levelName, isNew: false })),
+      );
     }
   }, [chainDraft, serverChain]);
 
@@ -909,12 +916,62 @@ function ApproversPanel({
       return next;
     });
   }
+  function addLevel() {
+    setChainDraft((prev) => {
+      const base = prev ?? [];
+      // Auto-name: "Additional", "Additional 2", "Additional 3", … avoiding
+      // any existing levelName in the draft (case-insensitive).
+      const used = new Set(base.map((r) => r.name.trim().toLowerCase()));
+      let name = "Additional";
+      let i = 2;
+      while (used.has(name.toLowerCase())) {
+        name = `Additional ${i++}`;
+      }
+      return [...base, { name, isNew: true }];
+    });
+  }
+  function renameLevel(idx: number, name: string) {
+    setChainDraft((prev) => {
+      if (!prev) return prev;
+      const next = [...prev];
+      // Guard: only newly-added rows are renameable from the UI.
+      if (!next[idx].isNew) return prev;
+      next[idx] = { ...next[idx], name };
+      return next;
+    });
+  }
+  function removeLevel(idx: number) {
+    setChainDraft((prev) => {
+      if (!prev) return prev;
+      // Guard: only newly-added (unsaved) rows can be removed.
+      if (!prev[idx].isNew) return prev;
+      const next = prev.filter((_, i) => i !== idx);
+      return next;
+    });
+  }
   function saveChain() {
     if (!chainDraft) return;
+    // Client-side validation mirroring the server: non-empty + unique names.
+    const trimmed = chainDraft.map((r) => r.name.trim());
+    if (trimmed.some((n) => n.length === 0)) {
+      toast({
+        title: "Level name cannot be empty",
+        variant: "destructive",
+      });
+      return;
+    }
+    const lower = trimmed.map((n) => n.toLowerCase());
+    if (new Set(lower).size !== lower.length) {
+      toast({
+        title: "Level names must be unique",
+        variant: "destructive",
+      });
+      return;
+    }
     setChain.mutate({
       id: projectId,
       data: {
-        chain: chainDraft.map((levelName, i) => ({
+        chain: trimmed.map((levelName, i) => ({
           position: i + 1,
           levelName,
         })),
@@ -925,7 +982,7 @@ function ApproversPanel({
   const chainDirty = useMemo(() => {
     if (!chainDraft) return false;
     if (chainDraft.length !== serverChain.length) return true;
-    return chainDraft.some((n, i) => n !== serverChain[i].levelName);
+    return chainDraft.some((r, i) => r.name !== serverChain[i].levelName);
   }, [chainDraft, serverChain]);
 
   if (!assignmentsDraft || !chainDraft) {
@@ -947,14 +1004,18 @@ function ApproversPanel({
             <p className="text-xs text-muted-foreground mt-1">
               Drag the arrows to reorder the chain. Approvals run top-to-bottom
               and the last position locks the entry. Approver assignments stay
-              attached to each role when you reorder.
+              attached to each role when you reorder. Use{" "}
+              <span className="font-medium">Add level</span> to insert extra
+              approval steps after CC; you can rename or remove newly-added
+              rows here, but saved levels are kept to preserve approval
+              history.
             </p>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border border-border divide-y divide-border bg-card">
-              {chainDraft.map((name, i) => (
+              {chainDraft.map((row, i) => (
                 <div
-                  key={`${name}-${i}`}
+                  key={`${row.isNew ? "new" : "old"}-${i}`}
                   className="flex items-center gap-3 px-3 py-2.5"
                   data-testid={`chain-row-${i}`}
                 >
@@ -962,7 +1023,17 @@ function ApproversPanel({
                   <Badge variant="secondary" className="tabular-nums">
                     {i + 1}
                   </Badge>
-                  <span className="flex-1 text-sm font-medium">{name}</span>
+                  {row.isNew ? (
+                    <Input
+                      value={row.name}
+                      onChange={(e) => renameLevel(i, e.target.value)}
+                      placeholder="Level name"
+                      className="h-8 flex-1 text-sm font-medium"
+                      data-testid={`chain-name-${i}`}
+                    />
+                  ) : (
+                    <span className="flex-1 text-sm font-medium">{row.name}</span>
+                  )}
                   <Button
                     size="icon"
                     variant="ghost"
@@ -985,14 +1056,43 @@ function ApproversPanel({
                   >
                     <ArrowDown className="h-3.5 w-3.5" />
                   </Button>
+                  {row.isNew && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => removeLevel(i)}
+                      data-testid={`chain-remove-${i}`}
+                      title="Remove this new level"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
-            <div className="flex justify-end gap-2 mt-3">
+            <div className="flex justify-between gap-2 mt-3">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setChainDraft(serverChain.map((c) => c.levelName))}
+                onClick={addLevel}
+                disabled={setChain.isPending}
+                data-testid="button-add-chain-level"
+              >
+                + Add level
+              </Button>
+              <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setChainDraft(
+                    serverChain.map((c) => ({
+                      name: c.levelName,
+                      isNew: false,
+                    })),
+                  )
+                }
                 disabled={!chainDirty || setChain.isPending}
                 data-testid="button-reset-chain"
               >
@@ -1006,6 +1106,7 @@ function ApproversPanel({
               >
                 Save order
               </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

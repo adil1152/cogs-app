@@ -48,11 +48,14 @@ async function fetchJoined(
   projectIds: string[],
   from?: string,
   to?: string,
+  statuses?: string[] | null,
 ): Promise<JoinedRow[]> {
   if (projectIds.length === 0) return [];
   const conds = [inArray(dailyEntriesTable.projectId, projectIds)];
   if (from) conds.push(gte(dailyEntriesTable.entryDate, from));
   if (to) conds.push(lte(dailyEntriesTable.entryDate, to));
+  if (statuses && statuses.length > 0)
+    conds.push(inArray(dailyEntriesTable.status, statuses));
 
   const rows = await db
     .select({
@@ -80,6 +83,14 @@ function parseCsv(v: unknown): string[] | null {
   if (typeof v !== "string") return null;
   const parts = v.split(",").map((s) => s.trim()).filter(Boolean);
   return parts.length > 0 ? parts : null;
+}
+
+const VALID_STATUSES = new Set(["draft", "pending", "approved"]);
+function parseStatuses(v: unknown): string[] | null {
+  const parsed = parseCsv(v);
+  if (!parsed) return null;
+  const filtered = parsed.filter((s) => VALID_STATUSES.has(s));
+  return filtered.length > 0 ? filtered : null;
 }
 
 function rowMandayContribution(row: JoinedRow): number {
@@ -314,8 +325,9 @@ router.get(
     const serviceFilterSet = serviceFilter ? new Set(serviceFilter) : null;
     const useEntryMandays = serviceFilterSet === null;
 
+    const statuses = parseStatuses(req.query.statuses);
     const [allRows, chain] = await Promise.all([
-      fetchJoined([(req.params.id as string)], from, to),
+      fetchJoined([(req.params.id as string)], from, to, statuses),
       getProjectChain(v.project.id),
     ]);
     const rows = serviceFilterSet
@@ -459,7 +471,8 @@ router.get(
         ? req.query.to
         : dateOnly(new Date());
 
-    const allRows = await fetchJoined(ids, from, to);
+    const statuses = parseStatuses(req.query.statuses);
+    const allRows = await fetchJoined(ids, from, to, statuses);
     // Apply service filter at the row level (only count cost rows for the
     // chosen services). We still need entry rows for KPI entry counts even
     // when their costs are filtered out.
@@ -598,7 +611,8 @@ router.get(
         ? req.query.to
         : dateOnly(new Date());
 
-    const rows = await fetchJoined(ids, from, to);
+    const statuses = parseStatuses(req.query.statuses);
+    const rows = await fetchJoined(ids, from, to, statuses);
 
     interface DayBucket {
       entryMandays: Map<string, number>;
@@ -673,7 +687,8 @@ router.get(
       return;
     }
 
-    const rows = await fetchJoined(ids, from, to);
+    const statuses = parseStatuses(req.query.statuses);
+    const rows = await fetchJoined(ids, from, to, statuses);
 
     const out = rows
       .filter(
@@ -749,7 +764,8 @@ router.get(
       getProjectChain(v.project.id),
     ]);
 
-    const rows = await fetchJoined([v.project.id], from, to);
+    const statuses = parseStatuses(req.query.statuses);
+    const rows = await fetchJoined([v.project.id], from, to, statuses);
 
     const entryMap = new Map<
       string,
@@ -801,6 +817,7 @@ router.get(
           costPerManday: safeDivide(totalCost, totalMandays),
           sequenceCode: entry.sequenceCode ?? null,
           sequenceNumber: entry.sequenceNumber ?? null,
+          status: (entry.status ?? "draft") as "draft" | "pending" | "approved",
           currentApprovalLevel: entry.currentApprovalLevel ?? 0,
           isLocked: !!entry.lockedAt,
           costs: Array.from(costs.entries()).map(([serviceId, c]) => ({

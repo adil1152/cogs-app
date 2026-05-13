@@ -125,6 +125,15 @@ export const dailyEntriesTable = pgTable(
     totalMandaysOverride: boolean("total_mandays_override")
       .notNull()
       .default(false),
+    /**
+     * Workflow state machine:
+     *   draft     — created, not yet submitted; not in any approver's queue.
+     *   pending   — submitted; advances through the approval chain.
+     *               currentApprovalLevel reflects how far it has progressed.
+     *   approved  — final approval recorded; lockedAt is set.
+     * Reject sends pending → pending (level 0). Reset sends any → draft.
+     */
+    status: varchar("status", { length: 16 }).notNull().default("draft"),
     currentApprovalLevel: integer("current_approval_level")
       .notNull()
       .default(0),

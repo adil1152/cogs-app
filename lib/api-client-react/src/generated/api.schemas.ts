@@ -411,6 +411,20 @@ export interface EntryApproval {
   approvedAt: string;
 }
 
+/**
+ * Workflow state. `draft` = created but not yet submitted (won't show
+up in approver queues). `pending` = submitted; advancing through the
+approval chain. `approved` = final approval recorded; entry is locked.
+
+ */
+export type EntryStatus = (typeof EntryStatus)[keyof typeof EntryStatus];
+
+export const EntryStatus = {
+  draft: "draft",
+  pending: "pending",
+  approved: "approved",
+} as const;
+
 export interface DailyEntrySummary {
   id: string;
   projectId: string;
@@ -421,6 +435,7 @@ export interface DailyEntrySummary {
   totalCost: number;
   costPerManday: number;
   totalMandaysOverride: boolean;
+  status: EntryStatus;
   currentApprovalLevel: number;
   isLocked: boolean;
   /** @nullable */
@@ -558,6 +573,7 @@ export interface EntryMatrixRow {
   sequenceCode?: string | null;
   /** @nullable */
   sequenceNumber?: number | null;
+  status: EntryStatus;
   currentApprovalLevel?: number;
   isLocked?: boolean;
   costs: EntryMatrixCostCell[];
@@ -679,11 +695,19 @@ export type HandleBrowserLoginCallbackParams = {
 export type ListProjectEntriesParams = {
   from?: string;
   to?: string;
+  /**
+   * Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+   */
+  statuses?: string;
 };
 
 export type GetProjectEntryMatrixParams = {
   from?: string;
   to?: string;
+  /**
+   * Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+   */
+  statuses?: string;
 };
 
 export type GetProjectSummaryParams = {
@@ -693,6 +717,10 @@ export type GetProjectSummaryParams = {
    * Comma-separated service IDs to restrict the summary to. When provided, mandays are recomputed from the chosen services' cost rows instead of the entry's stored total.
    */
   serviceIds?: string;
+  /**
+   * Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+   */
+  statuses?: string;
 };
 
 export type GetAggregateReportParams = {
@@ -706,6 +734,10 @@ export type GetAggregateReportParams = {
    * Comma-separated list of service ids to include.
    */
   serviceIds?: string;
+  /**
+   * Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+   */
+  statuses?: string;
 };
 
 export type GetTrendsReportParams = {
@@ -719,6 +751,10 @@ export type GetTrendsReportParams = {
    * Comma-separated list of service ids to include.
    */
   serviceIds?: string;
+  /**
+   * Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+   */
+  statuses?: string;
 };
 
 export type ListServiceEntriesParams = {
@@ -732,6 +768,10 @@ export type ListServiceEntriesParams = {
    * Comma-separated list of service ids to include.
    */
   serviceIds?: string;
+  /**
+   * Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+   */
+  statuses?: string;
 };
 
 export type ListVisibleServicesParams = {

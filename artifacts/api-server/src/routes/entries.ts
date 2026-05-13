@@ -6,7 +6,7 @@ import {
   projectsTable,
   serviceCostEntriesTable,
 } from "@workspace/db";
-import { and, eq, gte, lte, desc, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, lte, desc, isNull, inArray, sql } from "drizzle-orm";
 import {
   CreateDailyEntryBody,
   UpdateDailyEntryBody,
@@ -32,6 +32,17 @@ function pad4(n: number): string {
   return n.toString().padStart(4, "0");
 }
 
+const VALID_STATUSES = new Set(["draft", "pending", "approved"]);
+
+export function parseStatuses(v: unknown): string[] | null {
+  if (typeof v !== "string") return null;
+  const parts = v
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => VALID_STATUSES.has(s));
+  return parts.length > 0 ? parts : null;
+}
+
 router.get(
   "/projects/:id/entries",
   requireAuth,
@@ -55,6 +66,8 @@ router.get(
       conds.push(gte(dailyEntriesTable.entryDate, req.query.from));
     if (typeof req.query.to === "string")
       conds.push(lte(dailyEntriesTable.entryDate, req.query.to));
+    const statuses = parseStatuses(req.query.statuses);
+    if (statuses) conds.push(inArray(dailyEntriesTable.status, statuses));
 
     const rows = await db
       .select()
@@ -278,12 +291,27 @@ router.patch(
           data.totalMandays = String(parsed.data.totalMandays);
         }
 
+        data.updatedAt = new Date();
+
+        // Editing a pending entry performs a full workflow reset so that any
+        // prior approvals don't carry forward to the modified data. The user
+        // must re-submit and approvals must restart from level 0. Approved
+        // (locked) entries are blocked from edit above; drafts are untouched.
+        const prevStatus = entry.status ?? "draft";
+        const resetWorkflow = prevStatus === "pending";
+        if (resetWorkflow) {
+          data.status = "draft";
+          data.currentApprovalLevel = 0;
+          data.lockedAt = null;
+        }
+
         const beforeSnap: Record<string, unknown> = {
           entryDate: entry.entryDate,
           location: entry.location,
           notes: entry.notes,
           totalMandaysOverride: entry.totalMandaysOverride,
           totalMandays: Number(entry.totalMandays),
+          status: prevStatus,
         };
         const afterSnap: Record<string, unknown> = {
           ...beforeSnap,
@@ -296,9 +324,8 @@ router.patch(
           ...(data.totalMandays !== undefined
             ? { totalMandays: Number(data.totalMandays) }
             : {}),
+          ...(data.status !== undefined ? { status: data.status } : {}),
         };
-
-        data.updatedAt = new Date();
 
         if (Object.keys(data).length > 0) {
           const updated = await tx
@@ -316,6 +343,12 @@ router.patch(
               "Entry was locked — refresh to see changes",
             );
           }
+        }
+
+        if (resetWorkflow) {
+          await tx
+            .delete(entryApprovalsTable)
+            .where(eq(entryApprovalsTable.dailyEntryId, id));
         }
 
         if (parsed.data.serviceCosts !== undefined) {
@@ -504,7 +537,9 @@ router.post(
       return;
     }
     const previousLevel = entry.currentApprovalLevel;
-    if (previousLevel === 0 && !entry.lockedAt) {
+    const prevStatus = entry.status ?? "draft";
+    // No-op only when the entry is already in a clean draft state.
+    if (previousLevel === 0 && !entry.lockedAt && prevStatus === "draft") {
       res.json(await buildEntryDetail(id));
       return;
     }
@@ -515,6 +550,7 @@ router.post(
         .set({
           currentApprovalLevel: 0,
           lockedAt: null,
+          status: "draft",
           updatedAt: new Date(),
         })
         .where(eq(dailyEntriesTable.id, id));
@@ -534,6 +570,77 @@ router.post(
         tx,
       );
     });
+
+    res.json(await buildEntryDetail(id));
+  },
+);
+
+router.post(
+  "/entries/:id/submit",
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    const id = req.params.id as string;
+    const [entry] = await db
+      .select()
+      .from(dailyEntriesTable)
+      .where(eq(dailyEntriesTable.id, id));
+    if (!entry) {
+      res.status(404).json({ error: "Entry not found" });
+      return;
+    }
+    const v = await getProjectVisibility(
+      req.user!.id,
+      req.user!.role,
+      entry.projectId,
+    );
+    if (req.user!.role !== "admin" && !v.canEditEntries) {
+      res.status(403).json({ error: "Edit access required" });
+      return;
+    }
+    if ((entry.status ?? "draft") !== "draft") {
+      res
+        .status(400)
+        .json({ error: "Only draft entries can be submitted for approval" });
+      return;
+    }
+
+    let conflicted = false;
+    await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(dailyEntriesTable)
+        .set({ status: "pending", updatedAt: new Date() })
+        .where(
+          and(
+            eq(dailyEntriesTable.id, id),
+            eq(dailyEntriesTable.status, "draft"),
+            isNull(dailyEntriesTable.lockedAt),
+          ),
+        )
+        .returning({ id: dailyEntriesTable.id });
+      if (updated.length === 0) {
+        conflicted = true;
+        return;
+      }
+      await recordAudit(
+        {
+          dailyEntryId: id,
+          projectId: entry.projectId,
+          action: "SUBMIT",
+          actorId: req.user!.id,
+          field: "status",
+          oldValue: "draft",
+          newValue: "pending",
+        },
+        tx,
+      );
+    });
+
+    if (conflicted) {
+      res
+        .status(409)
+        .json({ error: "Entry state changed concurrently — refresh and retry" });
+      return;
+    }
 
     res.json(await buildEntryDetail(id));
   },

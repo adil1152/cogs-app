@@ -27,7 +27,14 @@ export default function ProjectSummary() {
   const [from, setFrom] = useState(daysAgoISO(29));
   const [to, setTo] = useState(todayISO());
   const [serviceIds, setServiceIds] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [drilldown, setDrilldown] = useState<ServiceDrilldownTarget | null>(null);
+
+  const statusOptions = [
+    { value: "draft", label: "Draft" },
+    { value: "pending", label: "Pending approval" },
+    { value: "approved", label: "Approved" },
+  ];
 
   const { data: project } = useGetProject(id, {
     query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) },
@@ -52,8 +59,11 @@ export default function ProjectSummary() {
       from,
       to,
       ...(serviceIds.length > 0 ? { serviceIds: serviceIds.join(",") } : {}),
+      ...(statuses.length > 0 && statuses.length < 3
+        ? { statuses: statuses.join(",") }
+        : {}),
     }),
-    [from, to, serviceIds],
+    [from, to, serviceIds, statuses],
   );
 
   const { data: summary, error, isLoading } = useGetProjectSummary(id, queryParams, {
@@ -108,7 +118,7 @@ export default function ProjectSummary() {
       <div className="px-8 py-6 space-y-6">
         <Card>
           <CardContent className="pt-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">From</Label>
                 <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} data-testid="input-from" />
@@ -129,6 +139,19 @@ export default function ProjectSummary() {
                   emptyText="No services on this project."
                   disabled={serviceOptions.length === 0}
                   data-testid="select-services"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
+                <MultiSelect
+                  options={statusOptions}
+                  selected={statuses}
+                  onChange={setStatuses}
+                  placeholder="All statuses"
+                  searchPlaceholder="Filter…"
+                  allLabel="All statuses"
+                  emptyText="No statuses."
+                  data-testid="select-statuses"
                 />
               </div>
             </div>

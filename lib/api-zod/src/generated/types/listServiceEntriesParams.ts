@@ -17,4 +17,8 @@ export type ListServiceEntriesParams = {
    * Comma-separated list of service ids to include.
    */
   serviceIds?: string;
+  /**
+   * Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+   */
+  statuses?: string;
 };

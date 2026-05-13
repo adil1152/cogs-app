@@ -555,6 +555,12 @@ paths:
           schema:
             type: string
             format: date
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
       responses:
         '200':
           description: OK
@@ -700,6 +706,38 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/EntryApproval'
+  /entries/{id}/submit:
+    post:
+      tags: [Entries]
+      operationId: submitDailyEntry
+      summary: |
+        Move a draft entry into the approval queue (status draft → pending).
+        Allowed for admins or any user with canEditEntries on the project.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+        '400':
+          description: Entry is not in draft status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /entries/{id}/reset:
     post:
       tags: [Entries]
@@ -818,6 +856,12 @@ paths:
           schema:
             type: string
             format: date
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
       responses:
         '200':
           description: OK
@@ -888,6 +932,12 @@ paths:
             cost rows instead of the entry's stored total.
           schema:
             type: string
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
       responses:
         '200':
           description: OK
@@ -931,6 +981,12 @@ paths:
           description: Comma-separated list of service ids to include.
           schema:
             type: string
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
       responses:
         '200':
           description: OK
@@ -966,6 +1022,12 @@ paths:
           in: query
           required: false
           description: Comma-separated list of service ids to include.
+          schema:
+            type: string
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
           schema:
             type: string
       responses:
@@ -1005,6 +1067,12 @@ paths:
           in: query
           required: false
           description: Comma-separated list of service ids to include.
+          schema:
+            type: string
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
           schema:
             type: string
       responses:
@@ -1443,7 +1511,7 @@ components:
         projectId: { type: string }
         action:
           type: string
-          description: 'CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET'
+          description: 'CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET | SUBMIT'
         level:
           type: [integer, 'null']
         levelName:
@@ -1530,9 +1598,16 @@ components:
           type: [string, 'null']
         approvedAt: { type: string, format: date-time }
 
+    EntryStatus:
+      type: string
+      enum: [draft, pending, approved]
+      description: |
+        Workflow state. `draft` = created but not yet submitted (won't show
+        up in approver queues). `pending` = submitted; advancing through the
+        approval chain. `approved` = final approval recorded; entry is locked.
     DailyEntrySummary:
       type: object
-      required: [id, projectId, projectName, entryDate, location, totalMandays, totalCost, costPerManday, totalMandaysOverride, currentApprovalLevel, isLocked]
+      required: [id, projectId, projectName, entryDate, location, totalMandays, totalCost, costPerManday, totalMandaysOverride, status, currentApprovalLevel, isLocked]
       properties:
         id: { type: string }
         projectId: { type: string }
@@ -1543,6 +1618,8 @@ components:
         totalCost: { type: number }
         costPerManday: { type: number }
         totalMandaysOverride: { type: boolean }
+        status:
+          $ref: '#/components/schemas/EntryStatus'
         currentApprovalLevel: { type: integer }
         isLocked: { type: boolean }
         lockedAt:
@@ -1692,6 +1769,7 @@ components:
         - totalCost
         - totalMandays
         - costPerManday
+        - status
         - costs
       properties:
         entryId: { type: string }
@@ -1704,6 +1782,8 @@ components:
           type: [string, 'null']
         sequenceNumber:
           type: [integer, 'null']
+        status:
+          $ref: '#/components/schemas/EntryStatus'
         currentApprovalLevel: { type: integer }
         isLocked: { type: boolean }
         costs:

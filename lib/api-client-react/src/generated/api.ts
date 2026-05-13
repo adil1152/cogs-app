@@ -2985,6 +2985,94 @@ export function useListEntryApprovals<
 }
 
 /**
+ * @summary Move a draft entry into the approval queue (status draft → pending).
+Allowed for admins or any user with canEditEntries on the project.
+
+ */
+export const getSubmitDailyEntryUrl = (id: string) => {
+  return `/api/entries/${id}/submit`;
+};
+
+export const submitDailyEntry = async (
+  id: string,
+  options?: RequestInit,
+): Promise<DailyEntryDetail> => {
+  return customFetch<DailyEntryDetail>(getSubmitDailyEntryUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSubmitDailyEntryMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitDailyEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitDailyEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["submitDailyEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitDailyEntry>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return submitDailyEntry(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitDailyEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitDailyEntry>>
+>;
+
+export type SubmitDailyEntryMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Move a draft entry into the approval queue (status draft → pending).
+Allowed for admins or any user with canEditEntries on the project.
+
+ */
+export const useSubmitDailyEntry = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitDailyEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitDailyEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getSubmitDailyEntryMutationOptions(options));
+};
+
+/**
  * @summary Reset entry to draft (clears all approvals). Allowed for admins or users with canResetApproval on the project.
  */
 export const getResetDailyEntryUrl = (id: string) => {

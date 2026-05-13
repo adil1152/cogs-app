@@ -187,10 +187,12 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
                 <TableCell className="text-right tabular-nums">{formatCurrency(e.totalCost)}</TableCell>
                 <TableCell className="text-right tabular-nums">{e.totalMandays ? formatCurrency(e.costPerManday) : "—"}</TableCell>
                 <TableCell className="text-center">
-                  {e.isLocked ? (
+                  {e.isLocked || e.status === "approved" ? (
                     <Badge variant="default" className="gap-1"><Lock className="h-3 w-3" /> Locked</Badge>
-                  ) : (e.currentApprovalLevel ?? 0) > 0 ? (
-                    <Badge variant="secondary">{e.currentApprovalLevel}/5</Badge>
+                  ) : e.status === "pending" ? (
+                    <Badge variant="secondary">
+                      Pending {(e.currentApprovalLevel ?? 0) > 0 ? `· ${e.currentApprovalLevel}/5` : ""}
+                    </Badge>
                   ) : (
                     <Badge variant="outline">Draft</Badge>
                   )}

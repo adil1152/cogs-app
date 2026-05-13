@@ -32,6 +32,7 @@ export * from "./entryMatrixReport";
 export * from "./entryMatrixReportRange";
 export * from "./entryMatrixRow";
 export * from "./entryMatrixServiceTotal";
+export * from "./entryStatus";
 export * from "./errorEnvelope";
 export * from "./getAggregateReportParams";
 export * from "./getProjectEntryMatrixParams";

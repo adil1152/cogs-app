@@ -628,6 +628,12 @@ export const ListProjectEntriesParams = zod.object({
 export const ListProjectEntriesQueryParams = zod.object({
   from: zod.date().optional(),
   to: zod.date().optional(),
+  statuses: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.",
+    ),
 });
 
 export const ListProjectEntriesResponseItem = zod.object({
@@ -640,6 +646,11 @@ export const ListProjectEntriesResponseItem = zod.object({
   totalCost: zod.number(),
   costPerManday: zod.number(),
   totalMandaysOverride: zod.boolean(),
+  status: zod
+    .enum(["draft", "pending", "approved"])
+    .describe(
+      "Workflow state. `draft` = created but not yet submitted (won't show\nup in approver queues). `pending` = submitted; advancing through the\napproval chain. `approved` = final approval recorded; entry is locked.\n",
+    ),
   currentApprovalLevel: zod.number(),
   isLocked: zod.boolean(),
   lockedAt: zod.coerce.date().nullish(),
@@ -736,6 +747,11 @@ export const GetDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    status: zod
+      .enum(["draft", "pending", "approved"])
+      .describe(
+        "Workflow state. `draft` = created but not yet submitted (won't show\nup in approver queues). `pending` = submitted; advancing through the\napproval chain. `approved` = final approval recorded; entry is locked.\n",
+      ),
     currentApprovalLevel: zod.number(),
     isLocked: zod.boolean(),
     lockedAt: zod.coerce.date().nullish(),
@@ -842,6 +858,11 @@ export const UpdateDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    status: zod
+      .enum(["draft", "pending", "approved"])
+      .describe(
+        "Workflow state. `draft` = created but not yet submitted (won't show\nup in approver queues). `pending` = submitted; advancing through the\napproval chain. `approved` = final approval recorded; entry is locked.\n",
+      ),
     currentApprovalLevel: zod.number(),
     isLocked: zod.boolean(),
     lockedAt: zod.coerce.date().nullish(),
@@ -893,6 +914,11 @@ export const ApproveDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    status: zod
+      .enum(["draft", "pending", "approved"])
+      .describe(
+        "Workflow state. `draft` = created but not yet submitted (won't show\nup in approver queues). `pending` = submitted; advancing through the\napproval chain. `approved` = final approval recorded; entry is locked.\n",
+      ),
     currentApprovalLevel: zod.number(),
     isLocked: zod.boolean(),
     lockedAt: zod.coerce.date().nullish(),
@@ -940,6 +966,11 @@ export const RejectDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    status: zod
+      .enum(["draft", "pending", "approved"])
+      .describe(
+        "Workflow state. `draft` = created but not yet submitted (won't show\nup in approver queues). `pending` = submitted; advancing through the\napproval chain. `approved` = final approval recorded; entry is locked.\n",
+      ),
     currentApprovalLevel: zod.number(),
     isLocked: zod.boolean(),
     lockedAt: zod.coerce.date().nullish(),
@@ -990,6 +1021,60 @@ export const ListEntryApprovalsResponse = zod.array(
 );
 
 /**
+ * @summary Move a draft entry into the approval queue (status draft → pending).
+Allowed for admins or any user with canEditEntries on the project.
+
+ */
+export const SubmitDailyEntryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const SubmitDailyEntryResponse = zod
+  .object({
+    id: zod.string(),
+    projectId: zod.string(),
+    projectName: zod.string(),
+    entryDate: zod.coerce.date(),
+    location: zod.string(),
+    totalMandays: zod.number(),
+    totalCost: zod.number(),
+    costPerManday: zod.number(),
+    totalMandaysOverride: zod.boolean(),
+    status: zod
+      .enum(["draft", "pending", "approved"])
+      .describe(
+        "Workflow state. `draft` = created but not yet submitted (won't show\nup in approver queues). `pending` = submitted; advancing through the\napproval chain. `approved` = final approval recorded; entry is locked.\n",
+      ),
+    currentApprovalLevel: zod.number(),
+    isLocked: zod.boolean(),
+    lockedAt: zod.coerce.date().nullish(),
+    notes: zod.string().nullish(),
+    sequenceNumber: zod.number().nullish(),
+    sequenceCode: zod.string().nullish(),
+  })
+  .and(
+    zod.object({
+      serviceCosts: zod.array(
+        zod.object({
+          id: zod.string(),
+          projectServiceId: zod.string(),
+          serviceName: zod.string(),
+          kind: zod.enum(["food", "standard"]),
+          cost: zod.number(),
+          mandays: zod.number().nullish(),
+          mandayContribution: zod.number(),
+          costPerManday: zod.number(),
+          breakfastQty: zod.number().nullish(),
+          lunchQty: zod.number().nullish(),
+          dinnerQty: zod.number().nullish(),
+          midnightQty: zod.number().nullish(),
+          mealBoxQty: zod.number().nullish(),
+        }),
+      ),
+    }),
+  );
+
+/**
  * @summary Reset entry to draft (clears all approvals). Allowed for admins or users with canResetApproval on the project.
  */
 export const ResetDailyEntryParams = zod.object({
@@ -1007,6 +1092,11 @@ export const ResetDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    status: zod
+      .enum(["draft", "pending", "approved"])
+      .describe(
+        "Workflow state. `draft` = created but not yet submitted (won't show\nup in approver queues). `pending` = submitted; advancing through the\napproval chain. `approved` = final approval recorded; entry is locked.\n",
+      ),
     currentApprovalLevel: zod.number(),
     isLocked: zod.boolean(),
     lockedAt: zod.coerce.date().nullish(),
@@ -1136,6 +1226,12 @@ export const GetProjectEntryMatrixParams = zod.object({
 export const GetProjectEntryMatrixQueryParams = zod.object({
   from: zod.date().optional(),
   to: zod.date().optional(),
+  statuses: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.",
+    ),
 });
 
 export const getProjectEntryMatrixResponseProjectApprovalChainItemLevelNameMax = 32;
@@ -1194,6 +1290,11 @@ export const GetProjectEntryMatrixResponse = zod
         costPerManday: zod.number(),
         sequenceCode: zod.string().nullish(),
         sequenceNumber: zod.number().nullish(),
+        status: zod
+          .enum(["draft", "pending", "approved"])
+          .describe(
+            "Workflow state. `draft` = created but not yet submitted (won't show\nup in approver queues). `pending` = submitted; advancing through the\napproval chain. `approved` = final approval recorded; entry is locked.\n",
+          ),
         currentApprovalLevel: zod.number().optional(),
         isLocked: zod.boolean().optional(),
         costs: zod.array(
@@ -1296,6 +1397,12 @@ export const GetProjectSummaryQueryParams = zod.object({
     .describe(
       "Comma-separated service IDs to restrict the summary to. When provided, mandays are recomputed from the chosen services' cost rows instead of the entry's stored total.",
     ),
+  statuses: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.",
+    ),
 });
 
 export const getProjectSummaryResponseProjectApprovalChainItemLevelNameMax = 32;
@@ -1365,6 +1472,11 @@ export const GetProjectSummaryResponse = zod.object({
       totalCost: zod.number(),
       costPerManday: zod.number(),
       totalMandaysOverride: zod.boolean(),
+      status: zod
+        .enum(["draft", "pending", "approved"])
+        .describe(
+          "Workflow state. `draft` = created but not yet submitted (won't show\nup in approver queues). `pending` = submitted; advancing through the\napproval chain. `approved` = final approval recorded; entry is locked.\n",
+        ),
       currentApprovalLevel: zod.number(),
       isLocked: zod.boolean(),
       lockedAt: zod.coerce.date().nullish(),
@@ -1389,6 +1501,12 @@ export const GetAggregateReportQueryParams = zod.object({
     .string()
     .optional()
     .describe("Comma-separated list of service ids to include."),
+  statuses: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.",
+    ),
 });
 
 export const GetAggregateReportResponse = zod.object({
@@ -1444,6 +1562,12 @@ export const GetTrendsReportQueryParams = zod.object({
     .string()
     .optional()
     .describe("Comma-separated list of service ids to include."),
+  statuses: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.",
+    ),
 });
 
 export const GetTrendsReportResponse = zod.object({
@@ -1477,6 +1601,12 @@ export const ListServiceEntriesQueryParams = zod.object({
     .string()
     .optional()
     .describe("Comma-separated list of service ids to include."),
+  statuses: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.",
+    ),
 });
 
 export const ListServiceEntriesResponseItem = zod

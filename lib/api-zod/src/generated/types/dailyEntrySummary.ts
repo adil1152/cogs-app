@@ -5,6 +5,7 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { EntryStatus } from "./entryStatus";
 
 export interface DailyEntrySummary {
   id: string;
@@ -16,6 +17,7 @@ export interface DailyEntrySummary {
   totalCost: number;
   costPerManday: number;
   totalMandaysOverride: boolean;
+  status: EntryStatus;
   currentApprovalLevel: number;
   isLocked: boolean;
   /** @nullable */

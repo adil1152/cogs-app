@@ -32,6 +32,12 @@ router.post(
       res.status(403).json({ error: "Entry is locked" });
       return;
     }
+    if ((entry.status ?? "draft") !== "pending") {
+      res
+        .status(400)
+        .json({ error: "Entry must be submitted before it can be approved" });
+      return;
+    }
     const chain = await getProjectChain(entry.projectId);
     const finalLevel = chain.length;
     const expectedLevel = entry.currentApprovalLevel;
@@ -63,12 +69,14 @@ router.post(
           .set({
             currentApprovalLevel: nextLevel,
             lockedAt: nextLevel === finalLevel ? new Date() : null,
+            status: nextLevel === finalLevel ? "approved" : "pending",
             updatedAt: new Date(),
           })
           .where(
             and(
               eq(dailyEntriesTable.id, id),
               eq(dailyEntriesTable.currentApprovalLevel, expectedLevel),
+              eq(dailyEntriesTable.status, "pending"),
               isNull(dailyEntriesTable.lockedAt),
             ),
           )
@@ -164,12 +172,14 @@ router.post(
           .set({
             currentApprovalLevel: 0,
             lockedAt: null,
+            status: "draft",
             updatedAt: new Date(),
           })
           .where(
             and(
               eq(dailyEntriesTable.id, id),
               eq(dailyEntriesTable.currentApprovalLevel, expectedLevel),
+              eq(dailyEntriesTable.status, "pending"),
               isNull(dailyEntriesTable.lockedAt),
             ),
           )

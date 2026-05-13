@@ -18,7 +18,8 @@ export interface AuditEvent {
     | "DELETE"
     | "APPROVE"
     | "REJECT"
-    | "RESET";
+    | "RESET"
+    | "SUBMIT";
   actorId: string | null;
   level?: number | null;
   levelName?: string | null;

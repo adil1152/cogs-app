@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { EntryMatrixCostCell } from "./entryMatrixCostCell";
+import type { EntryStatus } from "./entryStatus";
 
 export interface EntryMatrixRow {
   entryId: string;
@@ -18,6 +19,7 @@ export interface EntryMatrixRow {
   sequenceCode?: string | null;
   /** @nullable */
   sequenceNumber?: number | null;
+  status: EntryStatus;
   currentApprovalLevel?: number;
   isLocked?: boolean;
   costs: EntryMatrixCostCell[];

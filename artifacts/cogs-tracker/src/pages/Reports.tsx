@@ -61,10 +61,14 @@ export default function Reports() {
     const v = readSearch().get("serviceIds");
     return v ? v.split(",").filter(Boolean) : [];
   });
+  const [statuses, setStatuses] = useState<string[]>(() => {
+    const v = readSearch().get("statuses");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
   const [drilldown, setDrilldown] = useState<ServiceDrilldownTarget | null>(null);
 
-  useSyncUrlParams("/reports", { from, to, projectIds, serviceIds });
-  const returnUrl = buildUrl("/reports", { from, to, projectIds, serviceIds });
+  useSyncUrlParams("/reports", { from, to, projectIds, serviceIds, statuses });
+  const returnUrl = buildUrl("/reports", { from, to, projectIds, serviceIds, statuses });
 
   const { data: projects } = useListProjects({
     query: { queryKey: getListProjectsQueryKey() },
@@ -74,6 +78,10 @@ export default function Reports() {
     projectIds.length > 0 ? { projectIds: projectIds.join(",") } : {};
   const serviceIdsParam =
     serviceIds.length > 0 ? { serviceIds: serviceIds.join(",") } : {};
+  const statusesParam =
+    statuses.length > 0 && statuses.length < 3
+      ? { statuses: statuses.join(",") }
+      : {};
 
   const { data: services } = useListVisibleServices(projectIdsParam, {
     query: { queryKey: getListVisibleServicesQueryKey(projectIdsParam) },
@@ -95,7 +103,14 @@ export default function Reports() {
     to,
     ...projectIdsParam,
     ...serviceIdsParam,
+    ...statusesParam,
   };
+
+  const statusOptions = [
+    { value: "draft", label: "Draft" },
+    { value: "pending", label: "Pending approval" },
+    { value: "approved", label: "Approved" },
+  ];
 
   const { data: agg } = useGetAggregateReport(filterParams, {
     query: { queryKey: getGetAggregateReportQueryKey(filterParams) },
@@ -176,7 +191,7 @@ export default function Reports() {
       <div className="px-8 py-6 space-y-6">
         <Card>
           <CardContent className="pt-5">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                   From
@@ -237,6 +252,22 @@ export default function Reports() {
                   data-testid="select-services"
                 />
               </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Status
+                </Label>
+                <MultiSelect
+                  options={statusOptions}
+                  selected={statuses}
+                  onChange={setStatuses}
+                  placeholder="All statuses"
+                  searchPlaceholder="Filter…"
+                  allLabel="All statuses"
+                  emptyText="No statuses."
+                  data-testid="select-statuses"
+                />
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
@@ -280,13 +311,14 @@ export default function Reports() {
                 >
                   90 days
                 </Button>
-                {(projectIds.length > 0 || serviceIds.length > 0) && (
+                {(projectIds.length > 0 || serviceIds.length > 0 || statuses.length > 0) && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => {
                       setProjectIds([]);
                       setServiceIds([]);
+                      setStatuses([]);
                     }}
                     data-testid="button-clear-filters"
                   >

@@ -11,6 +11,7 @@ import {
   useApproveDailyEntry,
   useRejectDailyEntry,
   useResetDailyEntry,
+  useSubmitDailyEntry,
   useListEntryApprovals,
   useListEntryAudit,
   useListProjectApprovers,
@@ -45,6 +46,7 @@ import {
   XCircle,
   RotateCcw,
   History,
+  Send,
 } from "lucide-react";
 
 const APPROVAL_LEVELS = ["OP", "SOP", "COO", "CC", "Additional"] as const;
@@ -136,6 +138,11 @@ export default function EntryForm() {
 
   const isLocked = !!existingEntry?.isLocked;
   const currentLevel = existingEntry?.currentApprovalLevel ?? 0;
+  const status = (existingEntry?.status ?? "draft") as
+    | "draft"
+    | "pending"
+    | "approved";
+  const isDraft = status === "draft";
   const canResetApproval = !!project?.currentUserCanResetApproval;
   const nextLevel = currentLevel + 1;
   const isNextApprover =
@@ -265,6 +272,20 @@ export default function EntryForm() {
       onError: (err: any) => toast({ title: "Reject failed", description: err.message, variant: "destructive" }),
     },
   });
+  const submit = useSubmitDailyEntry({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Submitted for approval" });
+        invalidateAll();
+      },
+      onError: (err: any) =>
+        toast({
+          title: "Submit failed",
+          description: err.message,
+          variant: "destructive",
+        }),
+    },
+  });
   const reset = useResetDailyEntry({
     mutation: {
       onSuccess: () => {
@@ -376,19 +397,22 @@ export default function EntryForm() {
       />
 
       {isEdit && (
-        <div className="px-8 pt-4">
-          <ApprovalStrip
-            currentLevel={currentLevel}
-            isLocked={isLocked}
-            canApprove={isNextApprover && !isLocked && nextLevel <= APPROVAL_LEVELS.length}
-            canReject={isCurrentApprover && currentLevel > 0 && !isLocked}
-            canReset={canResetApproval && (currentLevel > 0 || isLocked)}
-            approvals={approvals ?? []}
-            onApprove={() => approve.mutate({ id: entryId! })}
-            onReject={() => reject.mutate({ id: entryId! })}
-            onReset={() => reset.mutate({ id: entryId! })}
-            pending={approve.isPending || reject.isPending || reset.isPending}
-          />
+        <div className="px-8 pt-4 space-y-3">
+          <StatusPill status={status} />
+          {!isDraft && (
+            <ApprovalStrip
+              currentLevel={currentLevel}
+              isLocked={isLocked}
+              canApprove={isNextApprover && !isLocked && nextLevel <= APPROVAL_LEVELS.length}
+              canReject={isCurrentApprover && currentLevel > 0 && !isLocked}
+              canReset={canResetApproval && (currentLevel > 0 || isLocked)}
+              approvals={approvals ?? []}
+              onApprove={() => approve.mutate({ id: entryId! })}
+              onReject={() => reject.mutate({ id: entryId! })}
+              onReset={() => reset.mutate({ id: entryId! })}
+              pending={approve.isPending || reject.isPending || reset.isPending}
+            />
+          )}
         </div>
       )}
 
@@ -558,8 +582,20 @@ export default function EntryForm() {
                 </div>
                 <Row label="Cost / manday" value={totals.costPerManday != null ? `${formatCurrency(totals.costPerManday)}` : "—"} />
                 <Button type="submit" className="w-full" disabled={create.isPending || update.isPending || isLocked} data-testid="button-save-entry">
-                  {isEdit ? "Save changes" : "Save entry"}
+                  {isEdit ? "Save changes" : "Save as draft"}
                 </Button>
+                {isEdit && isDraft && !isLocked && (
+                  <Button
+                    type="button"
+                    className="w-full"
+                    variant="default"
+                    disabled={submit.isPending}
+                    onClick={() => submit.mutate({ id: entryId! })}
+                    data-testid="button-submit-for-approval"
+                  >
+                    <Send className="mr-2 h-4 w-4" /> Submit for approval
+                  </Button>
+                )}
                 {isEdit && !isLocked && (
                   <Button
                     type="button" variant="outline" className="w-full text-destructive hover:text-destructive"
@@ -581,6 +617,35 @@ export default function EntryForm() {
         </div>
       )}
     </AppLayout>
+  );
+}
+
+function StatusPill({ status }: { status: "draft" | "pending" | "approved" }) {
+  const map = {
+    draft: {
+      label: "Draft",
+      className:
+        "bg-muted text-muted-foreground border-border",
+    },
+    pending: {
+      label: "Pending approval",
+      className:
+        "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+    },
+    approved: {
+      label: "Approved",
+      className:
+        "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+    },
+  } as const;
+  const s = map[status];
+  return (
+    <span
+      className={`inline-flex items-center text-xs font-semibold uppercase tracking-wider rounded border px-2 py-0.5 ${s.className}`}
+      data-testid={`status-pill-${status}`}
+    >
+      {s.label}
+    </span>
   );
 }
 
@@ -713,6 +778,7 @@ const AUDIT_ACTION_STYLES: Record<string, string> = {
   APPROVE: "bg-primary/15 text-primary border-primary/30",
   REJECT: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
   RESET: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
+  SUBMIT: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
 };
 
 function AuditPanel({ events }: { events: Array<any> }) {

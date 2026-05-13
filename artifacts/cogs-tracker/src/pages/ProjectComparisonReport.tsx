@@ -66,12 +66,17 @@ export default function ProjectComparisonReport() {
     const v = readSearch().get("serviceIds");
     return v ? v.split(",").filter(Boolean) : [];
   });
+  const [statuses, setStatuses] = useState<string[]>(() => {
+    const v = readSearch().get("statuses");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
 
   useSyncUrlParams("/reports/comparison", {
     from,
     to,
     projectIds,
     serviceIds,
+    statuses,
   });
   const [metrics, setMetrics] = useState<Set<Metric>>(
     new Set(["cost", "mandays", "avg"]),
@@ -89,6 +94,16 @@ export default function ProjectComparisonReport() {
     projectIds.length > 0 ? { projectIds: projectIds.join(",") } : {};
   const serviceIdsParam =
     serviceIds.length > 0 ? { serviceIds: serviceIds.join(",") } : {};
+  const statusesParam =
+    statuses.length > 0 && statuses.length < 3
+      ? { statuses: statuses.join(",") }
+      : {};
+
+  const statusOptions = [
+    { value: "draft", label: "Draft" },
+    { value: "pending", label: "Pending approval" },
+    { value: "approved", label: "Approved" },
+  ];
 
   const { data: services } = useListVisibleServices(projectIdsParam, {
     query: { queryKey: getListVisibleServicesQueryKey(projectIdsParam) },
@@ -109,6 +124,7 @@ export default function ProjectComparisonReport() {
     to,
     ...projectIdsParam,
     ...serviceIdsParam,
+    ...statusesParam,
   };
 
   const { data: agg, isLoading, isError } = useGetAggregateReport(filterParams, {
@@ -457,6 +473,17 @@ export default function ProjectComparisonReport() {
                   }
                   searchPlaceholder="Search services…"
                   data-testid="cmp-services"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <MultiSelect
+                  options={statusOptions}
+                  selected={statuses}
+                  onChange={setStatuses}
+                  placeholder="All statuses"
+                  searchPlaceholder="Filter…"
+                  data-testid="cmp-statuses"
                 />
               </div>
               <div className="flex gap-2">

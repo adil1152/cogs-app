@@ -9,4 +9,8 @@
 export type ListProjectEntriesParams = {
   from?: Date;
   to?: Date;
+  /**
+   * Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+   */
+  statuses?: string;
 };

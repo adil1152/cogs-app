@@ -16,6 +16,7 @@ export interface ServiceCostInputItem {
   kind: "food" | "standard";
   cost?: number;
   mandays?: number;
+  manualMandays?: number;
   breakfastQty?: number;
   lunchQty?: number;
   dinnerQty?: number;
@@ -30,6 +31,7 @@ export interface ServiceCostInputItem {
  */
 export function serviceMandays(sc: {
   mandays?: number | string | null;
+  manualMandays?: number | string | null;
   kind?: string | null;
   breakfastQty?: number | null;
   lunchQty?: number | null;
@@ -37,20 +39,29 @@ export function serviceMandays(sc: {
   midnightQty?: number | null;
   mealBoxQty?: number | null;
 }): number {
+  let manual = 0;
+  if (sc.manualMandays != null && sc.manualMandays !== "") {
+    const n = Number(sc.manualMandays);
+    if (!Number.isNaN(n)) manual = n;
+  }
   if (sc.mandays != null && sc.mandays !== "") {
     const n = Number(sc.mandays);
+    // Stored `mandays` already reflects the manual addition for food rows
+    // (computed and persisted by the writer), so do not double-add.
     if (!Number.isNaN(n)) return n;
   }
   if (sc.kind === "food") {
-    return calcFoodMandays({
-      breakfastQty: sc.breakfastQty ?? null,
-      lunchQty: sc.lunchQty ?? null,
-      dinnerQty: sc.dinnerQty ?? null,
-      midnightQty: sc.midnightQty ?? null,
-      mealBoxQty: sc.mealBoxQty ?? null,
-    });
+    return (
+      calcFoodMandays({
+        breakfastQty: sc.breakfastQty ?? null,
+        lunchQty: sc.lunchQty ?? null,
+        dinnerQty: sc.dinnerQty ?? null,
+        midnightQty: sc.midnightQty ?? null,
+        mealBoxQty: sc.mealBoxQty ?? null,
+      }) + manual
+    );
   }
-  return 0;
+  return manual;
 }
 
 export function computeTotalMandays(
@@ -108,6 +119,7 @@ export async function buildEntryDetail(entryId: string) {
     totalCost += cVal;
     const mandayContribution = serviceMandays({
       mandays: c.mandays,
+      manualMandays: c.manualMandays,
       kind: c.kind,
       breakfastQty: c.breakfastQty,
       lunchQty: c.lunchQty,
@@ -122,6 +134,7 @@ export async function buildEntryDetail(entryId: string) {
       kind: c.kind as "food" | "standard",
       cost: cVal,
       mandays: c.mandays != null ? Number(c.mandays) : null,
+      manualMandays: Number(c.manualMandays ?? 0),
       mandayContribution,
       costPerManday: safeDivide(cVal, mandayContribution),
       breakfastQty: c.breakfastQty,

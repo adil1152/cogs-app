@@ -17,6 +17,14 @@ export interface ServiceCostInput {
    * @minimum 0
    */
   mandays?: number;
+  /**
+   * Per-service manual mandays added on top of the auto-computed
+(food formula) mandays. Used by food services to add ad-hoc
+mandays not captured by the meal counts.
+
+   * @minimum 0
+   */
+  manualMandays?: number;
   /** @minimum 0 */
   breakfastQty?: number;
   /** @minimum 0 */

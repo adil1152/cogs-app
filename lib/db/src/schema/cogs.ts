@@ -175,6 +175,9 @@ export const serviceCostEntriesTable = pgTable(
     kind: varchar("kind", { length: 16 }).notNull(),
     cost: numeric("cost", { precision: 14, scale: 2 }).notNull().default("0"),
     mandays: numeric("mandays", { precision: 10, scale: 2 }),
+    manualMandays: numeric("manual_mandays", { precision: 10, scale: 2 })
+      .notNull()
+      .default("0"),
     breakfastQty: integer("breakfast_qty"),
     lunchQty: integer("lunch_qty"),
     dinnerQty: integer("dinner_qty"),

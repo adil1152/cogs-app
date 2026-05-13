@@ -97,6 +97,7 @@ function rowMandayContribution(row: JoinedRow): number {
   if (!row.cost) return 0;
   return serviceMandays({
     mandays: row.cost.mandays,
+    manualMandays: row.cost.manualMandays,
     kind: row.cost.kind,
     breakfastQty: row.cost.breakfastQty,
     lunchQty: row.cost.lunchQty,

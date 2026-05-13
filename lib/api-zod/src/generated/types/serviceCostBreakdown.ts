@@ -15,6 +15,8 @@ export interface ServiceCostBreakdown {
   cost: number;
   /** @nullable */
   mandays?: number | null;
+  /** Per-service manual mandays added on top of the auto-computed value. */
+  manualMandays?: number;
   mandayContribution: number;
   costPerManday: number;
   /** @nullable */

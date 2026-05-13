@@ -705,6 +705,8 @@ export const createDailyEntryBodyManualMandaysMin = 0;
 
 export const createDailyEntryBodyServiceCostsItemMandaysMin = 0;
 
+export const createDailyEntryBodyServiceCostsItemManualMandaysMin = 0;
+
 export const createDailyEntryBodyServiceCostsItemBreakfastQtyMin = 0;
 
 export const createDailyEntryBodyServiceCostsItemLunchQtyMin = 0;
@@ -749,6 +751,13 @@ export const CreateDailyEntryBody = zod.object({
         .min(createDailyEntryBodyServiceCostsItemMandaysMin)
         .optional()
         .describe("Optional per-service mandays contribution"),
+      manualMandays: zod
+        .number()
+        .min(createDailyEntryBodyServiceCostsItemManualMandaysMin)
+        .optional()
+        .describe(
+          "Per-service manual mandays added on top of the auto-computed\n(food formula) mandays. Used by food services to add ad-hoc\nmandays not captured by the meal counts.\n",
+        ),
       breakfastQty: zod
         .number()
         .min(createDailyEntryBodyServiceCostsItemBreakfastQtyMin)
@@ -826,6 +835,12 @@ export const GetDailyEntryResponse = zod
           kind: zod.enum(["food", "standard"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
+          manualMandays: zod
+            .number()
+            .optional()
+            .describe(
+              "Per-service manual mandays added on top of the auto-computed value.",
+            ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
           breakfastQty: zod.number().nullish(),
@@ -866,6 +881,8 @@ export const updateDailyEntryBodyManualMandaysMin = 0;
 
 export const updateDailyEntryBodyServiceCostsItemMandaysMin = 0;
 
+export const updateDailyEntryBodyServiceCostsItemManualMandaysMin = 0;
+
 export const updateDailyEntryBodyServiceCostsItemBreakfastQtyMin = 0;
 
 export const updateDailyEntryBodyServiceCostsItemLunchQtyMin = 0;
@@ -903,6 +920,13 @@ export const UpdateDailyEntryBody = zod.object({
           .min(updateDailyEntryBodyServiceCostsItemMandaysMin)
           .optional()
           .describe("Optional per-service mandays contribution"),
+        manualMandays: zod
+          .number()
+          .min(updateDailyEntryBodyServiceCostsItemManualMandaysMin)
+          .optional()
+          .describe(
+            "Per-service manual mandays added on top of the auto-computed\n(food formula) mandays. Used by food services to add ad-hoc\nmandays not captured by the meal counts.\n",
+          ),
         breakfastQty: zod
           .number()
           .min(updateDailyEntryBodyServiceCostsItemBreakfastQtyMin)
@@ -977,6 +1001,12 @@ export const UpdateDailyEntryResponse = zod
           kind: zod.enum(["food", "standard"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
+          manualMandays: zod
+            .number()
+            .optional()
+            .describe(
+              "Per-service manual mandays added on top of the auto-computed value.",
+            ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
           breakfastQty: zod.number().nullish(),
@@ -1067,6 +1097,12 @@ export const ApproveDailyEntryResponse = zod
           kind: zod.enum(["food", "standard"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
+          manualMandays: zod
+            .number()
+            .optional()
+            .describe(
+              "Per-service manual mandays added on top of the auto-computed value.",
+            ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
           breakfastQty: zod.number().nullish(),
@@ -1153,6 +1189,12 @@ export const RejectDailyEntryResponse = zod
           kind: zod.enum(["food", "standard"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
+          manualMandays: zod
+            .number()
+            .optional()
+            .describe(
+              "Per-service manual mandays added on top of the auto-computed value.",
+            ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
           breakfastQty: zod.number().nullish(),
@@ -1261,6 +1303,12 @@ export const SubmitDailyEntryResponse = zod
           kind: zod.enum(["food", "standard"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
+          manualMandays: zod
+            .number()
+            .optional()
+            .describe(
+              "Per-service manual mandays added on top of the auto-computed value.",
+            ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
           breakfastQty: zod.number().nullish(),
@@ -1347,6 +1395,12 @@ export const ResetDailyEntryResponse = zod
           kind: zod.enum(["food", "standard"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
+          manualMandays: zod
+            .number()
+            .optional()
+            .describe(
+              "Per-service manual mandays added on top of the auto-computed value.",
+            ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
           breakfastQty: zod.number().nullish(),

@@ -1665,6 +1665,13 @@ components:
           type: number
           minimum: 0
           description: Optional per-service mandays contribution
+        manualMandays:
+          type: number
+          minimum: 0
+          description: |
+            Per-service manual mandays added on top of the auto-computed
+            (food formula) mandays. Used by food services to add ad-hoc
+            mandays not captured by the meal counts.
         breakfastQty:
           type: integer
           minimum: 0
@@ -1693,6 +1700,9 @@ components:
         cost: { type: number }
         mandays:
           type: [number, 'null']
+        manualMandays:
+          type: number
+          description: Per-service manual mandays added on top of the auto-computed value.
         mandayContribution: { type: number }
         costPerManday: { type: number }
         breakfastQty:

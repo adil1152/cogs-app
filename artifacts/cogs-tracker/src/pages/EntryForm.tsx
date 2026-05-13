@@ -71,6 +71,8 @@ interface ServiceLine {
   dinnerQty: string;
   midnightQty: string;
   mealBoxQty: string;
+  // Food-only manual mandays added on top of the meal-formula auto value.
+  foodManualMandays: string;
 }
 
 function emptyLine(svc: { id: string; name: string; kind: "food" | "standard" }): ServiceLine {
@@ -85,18 +87,21 @@ function emptyLine(svc: { id: string; name: string; kind: "food" | "standard" })
     dinnerQty: "",
     midnightQty: "",
     mealBoxQty: "",
+    foodManualMandays: "",
   };
 }
 
 function lineMandays(l: ServiceLine): number {
   if (l.kind === "food") {
-    return computeMealMandays({
+    const auto = computeMealMandays({
       breakfastQty: Number(l.breakfastQty) || 0,
       lunchQty: Number(l.lunchQty) || 0,
       dinnerQty: Number(l.dinnerQty) || 0,
       midnightQty: Number(l.midnightQty) || 0,
       mealBoxQty: Number(l.mealBoxQty) || 0,
     });
+    const manual = Number(l.foodManualMandays);
+    return auto + (Number.isNaN(manual) ? 0 : manual);
   }
   const n = Number(l.mandays);
   return Number.isNaN(n) ? 0 : n;
@@ -203,6 +208,10 @@ export default function EntryForm() {
             dinnerQty: sc?.dinnerQty != null ? String(sc.dinnerQty) : "",
             midnightQty: sc?.midnightQty != null ? String(sc.midnightQty) : "",
             mealBoxQty: sc?.mealBoxQty != null ? String(sc.mealBoxQty) : "",
+            foodManualMandays:
+              kind === "food" && sc?.manualMandays != null && Number(sc.manualMandays) !== 0
+                ? String(sc.manualMandays)
+                : "",
           };
         }),
       );
@@ -336,7 +345,9 @@ export default function EntryForm() {
         return;
       }
     }
-    const serviceCosts: ServiceCostInput[] = lines
+    let serviceCosts: ServiceCostInput[];
+    try {
+      serviceCosts = lines
       .filter((l) => {
         if (l.cost !== "") return true;
         if (l.kind === "food") {
@@ -345,7 +356,8 @@ export default function EntryForm() {
             l.lunchQty !== "" ||
             l.dinnerQty !== "" ||
             l.midnightQty !== "" ||
-            l.mealBoxQty !== ""
+            l.mealBoxQty !== "" ||
+            l.foodManualMandays !== ""
           );
         }
         return l.mandays !== "";
@@ -365,12 +377,23 @@ export default function EntryForm() {
           if (l.dinnerQty !== "") base.dinnerQty = Number(l.dinnerQty);
           if (l.midnightQty !== "") base.midnightQty = Number(l.midnightQty);
           if (l.mealBoxQty !== "") base.mealBoxQty = Number(l.mealBoxQty);
+          if (l.foodManualMandays !== "") {
+            const fm = Number(l.foodManualMandays);
+            if (Number.isNaN(fm) || fm < 0) {
+              throw new Error(`Invalid manual mandays for ${l.name}`);
+            }
+            base.manualMandays = fm;
+          }
           base.mandays = lineMandays(l);
         } else if (l.mandays !== "") {
           base.mandays = Number(l.mandays);
         }
         return base as ServiceCostInput;
       });
+    } catch (err: any) {
+      toast({ title: "Check the form", description: err.message, variant: "destructive" });
+      return;
+    }
     const manualNum = Number(manualMandays);
     if (manualMandays !== "" && (Number.isNaN(manualNum) || manualNum < 0)) {
       toast({ title: "Manual mandays invalid", variant: "destructive" });
@@ -630,8 +653,45 @@ export default function EntryForm() {
                               testId={`input-mealbox-${i}`}
                             />
                           </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                              Manual mandays
+                              <span className="ml-1 normal-case tracking-normal text-[10px] text-muted-foreground/80">
+                                (added on top of meal-formula auto value)
+                              </span>
+                            </Label>
+                            <Input
+                              type="number" step="0.01" min="0"
+                              value={l.foodManualMandays}
+                              onChange={(e) => setLine(i, { foodManualMandays: e.target.value })}
+                              placeholder="0"
+                              data-testid={`input-food-manual-mandays-${i}`}
+                            />
+                          </div>
                           <div className="text-xs text-muted-foreground tabular-nums">
-                            Auto mandays: <span className="font-semibold text-foreground">{formatNumber(md, 2)}</span>
+                            Auto mandays:{" "}
+                            <span className="font-semibold text-foreground">
+                              {formatNumber(
+                                computeMealMandays({
+                                  breakfastQty: Number(l.breakfastQty) || 0,
+                                  lunchQty: Number(l.lunchQty) || 0,
+                                  dinnerQty: Number(l.dinnerQty) || 0,
+                                  midnightQty: Number(l.midnightQty) || 0,
+                                  mealBoxQty: Number(l.mealBoxQty) || 0,
+                                }),
+                                2,
+                              )}
+                            </span>
+                            {l.foodManualMandays !== "" && !Number.isNaN(Number(l.foodManualMandays)) && (
+                              <>
+                                {" + "}
+                                <span className="font-semibold text-foreground">
+                                  {formatNumber(Number(l.foodManualMandays), 2)}
+                                </span>
+                                {" manual = "}
+                                <span className="font-semibold text-foreground">{formatNumber(md, 2)}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       ) : (

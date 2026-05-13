@@ -1,0 +1,191 @@
+## 🚀 Application Enhancement & Workflow Improvement Requirements
+
+Enhance the application with the following workflow, approval, project management, and reporting improvements.
+
+---
+
+## 🔹 Approval Workflow Enhancements
+
+### 👉 Add Project Manager Approval
+
+Add a dedicated **Project Manager approval stage** in the workflow.
+
+The approval hierarchy should be configurable based on project requirements.
+
+---
+
+### 👉 Multiple Additional Approvers
+
+Currently, the system allows only one additional approver.
+
+Enhance the workflow to:
+
+* Allow adding multiple additional approvers
+* Support configurable approval sequence/order
+* Allow flexible approval structure per project
+
+This should be configurable from:
+
+* Project Settings
+  OR
+* Workflow Configuration Screen
+
+---
+
+### 👉 Draft & Submit Workflow
+
+Currently, entries directly move to the approval stage after creation.
+
+Enhance the workflow as follows:
+
+* New entries should initially remain in **Draft** status
+* Add a **Submit** button
+* Only after clicking **Submit**, the entry should move to the approval workflow
+
+This will allow users to:
+
+* Review entries before submission
+* Modify draft entries freely
+* Avoid accidental approvals
+
+---
+
+## 🔹 Project & Service Structure Enhancements
+
+### 👉 Sub Projects / Sub Services
+
+Evaluate and implement support for:
+
+* Sub Projects
+* Sub Services under main services
+
+The structure should support:
+
+* Parent → Child hierarchy
+* Consolidated reporting
+* Project comparison analytics
+
+Additionally, define how:
+
+* Sub-projects and sub-services will appear in reports
+* Cost calculations will behave
+* Project comparisons will be managed
+* Summary and dashboard reporting will consolidate parent/child records
+
+---
+
+## 🔹 Project Activation & Visibility Controls
+
+### 👉 Project Activation / Deactivation Options
+
+Add project control options in the Project Settings screen.
+
+The system should support two separate controls:
+
+### 1. Full Deactivation
+
+* Project will not appear in:
+
+  * Reports
+  * Dashboards
+  * Entry screens
+* No entries can be created
+* Fully inactive project
+
+### 2. Entry Deactivation Only
+
+* Users cannot create new entries
+* Existing reports and summaries remain visible
+* Project available only for reporting purposes
+
+This will help manage archived/completed projects without losing reporting visibility.
+
+---
+
+## 🔹 Manday Calculation Enhancement
+
+### 👉 Manual Mandays Field in Services
+
+Add a new field called:
+
+* Manual Mandays
+
+This field should be added in:
+
+* Services configuration/setup screen
+
+Applicable for:
+
+* Food Services Standard
+* Any service requiring manual adjustment
+
+### Calculation Logic
+
+Manual Mandays should:
+
+* Calculate on top of auto-generated mandays
+* Be included in final manday calculations
+
+Example:
+
+* Auto Mandays = 10
+* Manual Mandays = 2
+* Final Mandays = 12
+
+### Reporting Impact
+
+Final mandays should reflect in:
+
+* Reports
+* Summary screens
+* Cost calculations
+* Dashboard analytics
+* Project comparison reports
+* Excel exports
+
+---
+
+## 🔹 Attachment & Compliance Enhancements
+
+### 👉 Mandatory PDF Attachment Option
+
+Add support for PDF attachments in entries.
+
+Configuration should be manageable from:
+
+* Project Services Screen
+  OR
+* Settings Screen
+
+### Configuration Options
+
+* Attachment Mandatory = Yes / No
+
+### Validation Logic
+
+If attachment is configured as mandatory:
+
+* Entry should not be saved or submitted until PDF attachment is uploaded
+
+This feature can be used for:
+
+* Supporting documents
+* Invoices
+* Approvals
+* Compliance records
+
+---
+
+## 🎯 Objective
+
+The purpose of these enhancements is to improve:
+
+* Workflow flexibility
+* Approval management
+* Reporting accuracy
+* Project lifecycle management
+* Operational control
+* Compliance tracking
+* User experience and scalability
+
+The application should become more interactive, configurable, and suitable for long-term operational and management reporting.

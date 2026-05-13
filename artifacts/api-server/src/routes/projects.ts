@@ -37,7 +37,7 @@ router.post(
       res.status(400).json({ error: "Invalid body" });
       return;
     }
-    const { name, code, location, contractStart, contractEnd, notes } =
+    const { name, code, location, contractStart, contractEnd, notes, pdfRequired } =
       parsed.data;
     try {
       const [created] = await db
@@ -55,6 +55,7 @@ router.post(
               ? contractEnd.toISOString().slice(0, 10)
               : contractEnd,
           notes: notes ?? null,
+          pdfRequired: pdfRequired ?? false,
           createdById: req.user!.id,
         })
         .returning();
@@ -167,6 +168,8 @@ router.patch(
           : parsed.data.contractEnd;
     }
     if (parsed.data.notes !== undefined) data.notes = parsed.data.notes;
+    if (parsed.data.pdfRequired !== undefined)
+      data.pdfRequired = parsed.data.pdfRequired;
     data.updatedAt = new Date();
 
     let updated;

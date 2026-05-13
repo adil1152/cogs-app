@@ -93,6 +93,8 @@ export interface Project {
   contractEnd: string;
   /** @nullable */
   notes?: string | null;
+  /** When true, an entry on this project requires at least one attached PDF before it can be submitted for approval. */
+  pdfRequired: boolean;
   createdAt: string;
   isAdminOwned: boolean;
   currentUserCanViewSummary: boolean;
@@ -135,6 +137,7 @@ export interface CreateProjectBody {
   contractStart: string;
   contractEnd: string;
   notes?: string;
+  pdfRequired?: boolean;
 }
 
 export interface UpdateProjectBody {
@@ -150,6 +153,7 @@ export interface UpdateProjectBody {
   contractStart?: string;
   contractEnd?: string;
   notes?: string;
+  pdfRequired?: boolean;
 }
 
 export type CreateProjectServiceBodyKind =
@@ -320,7 +324,7 @@ export interface AuditLogEntry {
   /** @nullable */
   dailyEntryId: string | null;
   projectId: string;
-  /** CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET */
+  /** CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET | SUBMIT */
   action: string;
   /** @nullable */
   level?: number | null;
@@ -435,6 +439,16 @@ export interface DailyEntrySummary {
   totalCost: number;
   costPerManday: number;
   totalMandaysOverride: boolean;
+  /**
+   * Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.
+   * @minimum 0
+   */
+  manualMandays: number;
+  /**
+   * Number of files attached to this entry.
+   * @minimum 0
+   */
+  attachmentCount: number;
   status: EntryStatus;
   currentApprovalLevel: number;
   isLocked: boolean;
@@ -448,8 +462,23 @@ export interface DailyEntrySummary {
   sequenceCode?: string | null;
 }
 
+export interface EntryAttachment {
+  id: string;
+  dailyEntryId: string;
+  /** Normalized path returned by the storage upload endpoint (begins with `/objects/...`). */
+  objectPath: string;
+  fileName: string;
+  /** @minimum 0 */
+  fileSize: number;
+  mimeType: string;
+  /** @nullable */
+  uploadedById?: string | null;
+  uploadedAt: string;
+}
+
 export type DailyEntryDetail = DailyEntrySummary & {
   serviceCosts: ServiceCostBreakdown[];
+  attachments: EntryAttachment[];
 };
 
 export interface CreateDailyEntryBody {
@@ -457,11 +486,16 @@ export interface CreateDailyEntryBody {
   /** @minLength 1 */
   location: string;
   /**
-   * Only honored when totalMandaysOverride is true; otherwise auto-summed from serviceCosts.
+   * Only honored when totalMandaysOverride is true; otherwise auto-summed from serviceCosts plus manualMandays.
    * @minimum 0
    */
   totalMandays?: number;
   totalMandaysOverride?: boolean;
+  /**
+   * Added on top of auto-summed service mandays. Ignored when totalMandaysOverride is true.
+   * @minimum 0
+   */
+  manualMandays?: number;
   notes?: string;
   serviceCosts: ServiceCostInput[];
 }
@@ -473,8 +507,39 @@ export interface UpdateDailyEntryBody {
   /** @minimum 0 */
   totalMandays?: number;
   totalMandaysOverride?: boolean;
+  /** @minimum 0 */
+  manualMandays?: number;
   notes?: string;
   serviceCosts?: ServiceCostInput[];
+}
+
+export interface CreateEntryAttachmentBody {
+  /** @minLength 1 */
+  objectPath: string;
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
+  fileName: string;
+  /** @minimum 0 */
+  fileSize?: number;
+  /** @maxLength 128 */
+  mimeType?: string;
+}
+
+export interface UploadUrlRequest {
+  /** @minLength 1 */
+  name: string;
+  /** @minimum 1 */
+  size: number;
+  /** @minLength 1 */
+  contentType: string;
+}
+
+export interface UploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+  metadata?: UploadUrlRequest;
 }
 
 export interface DashboardKpi {

@@ -141,6 +141,11 @@ export const ListProjectsResponseItem = zod.object({
   contractStart: zod.coerce.date(),
   contractEnd: zod.coerce.date(),
   notes: zod.string().nullish(),
+  pdfRequired: zod
+    .boolean()
+    .describe(
+      "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
+    ),
   createdAt: zod.coerce.date(),
   isAdminOwned: zod.boolean(),
   currentUserCanViewSummary: zod.boolean(),
@@ -181,6 +186,7 @@ export const CreateProjectBody = zod.object({
   contractStart: zod.coerce.date(),
   contractEnd: zod.coerce.date(),
   notes: zod.string().optional(),
+  pdfRequired: zod.boolean().optional(),
 });
 
 export const GetProjectParams = zod.object({
@@ -198,6 +204,11 @@ export const GetProjectResponse = zod
     contractStart: zod.coerce.date(),
     contractEnd: zod.coerce.date(),
     notes: zod.string().nullish(),
+    pdfRequired: zod
+      .boolean()
+      .describe(
+        "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
+      ),
     createdAt: zod.coerce.date(),
     isAdminOwned: zod.boolean(),
     currentUserCanViewSummary: zod.boolean(),
@@ -244,6 +255,7 @@ export const UpdateProjectBody = zod.object({
   contractStart: zod.coerce.date().optional(),
   contractEnd: zod.coerce.date().optional(),
   notes: zod.string().optional(),
+  pdfRequired: zod.boolean().optional(),
 });
 
 export const updateProjectResponseApprovalChainItemLevelNameMax = 32;
@@ -256,6 +268,11 @@ export const UpdateProjectResponse = zod.object({
   contractStart: zod.coerce.date(),
   contractEnd: zod.coerce.date(),
   notes: zod.string().nullish(),
+  pdfRequired: zod
+    .boolean()
+    .describe(
+      "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
+    ),
   createdAt: zod.coerce.date(),
   isAdminOwned: zod.boolean(),
   currentUserCanViewSummary: zod.boolean(),
@@ -636,6 +653,10 @@ export const ListProjectEntriesQueryParams = zod.object({
     ),
 });
 
+export const listProjectEntriesResponseManualMandaysMin = 0;
+
+export const listProjectEntriesResponseAttachmentCountMin = 0;
+
 export const ListProjectEntriesResponseItem = zod.object({
   id: zod.string(),
   projectId: zod.string(),
@@ -646,6 +667,16 @@ export const ListProjectEntriesResponseItem = zod.object({
   totalCost: zod.number(),
   costPerManday: zod.number(),
   totalMandaysOverride: zod.boolean(),
+  manualMandays: zod
+    .number()
+    .min(listProjectEntriesResponseManualMandaysMin)
+    .describe(
+      "Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.",
+    ),
+  attachmentCount: zod
+    .number()
+    .min(listProjectEntriesResponseAttachmentCountMin)
+    .describe("Number of files attached to this entry."),
   status: zod
     .enum(["draft", "pending", "approved"])
     .describe(
@@ -669,6 +700,9 @@ export const CreateDailyEntryParams = zod.object({
 export const createDailyEntryBodyTotalMandaysMin = 0;
 
 export const createDailyEntryBodyTotalMandaysOverrideDefault = false;
+export const createDailyEntryBodyManualMandaysDefault = 0;
+export const createDailyEntryBodyManualMandaysMin = 0;
+
 export const createDailyEntryBodyServiceCostsItemMandaysMin = 0;
 
 export const createDailyEntryBodyServiceCostsItemBreakfastQtyMin = 0;
@@ -689,11 +723,18 @@ export const CreateDailyEntryBody = zod.object({
     .min(createDailyEntryBodyTotalMandaysMin)
     .optional()
     .describe(
-      "Only honored when totalMandaysOverride is true; otherwise auto-summed from serviceCosts.",
+      "Only honored when totalMandaysOverride is true; otherwise auto-summed from serviceCosts plus manualMandays.",
     ),
   totalMandaysOverride: zod
     .boolean()
     .default(createDailyEntryBodyTotalMandaysOverrideDefault),
+  manualMandays: zod
+    .number()
+    .min(createDailyEntryBodyManualMandaysMin)
+    .default(createDailyEntryBodyManualMandaysDefault)
+    .describe(
+      "Added on top of auto-summed service mandays. Ignored when totalMandaysOverride is true.",
+    ),
   notes: zod.string().optional(),
   serviceCosts: zod.array(
     zod.object({
@@ -736,6 +777,12 @@ export const GetDailyEntryParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const getDailyEntryResponseOneManualMandaysMin = 0;
+
+export const getDailyEntryResponseOneAttachmentCountMin = 0;
+
+export const getDailyEntryResponseTwoAttachmentsItemFileSizeMin = 0;
+
 export const GetDailyEntryResponse = zod
   .object({
     id: zod.string(),
@@ -747,6 +794,16 @@ export const GetDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    manualMandays: zod
+      .number()
+      .min(getDailyEntryResponseOneManualMandaysMin)
+      .describe(
+        "Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.",
+      ),
+    attachmentCount: zod
+      .number()
+      .min(getDailyEntryResponseOneAttachmentCountMin)
+      .describe("Number of files attached to this entry."),
     status: zod
       .enum(["draft", "pending", "approved"])
       .describe(
@@ -778,6 +835,24 @@ export const GetDailyEntryResponse = zod
           mealBoxQty: zod.number().nullish(),
         }),
       ),
+      attachments: zod.array(
+        zod.object({
+          id: zod.string(),
+          dailyEntryId: zod.string(),
+          objectPath: zod
+            .string()
+            .describe(
+              "Normalized path returned by the storage upload endpoint (begins with `\/objects\/...`).",
+            ),
+          fileName: zod.string(),
+          fileSize: zod
+            .number()
+            .min(getDailyEntryResponseTwoAttachmentsItemFileSizeMin),
+          mimeType: zod.string(),
+          uploadedById: zod.string().nullish(),
+          uploadedAt: zod.coerce.date(),
+        }),
+      ),
     }),
   );
 
@@ -786,6 +861,8 @@ export const UpdateDailyEntryParams = zod.object({
 });
 
 export const updateDailyEntryBodyTotalMandaysMin = 0;
+
+export const updateDailyEntryBodyManualMandaysMin = 0;
 
 export const updateDailyEntryBodyServiceCostsItemMandaysMin = 0;
 
@@ -807,6 +884,10 @@ export const UpdateDailyEntryBody = zod.object({
     .min(updateDailyEntryBodyTotalMandaysMin)
     .optional(),
   totalMandaysOverride: zod.boolean().optional(),
+  manualMandays: zod
+    .number()
+    .min(updateDailyEntryBodyManualMandaysMin)
+    .optional(),
   notes: zod.string().optional(),
   serviceCosts: zod
     .array(
@@ -847,6 +928,12 @@ export const UpdateDailyEntryBody = zod.object({
     .optional(),
 });
 
+export const updateDailyEntryResponseOneManualMandaysMin = 0;
+
+export const updateDailyEntryResponseOneAttachmentCountMin = 0;
+
+export const updateDailyEntryResponseTwoAttachmentsItemFileSizeMin = 0;
+
 export const UpdateDailyEntryResponse = zod
   .object({
     id: zod.string(),
@@ -858,6 +945,16 @@ export const UpdateDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    manualMandays: zod
+      .number()
+      .min(updateDailyEntryResponseOneManualMandaysMin)
+      .describe(
+        "Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.",
+      ),
+    attachmentCount: zod
+      .number()
+      .min(updateDailyEntryResponseOneAttachmentCountMin)
+      .describe("Number of files attached to this entry."),
     status: zod
       .enum(["draft", "pending", "approved"])
       .describe(
@@ -887,6 +984,24 @@ export const UpdateDailyEntryResponse = zod
           dinnerQty: zod.number().nullish(),
           midnightQty: zod.number().nullish(),
           mealBoxQty: zod.number().nullish(),
+        }),
+      ),
+      attachments: zod.array(
+        zod.object({
+          id: zod.string(),
+          dailyEntryId: zod.string(),
+          objectPath: zod
+            .string()
+            .describe(
+              "Normalized path returned by the storage upload endpoint (begins with `\/objects\/...`).",
+            ),
+          fileName: zod.string(),
+          fileSize: zod
+            .number()
+            .min(updateDailyEntryResponseTwoAttachmentsItemFileSizeMin),
+          mimeType: zod.string(),
+          uploadedById: zod.string().nullish(),
+          uploadedAt: zod.coerce.date(),
         }),
       ),
     }),
@@ -903,6 +1018,12 @@ export const ApproveDailyEntryParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const approveDailyEntryResponseOneManualMandaysMin = 0;
+
+export const approveDailyEntryResponseOneAttachmentCountMin = 0;
+
+export const approveDailyEntryResponseTwoAttachmentsItemFileSizeMin = 0;
+
 export const ApproveDailyEntryResponse = zod
   .object({
     id: zod.string(),
@@ -914,6 +1035,16 @@ export const ApproveDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    manualMandays: zod
+      .number()
+      .min(approveDailyEntryResponseOneManualMandaysMin)
+      .describe(
+        "Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.",
+      ),
+    attachmentCount: zod
+      .number()
+      .min(approveDailyEntryResponseOneAttachmentCountMin)
+      .describe("Number of files attached to this entry."),
     status: zod
       .enum(["draft", "pending", "approved"])
       .describe(
@@ -945,6 +1076,24 @@ export const ApproveDailyEntryResponse = zod
           mealBoxQty: zod.number().nullish(),
         }),
       ),
+      attachments: zod.array(
+        zod.object({
+          id: zod.string(),
+          dailyEntryId: zod.string(),
+          objectPath: zod
+            .string()
+            .describe(
+              "Normalized path returned by the storage upload endpoint (begins with `\/objects\/...`).",
+            ),
+          fileName: zod.string(),
+          fileSize: zod
+            .number()
+            .min(approveDailyEntryResponseTwoAttachmentsItemFileSizeMin),
+          mimeType: zod.string(),
+          uploadedById: zod.string().nullish(),
+          uploadedAt: zod.coerce.date(),
+        }),
+      ),
     }),
   );
 
@@ -954,6 +1103,12 @@ export const ApproveDailyEntryResponse = zod
 export const RejectDailyEntryParams = zod.object({
   id: zod.coerce.string(),
 });
+
+export const rejectDailyEntryResponseOneManualMandaysMin = 0;
+
+export const rejectDailyEntryResponseOneAttachmentCountMin = 0;
+
+export const rejectDailyEntryResponseTwoAttachmentsItemFileSizeMin = 0;
 
 export const RejectDailyEntryResponse = zod
   .object({
@@ -966,6 +1121,16 @@ export const RejectDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    manualMandays: zod
+      .number()
+      .min(rejectDailyEntryResponseOneManualMandaysMin)
+      .describe(
+        "Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.",
+      ),
+    attachmentCount: zod
+      .number()
+      .min(rejectDailyEntryResponseOneAttachmentCountMin)
+      .describe("Number of files attached to this entry."),
     status: zod
       .enum(["draft", "pending", "approved"])
       .describe(
@@ -995,6 +1160,24 @@ export const RejectDailyEntryResponse = zod
           dinnerQty: zod.number().nullish(),
           midnightQty: zod.number().nullish(),
           mealBoxQty: zod.number().nullish(),
+        }),
+      ),
+      attachments: zod.array(
+        zod.object({
+          id: zod.string(),
+          dailyEntryId: zod.string(),
+          objectPath: zod
+            .string()
+            .describe(
+              "Normalized path returned by the storage upload endpoint (begins with `\/objects\/...`).",
+            ),
+          fileName: zod.string(),
+          fileSize: zod
+            .number()
+            .min(rejectDailyEntryResponseTwoAttachmentsItemFileSizeMin),
+          mimeType: zod.string(),
+          uploadedById: zod.string().nullish(),
+          uploadedAt: zod.coerce.date(),
         }),
       ),
     }),
@@ -1029,6 +1212,12 @@ export const SubmitDailyEntryParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const submitDailyEntryResponseOneManualMandaysMin = 0;
+
+export const submitDailyEntryResponseOneAttachmentCountMin = 0;
+
+export const submitDailyEntryResponseTwoAttachmentsItemFileSizeMin = 0;
+
 export const SubmitDailyEntryResponse = zod
   .object({
     id: zod.string(),
@@ -1040,6 +1229,16 @@ export const SubmitDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    manualMandays: zod
+      .number()
+      .min(submitDailyEntryResponseOneManualMandaysMin)
+      .describe(
+        "Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.",
+      ),
+    attachmentCount: zod
+      .number()
+      .min(submitDailyEntryResponseOneAttachmentCountMin)
+      .describe("Number of files attached to this entry."),
     status: zod
       .enum(["draft", "pending", "approved"])
       .describe(
@@ -1071,6 +1270,24 @@ export const SubmitDailyEntryResponse = zod
           mealBoxQty: zod.number().nullish(),
         }),
       ),
+      attachments: zod.array(
+        zod.object({
+          id: zod.string(),
+          dailyEntryId: zod.string(),
+          objectPath: zod
+            .string()
+            .describe(
+              "Normalized path returned by the storage upload endpoint (begins with `\/objects\/...`).",
+            ),
+          fileName: zod.string(),
+          fileSize: zod
+            .number()
+            .min(submitDailyEntryResponseTwoAttachmentsItemFileSizeMin),
+          mimeType: zod.string(),
+          uploadedById: zod.string().nullish(),
+          uploadedAt: zod.coerce.date(),
+        }),
+      ),
     }),
   );
 
@@ -1080,6 +1297,12 @@ export const SubmitDailyEntryResponse = zod
 export const ResetDailyEntryParams = zod.object({
   id: zod.coerce.string(),
 });
+
+export const resetDailyEntryResponseOneManualMandaysMin = 0;
+
+export const resetDailyEntryResponseOneAttachmentCountMin = 0;
+
+export const resetDailyEntryResponseTwoAttachmentsItemFileSizeMin = 0;
 
 export const ResetDailyEntryResponse = zod
   .object({
@@ -1092,6 +1315,16 @@ export const ResetDailyEntryResponse = zod
     totalCost: zod.number(),
     costPerManday: zod.number(),
     totalMandaysOverride: zod.boolean(),
+    manualMandays: zod
+      .number()
+      .min(resetDailyEntryResponseOneManualMandaysMin)
+      .describe(
+        "Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.",
+      ),
+    attachmentCount: zod
+      .number()
+      .min(resetDailyEntryResponseOneAttachmentCountMin)
+      .describe("Number of files attached to this entry."),
     status: zod
       .enum(["draft", "pending", "approved"])
       .describe(
@@ -1121,6 +1354,24 @@ export const ResetDailyEntryResponse = zod
           dinnerQty: zod.number().nullish(),
           midnightQty: zod.number().nullish(),
           mealBoxQty: zod.number().nullish(),
+        }),
+      ),
+      attachments: zod.array(
+        zod.object({
+          id: zod.string(),
+          dailyEntryId: zod.string(),
+          objectPath: zod
+            .string()
+            .describe(
+              "Normalized path returned by the storage upload endpoint (begins with `\/objects\/...`).",
+            ),
+          fileName: zod.string(),
+          fileSize: zod
+            .number()
+            .min(resetDailyEntryResponseTwoAttachmentsItemFileSizeMin),
+          mimeType: zod.string(),
+          uploadedById: zod.string().nullish(),
+          uploadedAt: zod.coerce.date(),
         }),
       ),
     }),
@@ -1139,7 +1390,7 @@ export const ListEntryAuditResponseItem = zod.object({
   projectId: zod.string(),
   action: zod
     .string()
-    .describe("CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET"),
+    .describe("CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET | SUBMIT"),
   level: zod.number().nullish(),
   levelName: zod.string().nullish(),
   field: zod.string().nullish(),
@@ -1150,6 +1401,94 @@ export const ListEntryAuditResponseItem = zod.object({
   occurredAt: zod.coerce.date(),
 });
 export const ListEntryAuditResponse = zod.array(ListEntryAuditResponseItem);
+
+/**
+ * @summary List file attachments on an entry
+ */
+export const ListEntryAttachmentsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const listEntryAttachmentsResponseFileSizeMin = 0;
+
+export const ListEntryAttachmentsResponseItem = zod.object({
+  id: zod.string(),
+  dailyEntryId: zod.string(),
+  objectPath: zod
+    .string()
+    .describe(
+      "Normalized path returned by the storage upload endpoint (begins with `\/objects\/...`).",
+    ),
+  fileName: zod.string(),
+  fileSize: zod.number().min(listEntryAttachmentsResponseFileSizeMin),
+  mimeType: zod.string(),
+  uploadedById: zod.string().nullish(),
+  uploadedAt: zod.coerce.date(),
+});
+export const ListEntryAttachmentsResponse = zod.array(
+  ListEntryAttachmentsResponseItem,
+);
+
+/**
+ * @summary Record an uploaded file on an entry (call after the file has been PUT to the presigned URL)
+ */
+export const CreateEntryAttachmentParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const createEntryAttachmentBodyFileNameMax = 255;
+
+export const createEntryAttachmentBodyFileSizeDefault = 0;
+export const createEntryAttachmentBodyFileSizeMin = 0;
+
+export const createEntryAttachmentBodyMimeTypeMax = 128;
+
+export const CreateEntryAttachmentBody = zod.object({
+  objectPath: zod.string().min(1),
+  fileName: zod.string().min(1).max(createEntryAttachmentBodyFileNameMax),
+  fileSize: zod
+    .number()
+    .min(createEntryAttachmentBodyFileSizeMin)
+    .default(createEntryAttachmentBodyFileSizeDefault),
+  mimeType: zod.string().max(createEntryAttachmentBodyMimeTypeMax).optional(),
+});
+
+/**
+ * @summary Remove an attachment from an entry
+ */
+export const DeleteEntryAttachmentParams = zod.object({
+  id: zod.coerce.string(),
+  attachmentId: zod.coerce.string(),
+});
+
+/**
+ * @summary Request a presigned URL for file upload
+ */
+
+export const RequestUploadUrlBody = zod.object({
+  name: zod.string().min(1),
+  size: zod.number().min(1),
+  contentType: zod.string().min(1),
+});
+
+export const RequestUploadUrlResponse = zod.object({
+  uploadURL: zod.string().url(),
+  objectPath: zod.string(),
+  metadata: zod
+    .object({
+      name: zod.string().min(1),
+      size: zod.number().min(1),
+      contentType: zod.string().min(1),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Serve an uploaded object entity
+ */
+export const GetStorageObjectParams = zod.object({
+  objectPath: zod.coerce.string(),
+});
 
 /**
  * @summary List per-level approver assignments for this project
@@ -1246,6 +1585,11 @@ export const GetProjectEntryMatrixResponse = zod
       contractStart: zod.coerce.date(),
       contractEnd: zod.coerce.date(),
       notes: zod.string().nullish(),
+      pdfRequired: zod
+        .boolean()
+        .describe(
+          "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
+        ),
       createdAt: zod.coerce.date(),
       isAdminOwned: zod.boolean(),
       currentUserCanViewSummary: zod.boolean(),
@@ -1407,6 +1751,10 @@ export const GetProjectSummaryQueryParams = zod.object({
 
 export const getProjectSummaryResponseProjectApprovalChainItemLevelNameMax = 32;
 
+export const getProjectSummaryResponseDailyEntriesItemManualMandaysMin = 0;
+
+export const getProjectSummaryResponseDailyEntriesItemAttachmentCountMin = 0;
+
 export const GetProjectSummaryResponse = zod.object({
   project: zod.object({
     id: zod.string(),
@@ -1416,6 +1764,11 @@ export const GetProjectSummaryResponse = zod.object({
     contractStart: zod.coerce.date(),
     contractEnd: zod.coerce.date(),
     notes: zod.string().nullish(),
+    pdfRequired: zod
+      .boolean()
+      .describe(
+        "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
+      ),
     createdAt: zod.coerce.date(),
     isAdminOwned: zod.boolean(),
     currentUserCanViewSummary: zod.boolean(),
@@ -1472,6 +1825,16 @@ export const GetProjectSummaryResponse = zod.object({
       totalCost: zod.number(),
       costPerManday: zod.number(),
       totalMandaysOverride: zod.boolean(),
+      manualMandays: zod
+        .number()
+        .min(getProjectSummaryResponseDailyEntriesItemManualMandaysMin)
+        .describe(
+          "Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.",
+        ),
+      attachmentCount: zod
+        .number()
+        .min(getProjectSummaryResponseDailyEntriesItemAttachmentCountMin)
+        .describe("Number of files attached to this entry."),
       status: zod
         .enum(["draft", "pending", "approved"])
         .describe(

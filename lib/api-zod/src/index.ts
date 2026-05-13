@@ -12,6 +12,7 @@ export type {
   DashboardKpi,
   DashboardReport,
   EntryApproval,
+  EntryAttachment,
   EntryMatrixCostCell,
   EntryMatrixReport,
   EntryMatrixRow,
@@ -42,4 +43,6 @@ export type {
   ServiceCostInputKind,
   ServiceTotal,
   ServiceTotalKind,
+  UploadUrlRequest,
+  UploadUrlResponse,
 } from "./generated/types";

@@ -14,8 +14,10 @@
     "@workspace/db": "workspace:*",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
+    "@google-cloud/storage": "^7.16.0",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "google-auth-library": "^9.15.1",
     "openid-client": "^6.8.4",
     "pino": "^9",
     "pino-http": "^10"

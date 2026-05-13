@@ -14,6 +14,8 @@ export interface UpdateDailyEntryBody {
   /** @minimum 0 */
   totalMandays?: number;
   totalMandaysOverride?: boolean;
+  /** @minimum 0 */
+  manualMandays?: number;
   notes?: string;
   serviceCosts?: ServiceCostInput[];
 }

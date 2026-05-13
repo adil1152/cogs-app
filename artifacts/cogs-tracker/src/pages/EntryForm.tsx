@@ -15,6 +15,9 @@ import {
   useListEntryApprovals,
   useListEntryAudit,
   useListProjectApprovers,
+  useListEntryAttachments,
+  useCreateEntryAttachment,
+  useDeleteEntryAttachment,
   getGetProjectQueryKey,
   getListProjectServicesQueryKey,
   getGetDailyEntryQueryKey,
@@ -24,8 +27,10 @@ import {
   getListEntryApprovalsQueryKey,
   getListEntryAuditQueryKey,
   getListProjectApproversQueryKey,
+  getListEntryAttachmentsQueryKey,
   type ServiceCostInput,
 } from "@workspace/api-client-react";
+import { useUpload } from "@workspace/object-storage-web";
 import { useAuth } from "@workspace/replit-auth-web";
 import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +52,9 @@ import {
   RotateCcw,
   History,
   Send,
+  Paperclip,
+  Upload,
+  FileText,
 } from "lucide-react";
 
 const APPROVAL_LEVELS = ["OP", "SOP", "COO", "CC", "Additional"] as const;
@@ -160,6 +168,7 @@ export default function EntryForm() {
   const [location, setLocation] = useState("");
   const [totalMandaysOverride, setTotalMandaysOverride] = useState(false);
   const [totalMandaysManual, setTotalMandaysManual] = useState("");
+  const [manualMandays, setManualMandays] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<ServiceLine[]>([]);
 
@@ -171,6 +180,11 @@ export default function EntryForm() {
       setLocation(existingEntry.location);
       setTotalMandaysOverride(!!existingEntry.totalMandaysOverride);
       setTotalMandaysManual(String(existingEntry.totalMandays));
+      setManualMandays(
+        existingEntry.manualMandays != null && Number(existingEntry.manualMandays) !== 0
+          ? String(existingEntry.manualMandays)
+          : "",
+      );
       setNotes(existingEntry.notes ?? "");
       const byId = new Map(existingEntry.serviceCosts.map((s) => [s.projectServiceId, s]));
       setLines(
@@ -206,12 +220,19 @@ export default function EntryForm() {
       if (!Number.isNaN(c)) totalCost += c;
       summedMandays += lineMandays(l);
     }
+    const manual = Number(manualMandays) || 0;
     const tm = totalMandaysOverride
       ? Number(totalMandaysManual) || 0
-      : summedMandays;
+      : summedMandays + manual;
     const cpm = tm ? totalCost / tm : null;
-    return { totalCost, summedMandays, totalMandays: tm, costPerManday: cpm };
-  }, [lines, totalMandaysOverride, totalMandaysManual]);
+    return {
+      totalCost,
+      summedMandays,
+      manualMandays: manual,
+      totalMandays: tm,
+      costPerManday: cpm,
+    };
+  }, [lines, totalMandaysOverride, totalMandaysManual, manualMandays]);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: getListProjectEntriesQueryKey(projectId) });
@@ -350,16 +371,108 @@ export default function EntryForm() {
         }
         return base as ServiceCostInput;
       });
+    const manualNum = Number(manualMandays);
+    if (manualMandays !== "" && (Number.isNaN(manualNum) || manualNum < 0)) {
+      toast({ title: "Manual mandays invalid", variant: "destructive" });
+      return;
+    }
     const payload: any = {
       entryDate,
       location,
       totalMandaysOverride,
+      manualMandays: manualMandays === "" ? 0 : manualNum,
       notes,
       serviceCosts,
     };
     if (totalMandaysOverride) payload.totalMandays = Number(totalMandaysManual);
     if (isEdit) update.mutate({ id: entryId!, data: payload });
     else create.mutate({ id: projectId, data: payload });
+  }
+
+  // Attachments (only meaningful when editing an existing entry)
+  const { data: attachments } = useListEntryAttachments(entryId ?? "", {
+    query: {
+      enabled: !!entryId,
+      queryKey: getListEntryAttachmentsQueryKey(entryId ?? ""),
+    },
+  });
+  const attachmentList = attachments ?? [];
+  const pdfRequired = !!project?.pdfRequired;
+  const submitBlockedByPdf =
+    pdfRequired && isEdit && isDraft && attachmentList.length === 0;
+
+  const createAttachment = useCreateEntryAttachment({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Attachment uploaded" });
+        if (entryId) {
+          queryClient.invalidateQueries({
+            queryKey: getListEntryAttachmentsQueryKey(entryId),
+          });
+          queryClient.invalidateQueries({
+            queryKey: getGetDailyEntryQueryKey(entryId),
+          });
+          queryClient.invalidateQueries({
+            queryKey: getListEntryAuditQueryKey(entryId),
+          });
+        }
+      },
+      onError: (err: any) =>
+        toast({
+          title: "Could not save attachment",
+          description: err.message,
+          variant: "destructive",
+        }),
+    },
+  });
+  const deleteAttachment = useDeleteEntryAttachment({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Attachment removed" });
+        if (entryId) {
+          queryClient.invalidateQueries({
+            queryKey: getListEntryAttachmentsQueryKey(entryId),
+          });
+          queryClient.invalidateQueries({
+            queryKey: getGetDailyEntryQueryKey(entryId),
+          });
+          queryClient.invalidateQueries({
+            queryKey: getListEntryAuditQueryKey(entryId),
+          });
+        }
+      },
+      onError: (err: any) =>
+        toast({
+          title: "Could not remove attachment",
+          description: err.message,
+          variant: "destructive",
+        }),
+    },
+  });
+  const { uploadFile, isUploading } = useUpload({
+    onError: (err) =>
+      toast({
+        title: "Upload failed",
+        description: err.message,
+        variant: "destructive",
+      }),
+  });
+
+  async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !entryId) return;
+    const result = await uploadFile(file);
+    if (!result) return;
+    createAttachment.mutate({
+      id: entryId,
+      data: {
+        objectPath: result.objectPath,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || "application/octet-stream",
+      },
+    });
   }
 
   function setLine(idx: number, patch: Partial<ServiceLine>) {
@@ -548,6 +661,94 @@ export default function EntryForm() {
                 })}
               </CardContent>
             </Card>
+
+            {isEdit && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Paperclip className="h-4 w-4" />
+                    Attachments
+                    {pdfRequired && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wider rounded border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 px-1.5 py-0.5">
+                        Required
+                      </span>
+                    )}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Upload supporting documents (e.g. signed daily sheets) for
+                    this entry.
+                    {pdfRequired &&
+                      " At least one attachment is required before submitting for approval."}
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {attachmentList.length === 0 ? (
+                    <div className="text-sm text-muted-foreground rounded-md border border-dashed border-border px-4 py-6 text-center">
+                      No attachments yet.
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-border rounded-md border border-border">
+                      {attachmentList.map((a) => (
+                        <li
+                          key={a.id}
+                          className="flex items-center gap-3 px-3 py-2 text-sm"
+                          data-testid={`attachment-row-${a.id}`}
+                        >
+                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <a
+                            href={`/api/storage/objects/${encodeURI(a.objectPath)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 truncate hover:underline"
+                          >
+                            {a.fileName}
+                          </a>
+                          <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                            {formatFileSize(a.fileSize)}
+                          </span>
+                          {!isLocked && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:text-destructive h-7 w-7 p-0"
+                              onClick={() =>
+                                deleteAttachment.mutate({
+                                  id: entryId!,
+                                  attachmentId: a.id,
+                                })
+                              }
+                              disabled={deleteAttachment.isPending}
+                              data-testid={`button-delete-attachment-${a.id}`}
+                              aria-label={`Remove ${a.fileName}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {!isLocked && (
+                    <div>
+                      <label
+                        className="inline-flex items-center gap-2 text-sm font-medium cursor-pointer rounded-md border border-border bg-background px-3 py-1.5 hover:bg-muted"
+                        data-testid="button-upload-attachment"
+                      >
+                        <Upload className="h-4 w-4" />
+                        {isUploading ? "Uploading…" : "Upload file"}
+                        <input
+                          type="file"
+                          className="sr-only"
+                          onChange={onPickFile}
+                          disabled={isUploading || createAttachment.isPending}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -555,10 +756,38 @@ export default function EntryForm() {
               <CardHeader><CardTitle className="text-base">Live totals</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <Row label="Total cost" value={formatCurrency(totals.totalCost)} accent />
-                <div className="flex items-baseline justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Service mandays</span>
+                    <span className="tabular-nums">
+                      {formatNumber(totals.summedMandays, 2)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <Label
+                      htmlFor="input-manual-mandays"
+                      className="text-muted-foreground"
+                    >
+                      + Manual mandays
+                    </Label>
+                    <Input
+                      id="input-manual-mandays"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={manualMandays}
+                      onChange={(e) => setManualMandays(e.target.value)}
+                      placeholder="0"
+                      disabled={totalMandaysOverride}
+                      className="w-28 text-right tabular-nums"
+                      data-testid="input-manual-mandays"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2">
                   <div className="flex items-center gap-2">
                     <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                      Manual mandays
+                      Override total
                     </Label>
                     <Switch
                       checked={totalMandaysOverride}
@@ -575,8 +804,11 @@ export default function EntryForm() {
                       data-testid="input-total-mandays"
                     />
                   ) : (
-                    <span className="tabular-nums font-semibold text-base">
-                      {formatNumber(totals.summedMandays, 2)}
+                    <span
+                      className="tabular-nums font-semibold text-base"
+                      data-testid="text-total-mandays"
+                    >
+                      {formatNumber(totals.totalMandays, 2)}
                     </span>
                   )}
                 </div>
@@ -585,16 +817,24 @@ export default function EntryForm() {
                   {isEdit ? "Save changes" : "Save as draft"}
                 </Button>
                 {isEdit && isDraft && !isLocked && (
-                  <Button
-                    type="button"
-                    className="w-full"
-                    variant="default"
-                    disabled={submit.isPending}
-                    onClick={() => submit.mutate({ id: entryId! })}
-                    data-testid="button-submit-for-approval"
-                  >
-                    <Send className="mr-2 h-4 w-4" /> Submit for approval
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      className="w-full"
+                      variant="default"
+                      disabled={submit.isPending || submitBlockedByPdf}
+                      onClick={() => submit.mutate({ id: entryId! })}
+                      data-testid="button-submit-for-approval"
+                    >
+                      <Send className="mr-2 h-4 w-4" /> Submit for approval
+                    </Button>
+                    {submitBlockedByPdf && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        This project requires at least one PDF attachment before
+                        submission.
+                      </p>
+                    )}
+                  </>
                 )}
                 {isEdit && !isLocked && (
                   <Button
@@ -859,6 +1099,13 @@ function AuditPanel({ events }: { events: Array<any> }) {
       </CardContent>
     </Card>
   );
+}
+
+function formatFileSize(bytes: number): string {
+  if (!bytes || bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  return `${(kb / 1024).toFixed(2)} MB`;
 }
 
 function MealQty({

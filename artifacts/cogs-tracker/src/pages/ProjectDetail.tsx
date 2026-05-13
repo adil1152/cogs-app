@@ -44,6 +44,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -1125,6 +1126,7 @@ function SettingsPanel({ project }: { project: any }) {
       notes: project.notes ?? "",
     },
   });
+  const [pdfRequired, setPdfRequired] = useState<boolean>(!!project.pdfRequired);
   const update = useUpdateProject({
     mutation: {
       onSuccess: () => {
@@ -1151,7 +1153,9 @@ function SettingsPanel({ project }: { project: any }) {
         <CardHeader><CardTitle className="text-base">Project details</CardTitle></CardHeader>
         <CardContent>
           <form
-            onSubmit={handleSubmit((data) => update.mutate({ id: project.id, data }))}
+            onSubmit={handleSubmit((data) =>
+              update.mutate({ id: project.id, data: { ...data, pdfRequired } }),
+            )}
             className="space-y-3"
           >
             <Field label="Name"><Input {...register("name")} data-testid="input-edit-name" /></Field>
@@ -1169,6 +1173,20 @@ function SettingsPanel({ project }: { project: any }) {
               <Field label="End"><Input type="date" {...register("contractEnd")} /></Field>
             </div>
             <Field label="Notes"><Textarea rows={3} {...register("notes")} /></Field>
+            <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-muted/30 px-3 py-2">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Require PDF attachment</Label>
+                <p className="text-xs text-muted-foreground">
+                  When on, daily entries cannot be submitted for approval until
+                  at least one attachment is uploaded.
+                </p>
+              </div>
+              <Switch
+                checked={pdfRequired}
+                onCheckedChange={setPdfRequired}
+                data-testid="switch-pdf-required"
+              />
+            </div>
             <Button type="submit" disabled={update.isPending} data-testid="button-save-project">Save changes</Button>
           </form>
         </CardContent>

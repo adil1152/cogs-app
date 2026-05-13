@@ -11,7 +11,7 @@ export interface AuditLogEntry {
   /** @nullable */
   dailyEntryId: string | null;
   projectId: string;
-  /** CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET */
+  /** CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET | SUBMIT */
   action: string;
   /** @nullable */
   level?: number | null;

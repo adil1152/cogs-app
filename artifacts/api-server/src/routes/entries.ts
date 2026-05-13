@@ -3,6 +3,7 @@ import {
   db,
   dailyEntriesTable,
   entryApprovalsTable,
+  entryAttachmentsTable,
   projectsTable,
   serviceCostEntriesTable,
 } from "@workspace/db";
@@ -108,10 +109,12 @@ router.post(
 
     const override = !!parsed.data.totalMandaysOverride;
     const serviceCosts = parsed.data.serviceCosts as ServiceCostInputItem[];
+    const manualMandays = parsed.data.manualMandays ?? 0;
     const totalMandays = computeTotalMandays(
       serviceCosts,
       override,
       parsed.data.totalMandays,
+      manualMandays,
     );
 
     const prefix = v.project.code ?? slugifyForSequence(v.project.name);
@@ -142,6 +145,7 @@ router.post(
               location: parsed.data.location,
               totalMandays: String(totalMandays),
               totalMandaysOverride: override,
+              manualMandays: String(manualMandays),
               notes: parsed.data.notes ?? null,
               sequenceNumber: nextSeq,
               sequenceCode,
@@ -280,15 +284,48 @@ router.patch(
           data.totalMandaysOverride = overrideAfter;
         }
 
+        const manualAfter =
+          parsed.data.manualMandays ?? Number(entry.manualMandays ?? 0);
+        if (parsed.data.manualMandays !== undefined) {
+          data.manualMandays = String(parsed.data.manualMandays);
+        }
+
         if (parsed.data.serviceCosts !== undefined) {
           const tm = computeTotalMandays(
             parsed.data.serviceCosts as ServiceCostInputItem[],
             overrideAfter,
             parsed.data.totalMandays,
+            manualAfter,
           );
           data.totalMandays = String(tm);
         } else if (overrideAfter && parsed.data.totalMandays !== undefined) {
           data.totalMandays = String(parsed.data.totalMandays);
+        } else if (
+          parsed.data.manualMandays !== undefined &&
+          !overrideAfter
+        ) {
+          // Recompute by re-reading existing service cost rows.
+          const existing = await tx
+            .select()
+            .from(serviceCostEntriesTable)
+            .where(eq(serviceCostEntriesTable.dailyEntryId, id));
+          const tm = computeTotalMandays(
+            existing.map((c) => ({
+              projectServiceId: c.projectServiceId,
+              kind: c.kind as "food" | "standard",
+              cost: Number(c.cost ?? 0),
+              mandays: c.mandays != null ? Number(c.mandays) : undefined,
+              breakfastQty: c.breakfastQty ?? undefined,
+              lunchQty: c.lunchQty ?? undefined,
+              dinnerQty: c.dinnerQty ?? undefined,
+              midnightQty: c.midnightQty ?? undefined,
+              mealBoxQty: c.mealBoxQty ?? undefined,
+            })),
+            false,
+            undefined,
+            manualAfter,
+          );
+          data.totalMandays = String(tm);
         }
 
         data.updatedAt = new Date();
@@ -602,6 +639,25 @@ router.post(
         .status(400)
         .json({ error: "Only draft entries can be submitted for approval" });
       return;
+    }
+
+    // PDF-required guard: project setting blocks submission with no attachments.
+    const [project] = await db
+      .select({ pdfRequired: projectsTable.pdfRequired })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, entry.projectId));
+    if (project?.pdfRequired) {
+      const [{ n }] = await db
+        .select({ n: sql<number>`COUNT(*)::int` })
+        .from(entryAttachmentsTable)
+        .where(eq(entryAttachmentsTable.dailyEntryId, id));
+      if (Number(n ?? 0) === 0) {
+        res.status(400).json({
+          error:
+            "This project requires at least one attached PDF before submitting for approval.",
+        });
+        return;
+      }
     }
 
     let conflicted = false;

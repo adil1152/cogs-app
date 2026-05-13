@@ -25,6 +25,7 @@ import type {
   AuthUserEnvelope,
   BeginBrowserLoginParams,
   CreateDailyEntryBody,
+  CreateEntryAttachmentBody,
   CreateProjectBody,
   CreateProjectServiceBody,
   CreateSecurityGroupBody,
@@ -32,6 +33,7 @@ import type {
   DailyEntrySummary,
   DashboardReport,
   EntryApproval,
+  EntryAttachment,
   EntryMatrixReport,
   ErrorEnvelope,
   GetAggregateReportParams,
@@ -66,6 +68,8 @@ import type {
   UpdateProjectServiceBody,
   UpdateSecurityGroupBody,
   UpdateUserRoleBody,
+  UploadUrlRequest,
+  UploadUrlResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -3235,6 +3239,445 @@ export function useListEntryAudit<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListEntryAuditQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List file attachments on an entry
+ */
+export const getListEntryAttachmentsUrl = (id: string) => {
+  return `/api/entries/${id}/attachments`;
+};
+
+export const listEntryAttachments = async (
+  id: string,
+  options?: RequestInit,
+): Promise<EntryAttachment[]> => {
+  return customFetch<EntryAttachment[]>(getListEntryAttachmentsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListEntryAttachmentsQueryKey = (id: string) => {
+  return [`/api/entries/${id}/attachments`] as const;
+};
+
+export const getListEntryAttachmentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listEntryAttachments>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEntryAttachments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListEntryAttachmentsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listEntryAttachments>>
+  > = ({ signal }) => listEntryAttachments(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listEntryAttachments>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListEntryAttachmentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listEntryAttachments>>
+>;
+export type ListEntryAttachmentsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List file attachments on an entry
+ */
+
+export function useListEntryAttachments<
+  TData = Awaited<ReturnType<typeof listEntryAttachments>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEntryAttachments>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListEntryAttachmentsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record an uploaded file on an entry (call after the file has been PUT to the presigned URL)
+ */
+export const getCreateEntryAttachmentUrl = (id: string) => {
+  return `/api/entries/${id}/attachments`;
+};
+
+export const createEntryAttachment = async (
+  id: string,
+  createEntryAttachmentBody: CreateEntryAttachmentBody,
+  options?: RequestInit,
+): Promise<EntryAttachment> => {
+  return customFetch<EntryAttachment>(getCreateEntryAttachmentUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createEntryAttachmentBody),
+  });
+};
+
+export const getCreateEntryAttachmentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createEntryAttachment>>,
+    TError,
+    { id: string; data: BodyType<CreateEntryAttachmentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createEntryAttachment>>,
+  TError,
+  { id: string; data: BodyType<CreateEntryAttachmentBody> },
+  TContext
+> => {
+  const mutationKey = ["createEntryAttachment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createEntryAttachment>>,
+    { id: string; data: BodyType<CreateEntryAttachmentBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createEntryAttachment(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateEntryAttachmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createEntryAttachment>>
+>;
+export type CreateEntryAttachmentMutationBody =
+  BodyType<CreateEntryAttachmentBody>;
+export type CreateEntryAttachmentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Record an uploaded file on an entry (call after the file has been PUT to the presigned URL)
+ */
+export const useCreateEntryAttachment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createEntryAttachment>>,
+    TError,
+    { id: string; data: BodyType<CreateEntryAttachmentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createEntryAttachment>>,
+  TError,
+  { id: string; data: BodyType<CreateEntryAttachmentBody> },
+  TContext
+> => {
+  return useMutation(getCreateEntryAttachmentMutationOptions(options));
+};
+
+/**
+ * @summary Remove an attachment from an entry
+ */
+export const getDeleteEntryAttachmentUrl = (
+  id: string,
+  attachmentId: string,
+) => {
+  return `/api/entries/${id}/attachments/${attachmentId}`;
+};
+
+export const deleteEntryAttachment = async (
+  id: string,
+  attachmentId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteEntryAttachmentUrl(id, attachmentId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteEntryAttachmentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteEntryAttachment>>,
+    TError,
+    { id: string; attachmentId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteEntryAttachment>>,
+  TError,
+  { id: string; attachmentId: string },
+  TContext
+> => {
+  const mutationKey = ["deleteEntryAttachment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteEntryAttachment>>,
+    { id: string; attachmentId: string }
+  > = (props) => {
+    const { id, attachmentId } = props ?? {};
+
+    return deleteEntryAttachment(id, attachmentId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteEntryAttachmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteEntryAttachment>>
+>;
+
+export type DeleteEntryAttachmentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove an attachment from an entry
+ */
+export const useDeleteEntryAttachment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteEntryAttachment>>,
+    TError,
+    { id: string; attachmentId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteEntryAttachment>>,
+  TError,
+  { id: string; attachmentId: string },
+  TContext
+> => {
+  return useMutation(getDeleteEntryAttachmentMutationOptions(options));
+};
+
+/**
+ * @summary Request a presigned URL for file upload
+ */
+export const getRequestUploadUrlUrl = () => {
+  return `/api/storage/uploads/request-url`;
+};
+
+export const requestUploadUrl = async (
+  uploadUrlRequest: UploadUrlRequest,
+  options?: RequestInit,
+): Promise<UploadUrlResponse> => {
+  return customFetch<UploadUrlResponse>(getRequestUploadUrlUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(uploadUrlRequest),
+  });
+};
+
+export const getRequestUploadUrlMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestUploadUrl>>,
+    TError,
+    { data: BodyType<UploadUrlRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestUploadUrl>>,
+  TError,
+  { data: BodyType<UploadUrlRequest> },
+  TContext
+> => {
+  const mutationKey = ["requestUploadUrl"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestUploadUrl>>,
+    { data: BodyType<UploadUrlRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return requestUploadUrl(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RequestUploadUrlMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestUploadUrl>>
+>;
+export type RequestUploadUrlMutationBody = BodyType<UploadUrlRequest>;
+export type RequestUploadUrlMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Request a presigned URL for file upload
+ */
+export const useRequestUploadUrl = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestUploadUrl>>,
+    TError,
+    { data: BodyType<UploadUrlRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof requestUploadUrl>>,
+  TError,
+  { data: BodyType<UploadUrlRequest> },
+  TContext
+> => {
+  return useMutation(getRequestUploadUrlMutationOptions(options));
+};
+
+/**
+ * @summary Serve an uploaded object entity
+ */
+export const getGetStorageObjectUrl = (objectPath: string) => {
+  return `/api/storage/objects/${objectPath}`;
+};
+
+export const getStorageObject = async (
+  objectPath: string,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getGetStorageObjectUrl(objectPath), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStorageObjectQueryKey = (objectPath: string) => {
+  return [`/api/storage/objects/${objectPath}`] as const;
+};
+
+export const getGetStorageObjectQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStorageObject>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  objectPath: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStorageObject>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetStorageObjectQueryKey(objectPath);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStorageObject>>
+  > = ({ signal }) =>
+    getStorageObject(objectPath, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!objectPath,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStorageObject>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStorageObjectQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStorageObject>>
+>;
+export type GetStorageObjectQueryError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Serve an uploaded object entity
+ */
+
+export function useGetStorageObject<
+  TData = Awaited<ReturnType<typeof getStorageObject>>,
+  TError = ErrorType<ErrorEnvelope>,
+>(
+  objectPath: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStorageObject>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStorageObjectQueryOptions(objectPath, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

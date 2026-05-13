@@ -19,4 +19,5 @@ export interface UpdateProjectBody {
   contractStart?: Date;
   contractEnd?: Date;
   notes?: string;
+  pdfRequired?: boolean;
 }

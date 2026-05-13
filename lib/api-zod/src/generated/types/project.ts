@@ -17,6 +17,8 @@ export interface Project {
   contractEnd: Date;
   /** @nullable */
   notes?: string | null;
+  /** When true, an entry on this project requires at least one attached PDF before it can be submitted for approval. */
+  pdfRequired: boolean;
   createdAt: Date;
   isAdminOwned: boolean;
   currentUserCanViewSummary: boolean;

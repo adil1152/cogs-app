@@ -155,6 +155,7 @@ export function serializeProject(
     contractStart: p.contractStart,
     contractEnd: p.contractEnd,
     notes: p.notes,
+    pdfRequired: !!(p as { pdfRequired?: boolean }).pdfRequired,
     createdAt: p.createdAt.toISOString(),
     isAdminOwned: v.isAdminOwned,
     currentUserCanViewSummary: v.canViewSummary,

@@ -4,8 +4,9 @@ import {
   serviceCostEntriesTable,
   projectServicesTable,
   projectsTable,
+  entryAttachmentsTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { calcFoodMandays, safeDivide } from "./cogsCalc";
 
 export const FINAL_APPROVAL_LEVEL = 5;
@@ -55,12 +56,19 @@ export function serviceMandays(sc: {
 export function computeTotalMandays(
   serviceCosts: ServiceCostInputItem[],
   override: boolean,
-  manualValue: number | undefined,
+  overrideValue: number | undefined,
+  manualMandays: number | undefined,
 ): number {
-  if (override && manualValue != null && !Number.isNaN(manualValue)) {
-    return manualValue;
+  if (override && overrideValue != null && !Number.isNaN(overrideValue)) {
+    return overrideValue;
   }
-  return serviceCosts.reduce((sum, sc) => sum + serviceMandays(sc), 0);
+  const sumFromServices = serviceCosts.reduce(
+    (sum, sc) => sum + serviceMandays(sc),
+    0,
+  );
+  const manual =
+    manualMandays != null && !Number.isNaN(manualMandays) ? manualMandays : 0;
+  return sumFromServices + manual;
 }
 
 export async function buildEntryDetail(entryId: string) {
@@ -86,6 +94,12 @@ export async function buildEntryDetail(entryId: string) {
       eq(projectServicesTable.id, serviceCostEntriesTable.projectServiceId),
     )
     .where(eq(serviceCostEntriesTable.dailyEntryId, entryId));
+
+  const attachmentRows = await db
+    .select()
+    .from(entryAttachmentsTable)
+    .where(eq(entryAttachmentsTable.dailyEntryId, entryId))
+    .orderBy(entryAttachmentsTable.uploadedAt);
 
   const totalMandays = Number(entry.totalMandays);
   let totalCost = 0;
@@ -128,6 +142,8 @@ export async function buildEntryDetail(entryId: string) {
     totalCost,
     costPerManday: safeDivide(totalCost, totalMandays),
     totalMandaysOverride: entry.totalMandaysOverride,
+    manualMandays: Number(entry.manualMandays ?? 0),
+    attachmentCount: attachmentRows.length,
     status: (entry.status ?? "draft") as "draft" | "pending" | "approved",
     currentApprovalLevel: entry.currentApprovalLevel,
     isLocked: !!entry.lockedAt,
@@ -136,6 +152,16 @@ export async function buildEntryDetail(entryId: string) {
     sequenceNumber: entry.sequenceNumber,
     sequenceCode: entry.sequenceCode,
     serviceCosts,
+    attachments: attachmentRows.map((a) => ({
+      id: a.id,
+      dailyEntryId: a.dailyEntryId,
+      objectPath: a.objectPath,
+      fileName: a.fileName,
+      fileSize: a.fileSize ?? 0,
+      mimeType: a.mimeType ?? "",
+      uploadedById: a.uploadedById,
+      uploadedAt: a.uploadedAt.toISOString(),
+    })),
   };
 }
 
@@ -152,6 +178,11 @@ export async function buildEntrySummary(
     .from(serviceCostEntriesTable)
     .where(eq(serviceCostEntriesTable.dailyEntryId, entry.id));
 
+  const [attachmentCountRow] = await db
+    .select({ n: sql<number>`COUNT(*)::int` })
+    .from(entryAttachmentsTable)
+    .where(eq(entryAttachmentsTable.dailyEntryId, entry.id));
+
   const totalMandays = Number(entry.totalMandays);
   const totalCost = costs.reduce((s, r) => s + Number(r.cost ?? 0), 0);
 
@@ -165,6 +196,8 @@ export async function buildEntrySummary(
     totalCost,
     costPerManday: safeDivide(totalCost, totalMandays),
     totalMandaysOverride: entry.totalMandaysOverride,
+    manualMandays: Number(entry.manualMandays ?? 0),
+    attachmentCount: Number(attachmentCountRow?.n ?? 0),
     status: (entry.status ?? "draft") as "draft" | "pending" | "approved",
     currentApprovalLevel: entry.currentApprovalLevel,
     isLocked: !!entry.lockedAt,

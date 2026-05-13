@@ -17,6 +17,16 @@ export interface DailyEntrySummary {
   totalCost: number;
   costPerManday: number;
   totalMandaysOverride: boolean;
+  /**
+   * Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.
+   * @minimum 0
+   */
+  manualMandays: number;
+  /**
+   * Number of files attached to this entry.
+   * @minimum 0
+   */
+  attachmentCount: number;
   status: EntryStatus;
   currentApprovalLevel: number;
   isLocked: boolean;

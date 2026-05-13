@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DailyEntrySummary } from "./dailyEntrySummary";
+import type { EntryAttachment } from "./entryAttachment";
 import type { ServiceCostBreakdown } from "./serviceCostBreakdown";
 
 export type DailyEntryDetail = DailyEntrySummary & {
   serviceCosts: ServiceCostBreakdown[];
+  attachments: EntryAttachment[];
 };

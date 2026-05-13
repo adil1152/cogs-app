@@ -23,6 +23,7 @@ export const projectsTable = pgTable(
     contractStart: date("contract_start").notNull(),
     contractEnd: date("contract_end").notNull(),
     notes: text("notes"),
+    pdfRequired: boolean("pdf_required").notNull().default(false),
     createdById: varchar("created_by_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
@@ -125,6 +126,9 @@ export const dailyEntriesTable = pgTable(
     totalMandaysOverride: boolean("total_mandays_override")
       .notNull()
       .default(false),
+    manualMandays: numeric("manual_mandays", { precision: 10, scale: 2 })
+      .notNull()
+      .default("0"),
     /**
      * Workflow state machine:
      *   draft     — created, not yet submitted; not in any approver's queue.
@@ -309,3 +313,27 @@ export type InsertProjectApprovalChainEntry =
 
 export type EntryAuditLog = typeof entryAuditLogTable.$inferSelect;
 export type InsertEntryAuditLog = typeof entryAuditLogTable.$inferInsert;
+
+export const entryAttachmentsTable = pgTable(
+  "entry_attachments",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    dailyEntryId: varchar("daily_entry_id")
+      .notNull()
+      .references(() => dailyEntriesTable.id, { onDelete: "cascade" }),
+    objectPath: varchar("object_path", { length: 512 }).notNull(),
+    fileName: varchar("file_name", { length: 255 }).notNull(),
+    fileSize: integer("file_size").notNull().default(0),
+    mimeType: varchar("mime_type", { length: 128 }).notNull().default(""),
+    uploadedById: varchar("uploaded_by_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("IDX_entry_attachments_entry").on(t.dailyEntryId)],
+);
+
+export type EntryAttachment = typeof entryAttachmentsTable.$inferSelect;
+export type InsertEntryAttachment = typeof entryAttachmentsTable.$inferInsert;

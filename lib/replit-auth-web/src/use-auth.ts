@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useSyncExternalStore, useCallback } from "react";
 import type { AuthUser } from "@workspace/api-client-react";
 
 export type { AuthUser };
@@ -39,82 +39,119 @@ async function readJsonOrThrow(res: Response): Promise<any> {
   return data;
 }
 
-export function useAuth(): AuthState {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+// ---------- Module-level singleton store ----------
+// All useAuth() callers share this state, so a setUser() in <Login>
+// immediately re-renders <Gate> in App.tsx (no page refresh needed).
 
-  const refresh = useCallback(async () => {
+interface Snapshot {
+  user: AuthUser | null;
+  isLoading: boolean;
+}
+
+let snapshot: Snapshot = { user: null, isLoading: true };
+const listeners = new Set<() => void>();
+
+function setSnapshot(next: Snapshot) {
+  snapshot = next;
+  listeners.forEach((l) => l());
+}
+
+function subscribe(l: () => void): () => void {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+}
+
+function getSnapshot(): Snapshot {
+  return snapshot;
+}
+
+let bootstrapPromise: Promise<void> | null = null;
+
+function bootstrap(): Promise<void> {
+  if (bootstrapPromise) return bootstrapPromise;
+  bootstrapPromise = (async () => {
     try {
       const res = await fetch("/api/auth/user", { credentials: "include" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { user: AuthUser | null };
-      setUser(data.user ?? null);
+      setSnapshot({ user: data.user ?? null, isLoading: false });
     } catch {
-      setUser(null);
-    } finally {
-      setIsLoading(false);
+      setSnapshot({ user: null, isLoading: false });
     }
-  }, []);
+  })();
+  return bootstrapPromise;
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/user", { credentials: "include" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { user: AuthUser | null };
-        if (!cancelled) setUser(data.user ?? null);
-      } catch {
-        if (!cancelled) setUser(null);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+async function refreshImpl(): Promise<void> {
+  try {
+    const res = await fetch("/api/auth/user", { credentials: "include" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as { user: AuthUser | null };
+    setSnapshot({ user: data.user ?? null, isLoading: false });
+  } catch {
+    setSnapshot({ user: null, isLoading: false });
+  }
+}
 
-  const login = useCallback(async (email: string, password: string) => {
-    const res = await fetch("/api/auth/login", {
+async function loginImpl(email: string, password: string): Promise<AuthUser> {
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = (await readJsonOrThrow(res)) as { user: AuthUser };
+  setSnapshot({ user: data.user, isLoading: false });
+  return data.user;
+}
+
+async function registerImpl(input: RegisterInput): Promise<AuthUser> {
+  const res = await fetch("/api/auth/register", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = (await readJsonOrThrow(res)) as { user: AuthUser };
+  setSnapshot({ user: data.user, isLoading: false });
+  return data.user;
+}
+
+async function logoutImpl(): Promise<void> {
+  try {
+    await fetch("/api/auth/logout", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
     });
-    const data = (await readJsonOrThrow(res)) as { user: AuthUser };
-    setUser(data.user);
-    return data.user;
-  }, []);
+  } catch {
+    /* ignore network errors on logout */
+  }
+  setSnapshot({ user: null, isLoading: false });
+}
 
-  const register = useCallback(async (input: RegisterInput) => {
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    const data = (await readJsonOrThrow(res)) as { user: AuthUser };
-    setUser(data.user);
-    return data.user;
-  }, []);
+function setUserImpl(u: AuthUser | null): void {
+  setSnapshot({ user: u, isLoading: false });
+}
 
-  const logout = useCallback(async () => {
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
-    } catch {
-      /* ignore network errors on logout */
-    }
-    setUser(null);
-  }, []);
+export function useAuth(): AuthState {
+  // Kick off the initial /me fetch exactly once for the whole app.
+  if (snapshot.isLoading && !bootstrapPromise) {
+    void bootstrap();
+  }
+  const s = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  const login = useCallback(loginImpl, []);
+  const register = useCallback(registerImpl, []);
+  const logout = useCallback(logoutImpl, []);
+  const refresh = useCallback(refreshImpl, []);
+  const setUser = useCallback(setUserImpl, []);
 
   return {
-    user,
-    isLoading,
-    isAuthenticated: !!user,
+    user: s.user,
+    isLoading: s.isLoading,
+    isAuthenticated: !!s.user,
     login,
     register,
     logout,

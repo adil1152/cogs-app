@@ -31,6 +31,10 @@ export const GetCurrentAuthUserResponse = zod.object({
       email: zod.string().email().nullable(),
       firstName: zod.string().nullable(),
       lastName: zod.string().nullable(),
+      mobile: zod
+        .string()
+        .nullable()
+        .describe("Optional mobile number. Free-form, never required."),
       profileImageUrl: zod.string().nullable(),
       role: zod.enum(["admin", "user"]),
     }),
@@ -39,58 +43,150 @@ export const GetCurrentAuthUserResponse = zod.object({
 });
 
 /**
- * @summary Start the browser OIDC login flow
+ * @summary Create an account with email and password
  */
-export const BeginBrowserLoginQueryParams = zod.object({
-  returnTo: zod.coerce.string().optional(),
+export const registerWithPasswordBodyEmailMin = 3;
+export const registerWithPasswordBodyEmailMax = 255;
+
+export const registerWithPasswordBodyPasswordMin = 8;
+export const registerWithPasswordBodyPasswordMax = 200;
+
+export const registerWithPasswordBodyFirstNameMax = 80;
+
+export const registerWithPasswordBodyLastNameMax = 80;
+
+export const registerWithPasswordBodyMobileMax = 32;
+
+export const RegisterWithPasswordBody = zod.object({
+  email: zod
+    .string()
+    .email()
+    .min(registerWithPasswordBodyEmailMin)
+    .max(registerWithPasswordBodyEmailMax),
+  password: zod
+    .string()
+    .min(registerWithPasswordBodyPasswordMin)
+    .max(registerWithPasswordBodyPasswordMax),
+  firstName: zod.string().max(registerWithPasswordBodyFirstNameMax).nullish(),
+  lastName: zod.string().max(registerWithPasswordBodyLastNameMax).nullish(),
+  mobile: zod.string().max(registerWithPasswordBodyMobileMax).nullish(),
+});
+
+export const RegisterWithPasswordResponse = zod.object({
+  user: zod.union([
+    zod.object({
+      id: zod.string(),
+      email: zod.string().email().nullable(),
+      firstName: zod.string().nullable(),
+      lastName: zod.string().nullable(),
+      mobile: zod
+        .string()
+        .nullable()
+        .describe("Optional mobile number. Free-form, never required."),
+      profileImageUrl: zod.string().nullable(),
+      role: zod.enum(["admin", "user"]),
+    }),
+    zod.null(),
+  ]),
 });
 
 /**
- * @summary Complete the browser OIDC login flow
+ * @summary Sign in with email and password
  */
-export const HandleBrowserLoginCallbackQueryParams = zod.object({
-  code: zod.coerce.string().optional(),
-  state: zod.coerce.string().optional(),
-  iss: zod.coerce.string().url().optional(),
+export const loginWithPasswordBodyEmailMin = 3;
+export const loginWithPasswordBodyEmailMax = 255;
+
+export const loginWithPasswordBodyPasswordMax = 200;
+
+export const LoginWithPasswordBody = zod.object({
+  email: zod
+    .string()
+    .email()
+    .min(loginWithPasswordBodyEmailMin)
+    .max(loginWithPasswordBodyEmailMax),
+  password: zod.string().min(1).max(loginWithPasswordBodyPasswordMax),
+});
+
+export const LoginWithPasswordResponse = zod.object({
+  user: zod.union([
+    zod.object({
+      id: zod.string(),
+      email: zod.string().email().nullable(),
+      firstName: zod.string().nullable(),
+      lastName: zod.string().nullable(),
+      mobile: zod
+        .string()
+        .nullable()
+        .describe("Optional mobile number. Free-form, never required."),
+      profileImageUrl: zod.string().nullable(),
+      role: zod.enum(["admin", "user"]),
+    }),
+    zod.null(),
+  ]),
 });
 
 /**
- * @summary Clear the session and begin OIDC logout
+ * @summary Clear the current session
  */
-export const LogoutBrowserSessionHeader = zod.object({
+export const LogoutHeader = zod.object({
   Authorization: zod
     .string()
     .optional()
     .describe("Opaque session token — `Bearer <sid>`."),
 });
 
-/**
- * @summary Exchange a mobile OIDC code for a session token
- */
-
-export const ExchangeMobileAuthorizationCodeBody = zod.object({
-  code: zod.string().min(1),
-  code_verifier: zod.string().min(1),
-  redirect_uri: zod.string().url().min(1),
-  state: zod.string().min(1),
-  nonce: zod.string().min(1).optional(),
-});
-
-export const ExchangeMobileAuthorizationCodeResponse = zod.object({
-  token: zod.string(),
+export const LogoutResponse = zod.object({
+  success: zod.boolean(),
 });
 
 /**
- * @summary Delete a mobile session token
+ * @summary Update the current user's profile (name + mobile)
  */
-export const LogoutMobileSessionHeader = zod.object({
-  Authorization: zod
+export const updateCurrentUserBodyFirstNameMax = 80;
+
+export const updateCurrentUserBodyLastNameMax = 80;
+
+export const updateCurrentUserBodyMobileMax = 32;
+
+export const UpdateCurrentUserBody = zod.object({
+  firstName: zod.string().max(updateCurrentUserBodyFirstNameMax).nullish(),
+  lastName: zod.string().max(updateCurrentUserBodyLastNameMax).nullish(),
+  mobile: zod.string().max(updateCurrentUserBodyMobileMax).nullish(),
+});
+
+export const UpdateCurrentUserResponse = zod.object({
+  id: zod.string(),
+  email: zod.string().email().nullable(),
+  firstName: zod.string().nullable(),
+  lastName: zod.string().nullable(),
+  mobile: zod
     .string()
-    .optional()
-    .describe("Opaque session token — `Bearer <sid>`."),
+    .nullable()
+    .describe("Optional mobile number. Free-form, never required."),
+  profileImageUrl: zod.string().nullable(),
+  role: zod.enum(["admin", "user"]),
 });
 
-export const LogoutMobileSessionResponse = zod.object({
+/**
+ * @summary Change the current user's password
+ */
+export const changeMyPasswordBodyCurrentPasswordMax = 200;
+
+export const changeMyPasswordBodyNewPasswordMin = 8;
+export const changeMyPasswordBodyNewPasswordMax = 200;
+
+export const ChangeMyPasswordBody = zod.object({
+  currentPassword: zod
+    .string()
+    .min(1)
+    .max(changeMyPasswordBodyCurrentPasswordMax),
+  newPassword: zod
+    .string()
+    .min(changeMyPasswordBodyNewPasswordMin)
+    .max(changeMyPasswordBodyNewPasswordMax),
+});
+
+export const ChangeMyPasswordResponse = zod.object({
   success: zod.boolean(),
 });
 
@@ -102,10 +198,97 @@ export const ListUsersResponseItem = zod.object({
   email: zod.string().email().nullable(),
   firstName: zod.string().nullable(),
   lastName: zod.string().nullable(),
+  mobile: zod
+    .string()
+    .nullable()
+    .describe("Optional mobile number. Free-form, never required."),
   profileImageUrl: zod.string().nullable(),
   role: zod.enum(["admin", "user"]),
 });
 export const ListUsersResponse = zod.array(ListUsersResponseItem);
+
+/**
+ * @summary Create a user account (admin only)
+ */
+export const createUserBodyEmailMin = 3;
+export const createUserBodyEmailMax = 255;
+
+export const createUserBodyPasswordMin = 8;
+export const createUserBodyPasswordMax = 200;
+
+export const createUserBodyFirstNameMax = 80;
+
+export const createUserBodyLastNameMax = 80;
+
+export const createUserBodyMobileMax = 32;
+
+export const createUserBodyRoleDefault = `user`;
+
+export const CreateUserBody = zod.object({
+  email: zod
+    .string()
+    .email()
+    .min(createUserBodyEmailMin)
+    .max(createUserBodyEmailMax),
+  password: zod
+    .string()
+    .min(createUserBodyPasswordMin)
+    .max(createUserBodyPasswordMax),
+  firstName: zod.string().max(createUserBodyFirstNameMax).nullish(),
+  lastName: zod.string().max(createUserBodyLastNameMax).nullish(),
+  mobile: zod.string().max(createUserBodyMobileMax).nullish(),
+  role: zod.enum(["admin", "user"]).default(createUserBodyRoleDefault),
+});
+
+/**
+ * @summary Update a user's profile, role, or password (admin only)
+ */
+export const UpdateUserParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const updateUserBodyEmailMin = 3;
+export const updateUserBodyEmailMax = 255;
+
+export const updateUserBodyFirstNameMax = 80;
+
+export const updateUserBodyLastNameMax = 80;
+
+export const updateUserBodyMobileMax = 32;
+
+export const updateUserBodyPasswordMin = 8;
+export const updateUserBodyPasswordMax = 200;
+
+export const UpdateUserBody = zod.object({
+  email: zod
+    .string()
+    .email()
+    .min(updateUserBodyEmailMin)
+    .max(updateUserBodyEmailMax)
+    .optional(),
+  firstName: zod.string().max(updateUserBodyFirstNameMax).nullish(),
+  lastName: zod.string().max(updateUserBodyLastNameMax).nullish(),
+  mobile: zod.string().max(updateUserBodyMobileMax).nullish(),
+  role: zod.enum(["admin", "user"]).optional(),
+  password: zod
+    .string()
+    .min(updateUserBodyPasswordMin)
+    .max(updateUserBodyPasswordMax)
+    .optional(),
+});
+
+export const UpdateUserResponse = zod.object({
+  id: zod.string(),
+  email: zod.string().email().nullable(),
+  firstName: zod.string().nullable(),
+  lastName: zod.string().nullable(),
+  mobile: zod
+    .string()
+    .nullable()
+    .describe("Optional mobile number. Free-form, never required."),
+  profileImageUrl: zod.string().nullable(),
+  role: zod.enum(["admin", "user"]),
+});
 
 /**
  * @summary Promote or demote a user (admin only)
@@ -123,6 +306,10 @@ export const UpdateUserRoleResponse = zod.object({
   email: zod.string().email().nullable(),
   firstName: zod.string().nullable(),
   lastName: zod.string().nullable(),
+  mobile: zod
+    .string()
+    .nullable()
+    .describe("Optional mobile number. Free-form, never required."),
   profileImageUrl: zod.string().nullable(),
   role: zod.enum(["admin", "user"]),
 });
@@ -530,6 +717,10 @@ export const ListProjectAccessResponseItem = zod.object({
     email: zod.string().email().nullable(),
     firstName: zod.string().nullable(),
     lastName: zod.string().nullable(),
+    mobile: zod
+      .string()
+      .nullable()
+      .describe("Optional mobile number. Free-form, never required."),
     profileImageUrl: zod.string().nullable(),
     role: zod.enum(["admin", "user"]),
   }),
@@ -629,6 +820,10 @@ export const UpdateProjectAccessResponse = zod.object({
     email: zod.string().email().nullable(),
     firstName: zod.string().nullable(),
     lastName: zod.string().nullable(),
+    mobile: zod
+      .string()
+      .nullable()
+      .describe("Optional mobile number. Free-form, never required."),
     profileImageUrl: zod.string().nullable(),
     role: zod.enum(["admin", "user"]),
   }),
@@ -1562,6 +1757,10 @@ export const ListProjectApproversResponseItem = zod.object({
     email: zod.string().email().nullable(),
     firstName: zod.string().nullable(),
     lastName: zod.string().nullable(),
+    mobile: zod
+      .string()
+      .nullable()
+      .describe("Optional mobile number. Free-form, never required."),
     profileImageUrl: zod.string().nullable(),
     role: zod.enum(["admin", "user"]),
   }),
@@ -1597,6 +1796,10 @@ export const SetProjectApproversResponseItem = zod.object({
     email: zod.string().email().nullable(),
     firstName: zod.string().nullable(),
     lastName: zod.string().nullable(),
+    mobile: zod
+      .string()
+      .nullable()
+      .describe("Optional mobile number. Free-form, never required."),
     profileImageUrl: zod.string().nullable(),
     role: zod.enum(["admin", "user"]),
   }),

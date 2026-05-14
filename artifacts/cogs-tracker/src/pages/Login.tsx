@@ -1,11 +1,33 @@
+import { useState } from "react";
+import { Link } from "wouter";
 import { useAuth } from "@workspace/replit-auth-web";
 import { Button } from "@/components/ui/button";
-import { Activity, BarChart3, Lock, Utensils } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Activity, BarChart3, Lock, Utensils, Loader2 } from "lucide-react";
 import { QncLogo } from "@/components/QncLogo";
 import { ThemeToggle } from "@/components/ThemeProvider";
 
 export default function Login() {
   const { login } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await login(email.trim(), password);
+      // useAuth.setUser will flip Gate; nothing else to do.
+    } catch (err: any) {
+      setError(err?.message ?? "Sign-in failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-sidebar text-sidebar-foreground grid lg:grid-cols-2 relative">
@@ -27,31 +49,83 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="max-w-md">
-          <h1 className="text-4xl lg:text-5xl font-semibold tracking-tight leading-[1.1]">
-            Daily mandays.
-            <br />
-            <span className="text-sidebar-primary">Real costs.</span>
-            <br />
-            One screen.
+        <div className="max-w-md w-full">
+          <h1 className="text-3xl lg:text-4xl font-semibold tracking-tight leading-[1.1] mb-2">
+            Welcome back.
           </h1>
-          <p className="mt-5 text-sidebar-foreground/70 text-base leading-relaxed">
-            Track meals, mandays and service spend across every project you run — with a security
-            field that lets admins decide exactly who sees each project's report.
+          <p className="text-sidebar-foreground/70 text-sm mb-8">
+            Sign in to your COGS tracker account.
           </p>
-          <div className="mt-8 space-y-3">
+
+          <form onSubmit={onSubmit} className="space-y-4" data-testid="form-login">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-sidebar-foreground/80">
+                Email
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="bg-sidebar-accent/30 border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-foreground/40"
+                placeholder="you@company.com"
+                data-testid="input-login-email"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-sidebar-foreground/80">
+                Password
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                minLength={1}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="bg-sidebar-accent/30 border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-foreground/40"
+                placeholder="••••••••"
+                data-testid="input-login-password"
+              />
+            </div>
+            {error && (
+              <p
+                className="text-sm text-destructive"
+                data-testid="text-login-error"
+              >
+                {error}
+              </p>
+            )}
             <Button
+              type="submit"
               size="lg"
-              onClick={login}
+              disabled={submitting}
               className="w-full bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
               data-testid="button-login"
             >
-              Log in with Replit
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Signing in…
+                </>
+              ) : (
+                "Sign in"
+              )}
             </Button>
-            <p className="text-xs text-sidebar-foreground/50">
-              The first user to log in becomes the admin.
+            <p className="text-sm text-sidebar-foreground/60 text-center">
+              Don't have an account?{" "}
+              <Link
+                href="/register"
+                className="text-sidebar-primary hover:underline font-medium"
+                data-testid="link-register"
+              >
+                Create one
+              </Link>
             </p>
-          </div>
+          </form>
         </div>
 
         <div className="text-xs text-sidebar-foreground/40">

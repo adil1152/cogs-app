@@ -24,6 +24,11 @@ export interface AuthUser {
   firstName: string | null;
   /** @nullable */
   lastName: string | null;
+  /**
+   * Optional mobile number. Free-form, never required.
+   * @nullable
+   */
+  mobile: string | null;
   /** @nullable */
   profileImageUrl: string | null;
   role: AuthUserRole;
@@ -33,33 +38,167 @@ export interface AuthUserEnvelope {
   user: AuthUser | null;
 }
 
-export interface MobileTokenExchangeRequest {
-  /** @minLength 1 */
-  code: string;
-  /** @minLength 1 */
-  code_verifier: string;
-  /** @minLength 1 */
-  redirect_uri: string;
-  /** @minLength 1 */
-  state: string;
-  /** @minLength 1 */
-  nonce?: string;
+export interface RegisterBody {
+  /**
+   * @minLength 3
+   * @maxLength 255
+   */
+  email: string;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  password: string;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  firstName?: string | null;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  lastName?: string | null;
+  /**
+   * @maxLength 32
+   * @nullable
+   */
+  mobile?: string | null;
 }
 
-export interface MobileTokenExchangeSuccess {
-  token: string;
+export interface LoginBody {
+  /**
+   * @minLength 3
+   * @maxLength 255
+   */
+  email: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  password: string;
 }
 
-export const LogoutSuccessValue = {
+export const LogoutResponseValue = {
   success: true,
 } as const;
-export type LogoutSuccess = typeof LogoutSuccessValue;
+export type LogoutResponse = typeof LogoutResponseValue;
+
+export const SuccessResponseValue = {
+  success: true,
+} as const;
+export type SuccessResponse = typeof SuccessResponseValue;
+
+export interface UpdateMeBody {
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  firstName?: string | null;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  lastName?: string | null;
+  /**
+   * @maxLength 32
+   * @nullable
+   */
+  mobile?: string | null;
+}
+
+export interface ChangePasswordBody {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  currentPassword: string;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  newPassword: string;
+}
 
 export interface ErrorEnvelope {
   error: string;
 }
 
 export type AppUser = AuthUser;
+
+export type CreateUserBodyRole =
+  (typeof CreateUserBodyRole)[keyof typeof CreateUserBodyRole];
+
+export const CreateUserBodyRole = {
+  admin: "admin",
+  user: "user",
+} as const;
+
+export interface CreateUserBody {
+  /**
+   * @minLength 3
+   * @maxLength 255
+   */
+  email: string;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  password: string;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  firstName?: string | null;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  lastName?: string | null;
+  /**
+   * @maxLength 32
+   * @nullable
+   */
+  mobile?: string | null;
+  role?: CreateUserBodyRole;
+}
+
+export type UpdateUserBodyRole =
+  (typeof UpdateUserBodyRole)[keyof typeof UpdateUserBodyRole];
+
+export const UpdateUserBodyRole = {
+  admin: "admin",
+  user: "user",
+} as const;
+
+export interface UpdateUserBody {
+  /**
+   * @minLength 3
+   * @maxLength 255
+   */
+  email?: string;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  firstName?: string | null;
+  /**
+   * @maxLength 80
+   * @nullable
+   */
+  lastName?: string | null;
+  /**
+   * @maxLength 32
+   * @nullable
+   */
+  mobile?: string | null;
+  role?: UpdateUserBodyRole;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  password?: string;
+}
 
 export type UpdateUserRoleBodyRole =
   (typeof UpdateUserRoleBodyRole)[keyof typeof UpdateUserRoleBodyRole];
@@ -756,16 +895,6 @@ export interface TrendsReport {
  * Opaque session token — `Bearer <sid>`.
  */
 export type AuthorizationSessionHeaderParameter = string;
-
-export type BeginBrowserLoginParams = {
-  returnTo?: string;
-};
-
-export type HandleBrowserLoginCallbackParams = {
-  code?: string;
-  state?: string;
-  iss?: string;
-};
 
 export type ListProjectEntriesParams = {
   from?: string;

@@ -15,6 +15,11 @@ export interface AuthUser {
   firstName: string | null;
   /** @nullable */
   lastName: string | null;
+  /**
+   * Optional mobile number. Free-form, never required.
+   * @nullable
+   */
+  mobile: string | null;
   /** @nullable */
   profileImageUrl: string | null;
   role: AuthUserRole;

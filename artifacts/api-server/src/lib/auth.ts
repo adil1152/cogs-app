@@ -1,31 +1,14 @@
-import * as client from "openid-client";
 import crypto from "crypto";
 import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { AuthUser } from "@workspace/api-zod";
 
-export const ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 export const SESSION_COOKIE = "sid";
 export const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 
 export interface SessionData {
   user: AuthUser;
-  access_token: string;
-  refresh_token?: string;
-  expires_at?: number;
-}
-
-let oidcConfig: client.Configuration | null = null;
-
-export async function getOidcConfig(): Promise<client.Configuration> {
-  if (!oidcConfig) {
-    oidcConfig = await client.discovery(
-      new URL(ISSUER_URL),
-      process.env.REPL_ID!,
-    );
-  }
-  return oidcConfig;
 }
 
 export async function createSession(data: SessionData): Promise<string> {
@@ -52,14 +35,14 @@ export async function getSession(sid: string): Promise<SessionData | null> {
   return row.sess as unknown as SessionData;
 }
 
-export async function updateSession(
+export async function updateSessionUser(
   sid: string,
-  data: SessionData,
+  user: AuthUser,
 ): Promise<void> {
   await db
     .update(sessionsTable)
     .set({
-      sess: data as unknown as Record<string, unknown>,
+      sess: { user } as unknown as Record<string, unknown>,
       expire: new Date(Date.now() + SESSION_TTL),
     })
     .where(eq(sessionsTable.sid, sid));
@@ -67,6 +50,17 @@ export async function updateSession(
 
 export async function deleteSession(sid: string): Promise<void> {
   await db.delete(sessionsTable).where(eq(sessionsTable.sid, sid));
+}
+
+/**
+ * Delete every session belonging to a given user. Used after admin role / password
+ * changes so a demoted admin can't keep their old privileges (or a reset user can't
+ * keep using their old credentials) until the cookie's natural expiry.
+ */
+export async function deleteSessionsForUser(userId: string): Promise<void> {
+  await db
+    .delete(sessionsTable)
+    .where(sql`${sessionsTable.sess}->'user'->>'id' = ${userId}`);
 }
 
 export async function clearSession(
@@ -83,4 +77,14 @@ export function getSessionId(req: Request): string | undefined {
     return authHeader.slice(7);
   }
   return req.cookies?.[SESSION_COOKIE];
+}
+
+export function setSessionCookie(res: Response, sid: string) {
+  res.cookie(SESSION_COOKIE, sid, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL,
+  });
 }

@@ -57,106 +57,129 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthUserEnvelope'
-  /login:
-    get:
-      tags: [Auth]
-      operationId: beginBrowserLogin
-      summary: Start the browser OIDC login flow
-      parameters:
-        - name: returnTo
-          in: query
-          required: false
-          schema:
-            type: string
-      responses:
-        '302':
-          description: Redirect to the OIDC authorization endpoint.
-  /callback:
-    get:
-      tags: [Auth]
-      operationId: handleBrowserLoginCallback
-      summary: Complete the browser OIDC login flow
-      parameters:
-        - name: code
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: state
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: iss
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uri
-      responses:
-        '302':
-          description: Redirect to returnTo or login on failure.
-  /logout:
-    get:
-      tags: [Auth]
-      operationId: logoutBrowserSession
-      summary: Clear the session and begin OIDC logout
-      parameters:
-        - $ref: '#/components/parameters/AuthorizationSessionHeader'
-        - $ref: '#/components/parameters/SessionCookie'
-      responses:
-        '302':
-          description: Redirect to OIDC logout URL.
-  /mobile-auth/token-exchange:
+  /auth/register:
     post:
       tags: [Auth]
-      operationId: exchangeMobileAuthorizationCode
-      summary: Exchange a mobile OIDC code for a session token
+      operationId: registerWithPassword
+      summary: Create an account with email and password
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MobileTokenExchangeRequest'
+              $ref: '#/components/schemas/RegisterBody'
       responses:
         '200':
-          description: Session created
+          description: Registered and signed in
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MobileTokenExchangeSuccess'
+                $ref: '#/components/schemas/AuthUserEnvelope'
         '400':
-          description: Bad request
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Email already taken with a password set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: loginWithPassword
+      summary: Sign in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginBody'
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserEnvelope'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Clear the current session
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Session cleared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+  /auth/me:
+    patch:
+      tags: [Auth]
+      operationId: updateCurrentUser
+      summary: Update the current user's profile (name + mobile)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeBody'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/me/password:
+    post:
+      tags: [Auth]
+      operationId: changeMyPassword
+      summary: Change the current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordBody'
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Validation error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '401':
-          description: Unauthorized
+          description: Current password did not match
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-        '500':
-          description: Server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-  /mobile-auth/logout:
-    post:
-      tags: [Auth]
-      operationId: logoutMobileSession
-      summary: Delete a mobile session token
-      parameters:
-        - $ref: '#/components/parameters/AuthorizationSessionHeader'
-      responses:
-        '200':
-          description: Logout processed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LogoutSuccess'
 
   /users:
     get:
@@ -172,6 +195,65 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/AppUser'
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Create a user account (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppUser'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /users/{id}:
+    patch:
+      tags: [Users]
+      operationId: updateUser
+      summary: Update a user's profile, role, or password (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppUser'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /users/{id}/role:
     patch:
       tags: [Users]
@@ -1293,7 +1375,7 @@ components:
 
     AuthUser:
       type: object
-      required: [id, email, firstName, lastName, profileImageUrl, role]
+      required: [id, email, firstName, lastName, mobile, profileImageUrl, role]
       properties:
         id:
           type: string
@@ -1304,6 +1386,9 @@ components:
           type: [string, 'null']
         lastName:
           type: [string, 'null']
+        mobile:
+          type: [string, 'null']
+          description: Optional mobile number. Free-form, never required.
         profileImageUrl:
           type: [string, 'null']
         role:
@@ -1317,27 +1402,59 @@ components:
           oneOf:
             - $ref: '#/components/schemas/AuthUser'
             - type: 'null'
-    MobileTokenExchangeRequest:
+    RegisterBody:
       type: object
-      required: [code, code_verifier, redirect_uri, state]
+      required: [email, password]
       properties:
-        code: { type: string, minLength: 1 }
-        code_verifier: { type: string, minLength: 1 }
-        redirect_uri: { type: string, minLength: 1, format: uri }
-        state: { type: string, minLength: 1 }
-        nonce: { type: string, minLength: 1 }
-    MobileTokenExchangeSuccess:
+        email: { type: string, format: email, minLength: 3, maxLength: 255 }
+        password: { type: string, minLength: 8, maxLength: 200 }
+        firstName:
+          type: [string, 'null']
+          maxLength: 80
+        lastName:
+          type: [string, 'null']
+          maxLength: 80
+        mobile:
+          type: [string, 'null']
+          maxLength: 32
+    LoginBody:
       type: object
-      required: [token]
+      required: [email, password]
       properties:
-        token: { type: string }
-    LogoutSuccess:
+        email: { type: string, format: email, minLength: 3, maxLength: 255 }
+        password: { type: string, minLength: 1, maxLength: 200 }
+    LogoutResponse:
       type: object
       required: [success]
       properties:
         success:
           type: boolean
           const: true
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    UpdateMeBody:
+      type: object
+      properties:
+        firstName:
+          type: [string, 'null']
+          maxLength: 80
+        lastName:
+          type: [string, 'null']
+          maxLength: 80
+        mobile:
+          type: [string, 'null']
+          maxLength: 32
+    ChangePasswordBody:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 1, maxLength: 200 }
+        newPassword: { type: string, minLength: 8, maxLength: 200 }
     ErrorEnvelope:
       type: object
       required: [error]
@@ -1346,6 +1463,49 @@ components:
 
     AppUser:
       $ref: '#/components/schemas/AuthUser'
+    CreateUserBody:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, minLength: 3, maxLength: 255 }
+        password: { type: string, minLength: 8, maxLength: 200 }
+        firstName:
+          type: [string, 'null']
+          maxLength: 80
+        lastName:
+          type: [string, 'null']
+          maxLength: 80
+        mobile:
+          type: [string, 'null']
+          maxLength: 32
+        role:
+          type: string
+          enum: [admin, user]
+          default: user
+    UpdateUserBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 255
+        firstName:
+          type: [string, 'null']
+          maxLength: 80
+        lastName:
+          type: [string, 'null']
+          maxLength: 80
+        mobile:
+          type: [string, 'null']
+          maxLength: 32
+        role:
+          type: string
+          enum: [admin, user]
+        password:
+          type: string
+          minLength: 8
+          maxLength: 200
     UpdateUserRoleBody:
       type: object
       required: [role]

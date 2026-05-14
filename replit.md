@@ -58,14 +58,32 @@ Shared libs:
 
 ## Auth
 
-- Replit OIDC via openid-client. Cookie-session, server-side session storage.
-- The first user to log in is automatically promoted to `admin`. All others default to `user`.
-- Admins can promote/demote users at `/admin/users`.
+- Email + password (bcrypt). Cookie-session (`sid`), server-side session storage in `sessions`.
+- Public `/register` page for self-signup. The first user to register is automatically promoted
+  to `admin`; all others default to `user`. The check + insert happen in the same transaction.
+- Legacy rows from the previous OIDC setup (no `password_hash`) cannot be claimed via
+  `/register` — that would let anyone seize a coworker's account by knowing their email.
+  Migration is an admin task: delete the row, or set a password via `PATCH /users/:id`.
+- The bootstrap path is serialized with a transaction-scoped advisory lock so two concurrent
+  first registrations can never both be promoted to admin.
+- Role changes and admin-issued password resets immediately invalidate all of the target
+  user's existing sessions, so a demoted admin can't keep elevated access until the cookie
+  expires.
+- `users.mobile` is a free-form, optional varchar — never required by the API.
+- `/account` lets the signed-in user edit name + mobile and change their own password.
+- Admins manage all users at `/admin/users`: create accounts (email + password + role +
+  optional mobile), edit any user's profile, set a new password, and promote/demote roles.
 
 ## Backend route map
 
-- `GET /api/auth/user`, `/api/login`, `/api/logout`, `/api/callback`
-- `GET /api/users` (admin), `PATCH /api/users/:id/role` (admin)
+- `GET /api/auth/user`
+- `POST /api/auth/register` (public), `POST /api/auth/login` (public),
+  `POST /api/auth/logout`
+- `PATCH /api/auth/me` (self profile: name + mobile),
+  `POST /api/auth/me/password` (self password change)
+- `GET /api/users` (admin), `POST /api/users` (admin create with password),
+  `PATCH /api/users/:id` (admin update profile / role / password),
+  `PATCH /api/users/:id/role` (admin)
 - `GET /api/projects`, `POST /api/projects` (admin)
 - `GET /api/projects/:id`, `PATCH /api/projects/:id`, `DELETE /api/projects/:id` (admin)
 - `GET /api/projects/:id/services`, `POST /api/projects/:id/services` (admin)
@@ -129,7 +147,9 @@ Shared libs:
   Project total column and a Totals row across projects. Date range + project +
   service multi-select filters, metric toggles, frozen Project/Location columns,
   styled .xlsx export.
-- `/admin/users` — Admin role management
+- `/login`, `/register` — public auth pages (form-based; no OIDC redirect)
+- `/account` — Profile + change password (mobile is the only profile field shown)
+- `/admin/users` — Admin user management: add user, edit profile, set password, change role
 - `/admin/security-groups` — Admin security-group templates (create / edit / delete)
 
 ## Visual identity

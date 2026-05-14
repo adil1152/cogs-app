@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type BeginBrowserLoginParams = {
-  returnTo?: string;
-};
+export const SuccessResponseValue = {
+  success: true,
+} as const;
+export type SuccessResponse = typeof SuccessResponseValue;

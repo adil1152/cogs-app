@@ -1,95 +1,49 @@
-import * as oidc from "openid-client";
 import { Router, type IRouter, type Request, type Response } from "express";
+import bcrypt from "bcryptjs";
 import {
   GetCurrentAuthUserResponse,
-  ExchangeMobileAuthorizationCodeBody,
-  ExchangeMobileAuthorizationCodeResponse,
-  LogoutMobileSessionResponse,
+  RegisterWithPasswordBody as RegisterBody,
+  LoginWithPasswordBody as LoginBody,
+  LogoutResponse,
+  UpdateCurrentUserBody as UpdateMeBody,
+  ChangeMyPasswordBody as ChangePasswordBody,
 } from "@workspace/api-zod";
 import { db, usersTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import {
   clearSession,
-  getOidcConfig,
   getSessionId,
   createSession,
-  deleteSession,
-  SESSION_COOKIE,
-  SESSION_TTL,
-  ISSUER_URL,
+  setSessionCookie,
+  updateSessionUser,
   type SessionData,
 } from "../lib/auth";
-
-const OIDC_COOKIE_TTL = 10 * 60 * 1000;
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
-function getOrigin(req: Request): string {
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host =
-    req.headers["x-forwarded-host"] || req.headers["host"] || "localhost";
-  return `${proto}://${host}`;
-}
+const BCRYPT_ROUNDS = 10;
 
-function setSessionCookie(res: Response, sid: string) {
-  res.cookie(SESSION_COOKIE, sid, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_TTL,
-  });
-}
-
-function setOidcCookie(res: Response, name: string, value: string) {
-  res.cookie(name, value, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: OIDC_COOKIE_TTL,
-  });
-}
-
-function getSafeReturnTo(value: unknown): string {
-  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
-  }
-  return value;
-}
-
-async function upsertUser(claims: Record<string, unknown>) {
-  const userData = {
-    id: claims.sub as string,
-    email: (claims.email as string) || null,
-    firstName: (claims.first_name as string) || null,
-    lastName: (claims.last_name as string) || null,
-    profileImageUrl: (claims.profile_image_url || claims.picture) as
-      | string
-      | null,
+function toAuthUser(u: typeof usersTable.$inferSelect) {
+  return {
+    id: u.id,
+    email: u.email,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    mobile: u.mobile,
+    profileImageUrl: u.profileImageUrl,
+    role: (u.role as "admin" | "user") ?? "user",
   };
+}
 
-  // First user becomes admin automatically — done inside a transaction
-  // so concurrent first logins can't both win.
-  return await db.transaction(async (tx) => {
-    const existing = await tx
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .limit(1);
-    const isFirstUser = existing.length === 0;
+function normEmail(s: string): string {
+  return s.trim().toLowerCase();
+}
 
-    const [user] = await tx
-      .insert(usersTable)
-      .values({ ...userData, role: isFirstUser ? "admin" : "user" })
-      .onConflictDoUpdate({
-        target: usersTable.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
-  });
+function normMobile(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const t = s.trim();
+  return t.length > 0 ? t : null;
 }
 
 router.get("/auth/user", (req: Request, res: Response) => {
@@ -100,185 +54,173 @@ router.get("/auth/user", (req: Request, res: Response) => {
   );
 });
 
-router.get("/login", async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
-  const callbackUrl = `${getOrigin(req)}/api/callback`;
-
-  const returnTo = getSafeReturnTo(req.query.returnTo);
-
-  const state = oidc.randomState();
-  const nonce = oidc.randomNonce();
-  const codeVerifier = oidc.randomPKCECodeVerifier();
-  const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
-
-  const redirectTo = oidc.buildAuthorizationUrl(config, {
-    redirect_uri: callbackUrl,
-    scope: "openid email profile offline_access",
-    code_challenge: codeChallenge,
-    code_challenge_method: "S256",
-    prompt: "login consent",
-    state,
-    nonce,
-  });
-
-  setOidcCookie(res, "code_verifier", codeVerifier);
-  setOidcCookie(res, "nonce", nonce);
-  setOidcCookie(res, "state", state);
-  setOidcCookie(res, "return_to", returnTo);
-
-  res.redirect(redirectTo.href);
-});
-
-// Query params are not validated because the OIDC provider may include
-// parameters not expressed in the schema.
-router.get("/callback", async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
-  const callbackUrl = `${getOrigin(req)}/api/callback`;
-
-  const codeVerifier = req.cookies?.code_verifier;
-  const nonce = req.cookies?.nonce;
-  const expectedState = req.cookies?.state;
-
-  if (!codeVerifier || !expectedState) {
-    res.redirect("/api/login");
+router.post("/auth/register", async (req: Request, res: Response) => {
+  const parsed = RegisterBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid registration details" });
     return;
   }
+  const email = normEmail(parsed.data.email);
+  const passwordHash = await bcrypt.hash(parsed.data.password, BCRYPT_ROUNDS);
 
-  const currentUrl = new URL(
-    `${callbackUrl}?${new URL(req.url, `http://${req.headers.host}`).searchParams}`,
-  );
-
-  let tokens: oidc.TokenEndpointResponse & oidc.TokenEndpointResponseHelpers;
+  let user: typeof usersTable.$inferSelect;
   try {
-    tokens = await oidc.authorizationCodeGrant(config, currentUrl, {
-      pkceCodeVerifier: codeVerifier,
-      expectedNonce: nonce,
-      expectedState,
-      idTokenExpected: true,
+    // We hold a transaction-scoped advisory lock so that the
+    // "is this the first user?" check + insert is serialized across
+    // concurrent registrations — otherwise two parallel POSTs could both
+    // observe count=0 and both be promoted to admin. The lock key is an
+    // arbitrary fixed integer; only register touches it.
+    user = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(479201742)`);
+
+      const [existing] = await tx
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(eq(usersTable.email, email));
+
+      // We never let an unauthenticated caller "claim" an existing user row,
+      // even if the row has no password_hash (legacy from the old OIDC setup).
+      // That would let anyone seize a coworker's account by knowing their email.
+      // Migration of legacy rows is an admin task: an admin can delete the row
+      // or set a password via /users/:id, then hand the credentials over.
+      if (existing) {
+        const e = new Error("Email already registered") as Error & {
+          httpStatus: number;
+        };
+        e.httpStatus = 409;
+        throw e;
+      }
+
+      const [{ count }] = await tx
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(usersTable);
+      const isFirstUser = count === 0;
+
+      const [inserted] = await tx
+        .insert(usersTable)
+        .values({
+          email,
+          passwordHash,
+          firstName: parsed.data.firstName ?? null,
+          lastName: parsed.data.lastName ?? null,
+          mobile: normMobile(parsed.data.mobile),
+          role: isFirstUser ? "admin" : "user",
+        })
+        .returning();
+      return inserted;
     });
-  } catch {
-    res.redirect("/api/login");
-    return;
+  } catch (err) {
+    const status = (err as { httpStatus?: number }).httpStatus;
+    const code = (err as { code?: string }).code;
+    if (status === 409 || code === "23505") {
+      res.status(409).json({ error: "Email already registered" });
+      return;
+    }
+    throw err;
   }
 
-  const returnTo = getSafeReturnTo(req.cookies?.return_to);
-
-  res.clearCookie("code_verifier", { path: "/" });
-  res.clearCookie("nonce", { path: "/" });
-  res.clearCookie("state", { path: "/" });
-  res.clearCookie("return_to", { path: "/" });
-
-  const claims = tokens.claims();
-  if (!claims) {
-    res.redirect("/api/login");
-    return;
-  }
-
-  const dbUser = await upsertUser(
-    claims as unknown as Record<string, unknown>,
-  );
-
-  const now = Math.floor(Date.now() / 1000);
-  const sessionData: SessionData = {
-    user: {
-      id: dbUser.id,
-      email: dbUser.email,
-      firstName: dbUser.firstName,
-      lastName: dbUser.lastName,
-      profileImageUrl: dbUser.profileImageUrl,
-      role: (dbUser.role as "admin" | "user") ?? "user",
-    },
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
-    expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp,
-  };
-
+  const sessionData: SessionData = { user: toAuthUser(user) };
   const sid = await createSession(sessionData);
   setSessionCookie(res, sid);
-  res.redirect(returnTo);
+  res.json({ user: sessionData.user });
 });
 
-router.get("/logout", async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
-  const origin = getOrigin(req);
+router.post("/auth/login", async (req: Request, res: Response) => {
+  const parsed = LoginBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid login details" });
+    return;
+  }
+  const email = normEmail(parsed.data.email);
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email));
 
+  if (!user || !user.passwordHash) {
+    res.status(401).json({ error: "Invalid email or password" });
+    return;
+  }
+  const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
+  if (!ok) {
+    res.status(401).json({ error: "Invalid email or password" });
+    return;
+  }
+
+  const sessionData: SessionData = { user: toAuthUser(user) };
+  const sid = await createSession(sessionData);
+  setSessionCookie(res, sid);
+  res.json({ user: sessionData.user });
+});
+
+router.post("/auth/logout", async (req: Request, res: Response) => {
   const sid = getSessionId(req);
   await clearSession(res, sid);
+  res.json(LogoutResponse.parse({ success: true }));
+});
 
-  const endSessionUrl = oidc.buildEndSessionUrl(config, {
-    client_id: process.env.REPL_ID!,
-    post_logout_redirect_uri: origin,
-  });
+router.patch("/auth/me", requireAuth, async (req: Request, res: Response) => {
+  const parsed = UpdateMeBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid profile details" });
+    return;
+  }
+  const update: Partial<typeof usersTable.$inferInsert> = { updatedAt: new Date() };
+  if ("firstName" in parsed.data) update.firstName = parsed.data.firstName ?? null;
+  if ("lastName" in parsed.data) update.lastName = parsed.data.lastName ?? null;
+  if ("mobile" in parsed.data) update.mobile = normMobile(parsed.data.mobile);
 
-  res.redirect(endSessionUrl.href);
+  const [updated] = await db
+    .update(usersTable)
+    .set(update)
+    .where(eq(usersTable.id, req.user!.id))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const newUser = toAuthUser(updated);
+  const sid = getSessionId(req);
+  if (sid) await updateSessionUser(sid, newUser);
+  res.json(newUser);
 });
 
 router.post(
-  "/mobile-auth/token-exchange",
+  "/auth/me/password",
+  requireAuth,
   async (req: Request, res: Response) => {
-    const parsed = ExchangeMobileAuthorizationCodeBody.safeParse(req.body);
+    const parsed = ChangePasswordBody.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ error: "Missing or invalid required parameters" });
+      res
+        .status(400)
+        .json({ error: "Password must be at least 8 characters long" });
       return;
     }
-
-    const { code, code_verifier, redirect_uri, state, nonce } = parsed.data;
-
-    try {
-      const config = await getOidcConfig();
-
-      const callbackUrl = new URL(redirect_uri);
-      callbackUrl.searchParams.set("code", code);
-      callbackUrl.searchParams.set("state", state);
-      callbackUrl.searchParams.set("iss", ISSUER_URL);
-
-      const tokens = await oidc.authorizationCodeGrant(config, callbackUrl, {
-        pkceCodeVerifier: code_verifier,
-        expectedNonce: nonce ?? undefined,
-        expectedState: state,
-        idTokenExpected: true,
-      });
-
-      const claims = tokens.claims();
-      if (!claims) {
-        res.status(401).json({ error: "No claims in ID token" });
-        return;
-      }
-
-      const dbUser = await upsertUser(
-        claims as unknown as Record<string, unknown>,
-      );
-
-      const now = Math.floor(Date.now() / 1000);
-      const sessionData: SessionData = {
-        user: {
-          id: dbUser.id,
-          email: dbUser.email,
-          firstName: dbUser.firstName,
-          lastName: dbUser.lastName,
-          profileImageUrl: dbUser.profileImageUrl,
-          role: (dbUser.role as "admin" | "user") ?? "user",
-        },
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp,
-      };
-
-      const sid = await createSession(sessionData);
-      res.json(ExchangeMobileAuthorizationCodeResponse.parse({ token: sid }));
-    } catch (err) {
-      req.log.error({ err }, "Mobile token exchange error");
-      res.status(500).json({ error: "Token exchange failed" });
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, req.user!.id));
+    if (!user || !user.passwordHash) {
+      res.status(401).json({ error: "Account has no password set" });
+      return;
     }
+    const ok = await bcrypt.compare(
+      parsed.data.currentPassword,
+      user.passwordHash,
+    );
+    if (!ok) {
+      res.status(401).json({ error: "Current password is incorrect" });
+      return;
+    }
+    const newHash = await bcrypt.hash(parsed.data.newPassword, BCRYPT_ROUNDS);
+    await db
+      .update(usersTable)
+      .set({ passwordHash: newHash, updatedAt: new Date() })
+      .where(eq(usersTable.id, user.id));
+    res.json({ success: true });
   },
 );
-
-router.post("/mobile-auth/logout", async (req: Request, res: Response) => {
-  const sid = getSessionId(req);
-  if (sid) {
-    await deleteSession(sid);
-  }
-  res.json(LogoutMobileSessionResponse.parse({ success: true }));
-});
 
 export default router;

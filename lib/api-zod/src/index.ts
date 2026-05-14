@@ -20,9 +20,6 @@ export type {
   ErrorEnvelope,
   GrantAccessBody,
   HealthStatus,
-  LogoutSuccess,
-  MobileTokenExchangeRequest,
-  MobileTokenExchangeSuccess,
   Project,
   ProjectAccess,
   ProjectDetail,
@@ -43,6 +40,7 @@ export type {
   ServiceCostInputKind,
   ServiceTotal,
   ServiceTotalKind,
+  SuccessResponse,
   UploadUrlRequest,
   UploadUrlResponse,
 } from "./generated/types";

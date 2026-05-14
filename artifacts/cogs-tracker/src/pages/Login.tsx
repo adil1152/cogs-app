@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useAuth } from "@workspace/replit-auth-web";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Activity, BarChart3, Lock, Utensils, Loader2 } from "lucide-react";
 import { QncLogo } from "@/components/QncLogo";
@@ -78,9 +79,8 @@ export default function Login() {
               <Label htmlFor="password" className="text-sidebar-foreground/80">
                 Password
               </Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 autoComplete="current-password"
                 required
                 minLength={1}

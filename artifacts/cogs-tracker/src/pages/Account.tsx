@@ -4,6 +4,7 @@ import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -186,9 +187,8 @@ export default function Account() {
             <form onSubmit={changePassword} className="space-y-4" data-testid="form-password">
               <div className="space-y-1.5">
                 <Label htmlFor="pw-cur">Current password</Label>
-                <Input
+                <PasswordInput
                   id="pw-cur"
-                  type="password"
                   autoComplete="current-password"
                   required
                   value={currentPassword}
@@ -199,9 +199,8 @@ export default function Account() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="pw-new">New password</Label>
-                  <Input
+                  <PasswordInput
                     id="pw-new"
-                    type="password"
                     autoComplete="new-password"
                     required
                     minLength={8}
@@ -212,9 +211,8 @@ export default function Account() {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="pw-confirm">Confirm new password</Label>
-                  <Input
+                  <PasswordInput
                     id="pw-confirm"
-                    type="password"
                     autoComplete="new-password"
                     required
                     minLength={8}

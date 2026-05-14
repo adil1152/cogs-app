@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -317,8 +318,7 @@ export default function AdminUsers() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Password</Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   required
                   minLength={8}
                   value={form.password}
@@ -415,8 +415,7 @@ export default function AdminUsers() {
                     (leave blank to keep current)
                   </span>
                 </Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   minLength={editForm.password ? 8 : undefined}
                   value={editForm.password}
                   onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}

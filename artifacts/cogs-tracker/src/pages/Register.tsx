@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useAuth } from "@workspace/replit-auth-web";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { QncLogo } from "@/components/QncLogo";
@@ -124,9 +125,8 @@ export default function Register() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pw" className="text-sidebar-foreground/80">Password</Label>
-            <Input
+            <PasswordInput
               id="pw"
-              type="password"
               autoComplete="new-password"
               required
               minLength={8}
@@ -139,9 +139,8 @@ export default function Register() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pw2" className="text-sidebar-foreground/80">Confirm password</Label>
-            <Input
+            <PasswordInput
               id="pw2"
-              type="password"
               autoComplete="new-password"
               required
               minLength={8}

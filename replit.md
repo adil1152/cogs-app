@@ -9,6 +9,15 @@ service contracts (catering, cleaning, security, transport, etc.).
 - Food services use a meal-weighted manday formula:
   `breakfast × 0.2 + (lunch + dinner + midnight + meal box) × 0.4`
 - Standard services use a flat daily cost.
+- **Group services** ("Group services" kind) are admin-defined containers of
+  named sub-services. Each sub-service captures its own cost + mandays per
+  daily entry; the parent row's totals are the **sums** of its sub-rows. Sub-
+  items live in `service_sub_items` and per-entry values in
+  `sub_service_cost_entries`. Renames and reorders are always allowed; **add /
+  remove of sub-items is locked once any cost entry references the parent
+  service** (backend returns 409, UI disables the buttons via the new
+  `ProjectService.hasEntries` flag computed in `serializeMany`). The entry
+  detail surfaces sub-breakdowns inline on the entry edit page.
 - Cost-per-manday = total cost / total mandays (gracefully handles 0 mandays).
 - Dashboard with today / week-to-date / month-to-date KPIs, a 30-day trend, and service +
   project breakdowns.
@@ -151,6 +160,14 @@ Shared libs:
 - `/account` — Profile + change password (mobile is the only profile field shown)
 - `/admin/users` — Admin user management: add user, edit profile, set password, change role
 - `/admin/security-groups` — Admin security-group templates (create / edit / delete)
+
+## Project navigation
+
+Both `/projects/:id` and `/projects/:id/summary` show ←/→ chevrons next to the
+project title (`ProjectSwitcher` + `useProjectSwitcher`). Order is by project
+name, navigation wraps around at the ends, and global ←/→ keypresses are also
+bound (ignored when typing in inputs/textarea/select/contenteditable or with
+modifier keys held).
 
 ## Visual identity
 

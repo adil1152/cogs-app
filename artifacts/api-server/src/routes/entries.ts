@@ -5,9 +5,13 @@ import {
   entryApprovalsTable,
   entryAttachmentsTable,
   projectsTable,
+  projectServicesTable,
   serviceCostEntriesTable,
+  serviceSubItemsTable,
+  subServiceCostEntriesTable,
 } from "@workspace/db";
 import { and, eq, gte, lte, desc, isNull, inArray, sql } from "drizzle-orm";
+import type { PgTransaction } from "drizzle-orm/pg-core";
 import {
   CreateDailyEntryBody,
   UpdateDailyEntryBody,
@@ -18,10 +22,125 @@ import {
   buildEntryDetail,
   buildEntrySummary,
   computeTotalMandays,
+  deriveParentRow,
   slugifyForSequence,
   type ServiceCostInputItem,
 } from "../lib/entries";
 import { diffSnapshots, listEntryAudit, recordAudit } from "../lib/audit";
+
+/** Thrown by `insertServiceCosts` when sub-item refs don't belong to the parent. */
+class SubItemIntegrityError extends Error {}
+
+/** Insert parent service_cost_entries rows + their sub_service_cost_entries. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function insertServiceCosts(
+  tx: PgTransaction<any, any, any>,
+  dailyEntryId: string,
+  projectId: string,
+  serviceCosts: ServiceCostInputItem[],
+): Promise<void> {
+  if (serviceCosts.length === 0) return;
+  // Integrity: every projectServiceId must belong to this entry's project.
+  // Without this, a known service id from a different project could be
+  // attached to this entry, leaking data across project boundaries.
+  const serviceIds = Array.from(
+    new Set(serviceCosts.map((sc) => sc.projectServiceId)),
+  );
+  const owned = await tx
+    .select({ id: projectServicesTable.id })
+    .from(projectServicesTable)
+    .where(
+      and(
+        eq(projectServicesTable.projectId, projectId),
+        inArray(projectServicesTable.id, serviceIds),
+      ),
+    );
+  if (owned.length !== serviceIds.length) {
+    throw new SubItemIntegrityError(
+      "One or more services do not belong to this project",
+    );
+  }
+  // Integrity: every subItemId must belong to its parent projectServiceId.
+  // Without this, a malicious or buggy client could attach historical sub-rows
+  // to the wrong service (cross-service or cross-project linkage).
+  const groupRows = serviceCosts.filter(
+    (sc) => sc.kind === "group" && sc.subCosts && sc.subCosts.length > 0,
+  );
+  if (groupRows.length > 0) {
+    for (const sc of groupRows) {
+      const subIds = (sc.subCosts ?? []).map((s) => s.subItemId);
+      if (new Set(subIds).size !== subIds.length) {
+        throw new SubItemIntegrityError(
+          "Duplicate subItemId in a group service",
+        );
+      }
+      const valid = await tx
+        .select({ id: serviceSubItemsTable.id })
+        .from(serviceSubItemsTable)
+        .where(
+          and(
+            eq(serviceSubItemsTable.projectServiceId, sc.projectServiceId),
+            inArray(serviceSubItemsTable.id, subIds),
+          ),
+        );
+      if (valid.length !== subIds.length) {
+        throw new SubItemIntegrityError(
+          "One or more sub-items do not belong to their parent service",
+        );
+      }
+    }
+  }
+  const inserted = await tx
+    .insert(serviceCostEntriesTable)
+    .values(
+      serviceCosts.map((sc) => {
+        const { cost, mandays } = deriveParentRow(sc);
+        return {
+          dailyEntryId,
+          projectServiceId: sc.projectServiceId,
+          kind: sc.kind,
+          cost: String(cost),
+          mandays: mandays != null ? String(mandays) : null,
+          manualMandays: String(sc.manualMandays ?? 0),
+          breakfastQty: sc.breakfastQty ?? null,
+          lunchQty: sc.lunchQty ?? null,
+          dinnerQty: sc.dinnerQty ?? null,
+          midnightQty: sc.midnightQty ?? null,
+          mealBoxQty: sc.mealBoxQty ?? null,
+        };
+      }),
+    )
+    .returning({
+      id: serviceCostEntriesTable.id,
+      projectServiceId: serviceCostEntriesTable.projectServiceId,
+    });
+
+  // Map parent input → its inserted row id (positional, since the same project
+  // service can only appear once per daily entry — there is no unique constraint
+  // here but the UI prevents duplicates and orderings line up positionally).
+  const subValues: Array<{
+    serviceCostEntryId: string;
+    subItemId: string;
+    cost: string;
+    mandays: string;
+  }> = [];
+  for (let i = 0; i < serviceCosts.length; i++) {
+    const sc = serviceCosts[i];
+    if (sc.kind !== "group" || !sc.subCosts || sc.subCosts.length === 0) continue;
+    const parentId = inserted[i].id;
+    for (const sub of sc.subCosts) {
+      subValues.push({
+        serviceCostEntryId: parentId,
+        subItemId: sub.subItemId,
+        cost: String(sub.cost ?? 0),
+        mandays: String(sub.mandays ?? 0),
+      });
+    }
+  }
+  if (subValues.length > 0) {
+    await tx.insert(subServiceCostEntriesTable).values(subValues);
+  }
+}
 
 const router: IRouter = Router();
 
@@ -153,23 +272,7 @@ router.post(
             })
             .returning();
 
-          if (serviceCosts.length > 0) {
-            await tx.insert(serviceCostEntriesTable).values(
-              serviceCosts.map((sc) => ({
-                dailyEntryId: entry.id,
-                projectServiceId: sc.projectServiceId,
-                kind: sc.kind,
-                cost: String(sc.cost ?? 0),
-                mandays: sc.mandays != null ? String(sc.mandays) : null,
-                manualMandays: String(sc.manualMandays ?? 0),
-                breakfastQty: sc.breakfastQty ?? null,
-                lunchQty: sc.lunchQty ?? null,
-                dinnerQty: sc.dinnerQty ?? null,
-                midnightQty: sc.midnightQty ?? null,
-                mealBoxQty: sc.mealBoxQty ?? null,
-              })),
-            );
-          }
+          await insertServiceCosts(tx, entry.id, projectId, serviceCosts);
 
           await recordAudit(
             {
@@ -186,6 +289,10 @@ router.post(
         });
       } catch (e) {
         lastErr = e;
+        if (e instanceof SubItemIntegrityError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
         if ((e as { code?: string }).code === "23505") continue; // sequence collision — retry
         throw e;
       }
@@ -313,7 +420,7 @@ router.patch(
           const tm = computeTotalMandays(
             existing.map((c) => ({
               projectServiceId: c.projectServiceId,
-              kind: c.kind as "food" | "standard",
+              kind: c.kind as "food" | "standard" | "group",
               cost: Number(c.cost ?? 0),
               mandays: c.mandays != null ? Number(c.mandays) : undefined,
               manualMandays: Number(c.manualMandays ?? 0),
@@ -394,25 +501,12 @@ router.patch(
           await tx
             .delete(serviceCostEntriesTable)
             .where(eq(serviceCostEntriesTable.dailyEntryId, id));
-          if (parsed.data.serviceCosts.length > 0) {
-            await tx.insert(serviceCostEntriesTable).values(
-              (parsed.data.serviceCosts as ServiceCostInputItem[]).map(
-                (sc) => ({
-                  dailyEntryId: id,
-                  projectServiceId: sc.projectServiceId,
-                  kind: sc.kind,
-                  cost: String(sc.cost ?? 0),
-                  mandays: sc.mandays != null ? String(sc.mandays) : null,
-                  manualMandays: String(sc.manualMandays ?? 0),
-                  breakfastQty: sc.breakfastQty ?? null,
-                  lunchQty: sc.lunchQty ?? null,
-                  dinnerQty: sc.dinnerQty ?? null,
-                  midnightQty: sc.midnightQty ?? null,
-                  mealBoxQty: sc.mealBoxQty ?? null,
-                }),
-              ),
-            );
-          }
+          await insertServiceCosts(
+            tx,
+            id,
+            entry.projectId,
+            parsed.data.serviceCosts as ServiceCostInputItem[],
+          );
         }
 
         const events = diffSnapshots(beforeSnap, afterSnap, {
@@ -473,6 +567,10 @@ router.patch(
     } catch (e) {
       if (e instanceof LockedConflict) {
         res.status(409).json({ error: e.message });
+        return;
+      }
+      if (e instanceof SubItemIntegrityError) {
+        res.status(400).json({ error: e.message });
         return;
       }
       throw e;

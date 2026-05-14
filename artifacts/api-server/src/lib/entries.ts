@@ -4,14 +4,24 @@ import {
   serviceCostEntriesTable,
   projectServicesTable,
   projectsTable,
+  serviceSubItemsTable,
+  subServiceCostEntriesTable,
   entryAttachmentsTable,
 } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { calcFoodMandays, safeDivide } from "./cogsCalc";
+
+export type ServiceKind = "food" | "standard" | "group";
+
+export interface SubServiceCostInputItem {
+  subItemId: string;
+  cost?: number;
+  mandays?: number;
+}
 
 export interface ServiceCostInputItem {
   projectServiceId: string;
-  kind: "food" | "standard";
+  kind: ServiceKind;
   cost?: number;
   mandays?: number;
   manualMandays?: number;
@@ -20,6 +30,31 @@ export interface ServiceCostInputItem {
   dinnerQty?: number;
   midnightQty?: number;
   mealBoxQty?: number;
+  subCosts?: SubServiceCostInputItem[];
+}
+
+/**
+ * For a "group" service line, the parent row's cost is the sum of its
+ * sub-item costs and its mandays is the sum of sub-item mandays plus the
+ * service-level manualMandays. Writers must persist these on the parent
+ * row so all read paths (reports, dashboards) can keep using the parent
+ * row totals without joining sub_service_cost_entries.
+ */
+export function computeGroupCost(sc: ServiceCostInputItem): number {
+  if (!sc.subCosts || sc.subCosts.length === 0) return 0;
+  return sc.subCosts.reduce((s, r) => s + Number(r.cost ?? 0), 0);
+}
+
+export function computeGroupMandays(sc: ServiceCostInputItem): number {
+  const sub = (sc.subCosts ?? []).reduce(
+    (s, r) => s + Number(r.mandays ?? 0),
+    0,
+  );
+  const manual =
+    sc.manualMandays != null && !Number.isNaN(sc.manualMandays)
+      ? sc.manualMandays
+      : 0;
+  return sub + manual;
 }
 
 /**
@@ -44,10 +79,35 @@ export function serviceMandays(sc: {
   }
   if (sc.mandays != null && sc.mandays !== "") {
     const n = Number(sc.mandays);
-    // Stored `mandays` already reflects the manual addition for food rows
+    // Stored `mandays` already reflects the manual addition for food/group rows
     // (computed and persisted by the writer), so do not double-add.
     if (!Number.isNaN(n)) return n;
   }
+  if (sc.kind === "food") {
+    return (
+      calcFoodMandays({
+        breakfastQty: sc.breakfastQty ?? null,
+        lunchQty: sc.lunchQty ?? null,
+        dinnerQty: sc.dinnerQty ?? null,
+        midnightQty: sc.midnightQty ?? null,
+        mealBoxQty: sc.mealBoxQty ?? null,
+      }) + manual
+    );
+  }
+  return manual;
+}
+
+/**
+ * Per-input mandays during write: use the kind-specific formula. For "group"
+ * the writer has not yet persisted `mandays`, so we compute it from subCosts.
+ */
+function inputMandays(sc: ServiceCostInputItem): number {
+  if (sc.kind === "group") return computeGroupMandays(sc);
+  if (sc.mandays != null && !Number.isNaN(sc.mandays)) return Number(sc.mandays);
+  const manual =
+    sc.manualMandays != null && !Number.isNaN(sc.manualMandays)
+      ? sc.manualMandays
+      : 0;
   if (sc.kind === "food") {
     return (
       calcFoodMandays({
@@ -72,12 +132,30 @@ export function computeTotalMandays(
     return overrideValue;
   }
   const sumFromServices = serviceCosts.reduce(
-    (sum, sc) => sum + serviceMandays(sc),
+    (sum, sc) => sum + inputMandays(sc),
     0,
   );
   const manual =
     manualMandays != null && !Number.isNaN(manualMandays) ? manualMandays : 0;
   return sumFromServices + manual;
+}
+
+/**
+ * For writers: derive the parent service_cost_entries row's stored cost +
+ * mandays values from the input. Group services derive both from subCosts
+ * regardless of any incoming cost/mandays fields.
+ */
+export function deriveParentRow(sc: ServiceCostInputItem): {
+  cost: number;
+  mandays: number | null;
+} {
+  if (sc.kind === "group") {
+    return { cost: computeGroupCost(sc), mandays: computeGroupMandays(sc) };
+  }
+  return {
+    cost: Number(sc.cost ?? 0),
+    mandays: sc.mandays != null ? Number(sc.mandays) : null,
+  };
 }
 
 export async function buildEntryDetail(entryId: string) {
@@ -104,6 +182,43 @@ export async function buildEntryDetail(entryId: string) {
     )
     .where(eq(serviceCostEntriesTable.dailyEntryId, entryId));
 
+  // Fetch sub-item rows for any group cost entries on this entry.
+  const costIds = costs.map((c) => c.cost.id);
+  const subRows = costIds.length
+    ? await db
+        .select({
+          row: subServiceCostEntriesTable,
+          item: serviceSubItemsTable,
+        })
+        .from(subServiceCostEntriesTable)
+        .leftJoin(
+          serviceSubItemsTable,
+          eq(serviceSubItemsTable.id, subServiceCostEntriesTable.subItemId),
+        )
+        .where(inArray(subServiceCostEntriesTable.serviceCostEntryId, costIds))
+    : [];
+  const subsByParent = new Map<
+    string,
+    Array<{
+      subItemId: string;
+      subItemName: string;
+      cost: number;
+      mandays: number;
+      sortOrder: number;
+    }>
+  >();
+  for (const { row, item } of subRows) {
+    const list = subsByParent.get(row.serviceCostEntryId) ?? [];
+    list.push({
+      subItemId: row.subItemId,
+      subItemName: item?.name ?? "Unknown",
+      cost: Number(row.cost ?? 0),
+      mandays: Number(row.mandays ?? 0),
+      sortOrder: item?.sortOrder ?? 0,
+    });
+    subsByParent.set(row.serviceCostEntryId, list);
+  }
+
   const attachmentRows = await db
     .select()
     .from(entryAttachmentsTable)
@@ -125,11 +240,14 @@ export async function buildEntryDetail(entryId: string) {
       midnightQty: c.midnightQty,
       mealBoxQty: c.mealBoxQty,
     });
+    const subs = (subsByParent.get(c.id) ?? [])
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map(({ sortOrder: _s, ...rest }) => rest);
     return {
       id: c.id,
       projectServiceId: c.projectServiceId,
       serviceName: service?.name ?? "Unknown",
-      kind: c.kind as "food" | "standard",
+      kind: c.kind as ServiceKind,
       cost: cVal,
       mandays: c.mandays != null ? Number(c.mandays) : null,
       manualMandays: Number(c.manualMandays ?? 0),
@@ -140,6 +258,7 @@ export async function buildEntryDetail(entryId: string) {
       dinnerQty: c.dinnerQty,
       midnightQty: c.midnightQty,
       mealBoxQty: c.mealBoxQty,
+      subCosts: subs,
     };
   });
 

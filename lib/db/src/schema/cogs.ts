@@ -55,6 +55,32 @@ export const projectServicesTable = pgTable(
   (t) => [index("IDX_project_services_project").on(t.projectId)],
 );
 
+/**
+ * Sub-items for a "group" service. Admin defines a list of named slots
+ * (e.g. "Day Shift", "Night Shift") at the service level; every daily entry
+ * for that service then has one cost+manday row per sub-item. Sub-items are
+ * locked (no add/remove) once any cost entry exists for the parent service —
+ * renames and reorders are still allowed.
+ */
+export const serviceSubItemsTable = pgTable(
+  "service_sub_items",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    projectServiceId: varchar("project_service_id")
+      .notNull()
+      .references(() => projectServicesTable.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("IDX_sub_items_service").on(t.projectServiceId)],
+);
+
+export type ServiceSubItem = typeof serviceSubItemsTable.$inferSelect;
+export type InsertServiceSubItem = typeof serviceSubItemsTable.$inferInsert;
+
 export const securityGroupsTable = pgTable(
   "security_groups",
   {
@@ -186,6 +212,42 @@ export const serviceCostEntriesTable = pgTable(
   },
   (t) => [index("IDX_service_costs_entry").on(t.dailyEntryId)],
 );
+
+/**
+ * Per-day, per-sub-item cost & manday rows for a "group" service. Each row
+ * pairs a service_cost_entries row (the parent service line for the day)
+ * with one of the parent service's sub-items. A sub-item cannot be deleted
+ * while any sub_service_cost_entries reference it (RESTRICT) so historical
+ * entries always resolve to a real sub-item name.
+ */
+export const subServiceCostEntriesTable = pgTable(
+  "sub_service_cost_entries",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    serviceCostEntryId: varchar("service_cost_entry_id")
+      .notNull()
+      .references(() => serviceCostEntriesTable.id, { onDelete: "cascade" }),
+    subItemId: varchar("sub_item_id")
+      .notNull()
+      .references(() => serviceSubItemsTable.id, { onDelete: "restrict" }),
+    cost: numeric("cost", { precision: 14, scale: 2 }).notNull().default("0"),
+    mandays: numeric("mandays", { precision: 10, scale: 2 })
+      .notNull()
+      .default("0"),
+  },
+  (t) => [
+    index("IDX_sub_costs_parent").on(t.serviceCostEntryId),
+    uniqueIndex("UQ_sub_costs_parent_sub").on(
+      t.serviceCostEntryId,
+      t.subItemId,
+    ),
+  ],
+);
+
+export type SubServiceCostEntry =
+  typeof subServiceCostEntriesTable.$inferSelect;
+export type InsertSubServiceCostEntry =
+  typeof subServiceCostEntriesTable.$inferInsert;
 
 export const entryApprovalsTable = pgTable(
   "entry_approvals",

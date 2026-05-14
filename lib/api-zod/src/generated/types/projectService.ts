@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ProjectServiceKind } from "./projectServiceKind";
+import type { ServiceSubItem } from "./serviceSubItem";
 
 export interface ProjectService {
   id: string;
@@ -13,4 +14,11 @@ export interface ProjectService {
   name: string;
   kind: ProjectServiceKind;
   sortOrder: number;
+  /** Defined sub-services for kind=group; empty array otherwise. */
+  subItems: ServiceSubItem[];
+  /** True if at least one daily-entry cost row references this service.
+Used by the UI to lock add/remove of sub-items on group services
+once historical entries exist (rename/reorder remain allowed).
+ */
+  hasEntries: boolean;
 }

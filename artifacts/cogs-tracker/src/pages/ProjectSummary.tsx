@@ -18,6 +18,8 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { ServiceDrilldownDialog, type ServiceDrilldownTarget } from "@/components/ServiceDrilldownDialog";
 import { downloadCsv } from "@/lib/csv";
 import { formatCurrency, formatNumber, formatDate, daysAgoISO, todayISO } from "@/lib/format";
+import { useProjectSwitcher } from "@/lib/useProjectSwitcher";
+import { ProjectSwitcherButtons } from "@/components/ProjectSwitcher";
 import { ArrowLeft, ArrowRight, Download, Lock } from "lucide-react";
 
 export default function ProjectSummary() {
@@ -29,6 +31,7 @@ export default function ProjectSummary() {
   const [serviceIds, setServiceIds] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>([]);
   const [drilldown, setDrilldown] = useState<ServiceDrilldownTarget | null>(null);
+  const switcher = useProjectSwitcher(id, (pid) => `/projects/${pid}/summary`);
 
   const statusOptions = [
     { value: "draft", label: "Draft" },
@@ -102,7 +105,14 @@ export default function ProjectSummary() {
   return (
     <AppLayout>
       <PageHeader
-        title={project ? `${project.name} — summary` : "Summary"}
+        title={
+          (
+            <span className="inline-flex items-center gap-2">
+              <ProjectSwitcherButtons switcher={switcher} />
+              <span>{project ? `${project.name} — summary` : "Summary"}</span>
+            </span>
+          ) as any
+        }
         subtitle={`${formatDate(from)} → ${formatDate(to)}${
           serviceIds.length > 0 ? ` · ${serviceIds.length} of ${serviceOptions.length} services` : ""
         }`}

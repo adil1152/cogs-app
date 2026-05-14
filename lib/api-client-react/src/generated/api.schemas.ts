@@ -249,7 +249,18 @@ export type ProjectServiceKind =
 export const ProjectServiceKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;
+
+export interface ServiceSubItem {
+  id: string;
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
+  name: string;
+  sortOrder: number;
+}
 
 export interface ProjectService {
   id: string;
@@ -257,6 +268,13 @@ export interface ProjectService {
   name: string;
   kind: ProjectServiceKind;
   sortOrder: number;
+  /** Defined sub-services for kind=group; empty array otherwise. */
+  subItems: ServiceSubItem[];
+  /** True if at least one daily-entry cost row references this service.
+Used by the UI to lock add/remove of sub-items on group services
+once historical entries exist (rename/reorder remain allowed).
+ */
+  hasEntries: boolean;
 }
 
 export type ProjectDetail = Project & {
@@ -295,12 +313,24 @@ export interface UpdateProjectBody {
   pdfRequired?: boolean;
 }
 
+export interface SubItemInput {
+  /** When set, identifies an existing sub-item to rename / reorder. */
+  id?: string;
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
+  name: string;
+  sortOrder?: number;
+}
+
 export type CreateProjectServiceBodyKind =
   (typeof CreateProjectServiceBodyKind)[keyof typeof CreateProjectServiceBodyKind];
 
 export const CreateProjectServiceBodyKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;
 
 export interface CreateProjectServiceBody {
@@ -308,6 +338,8 @@ export interface CreateProjectServiceBody {
   name: string;
   kind: CreateProjectServiceBodyKind;
   sortOrder?: number;
+  /** Initial sub-items (only meaningful when kind=group). */
+  subItems?: SubItemInput[];
 }
 
 export type UpdateProjectServiceBodyKind =
@@ -316,6 +348,7 @@ export type UpdateProjectServiceBodyKind =
 export const UpdateProjectServiceBodyKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;
 
 export interface UpdateProjectServiceBody {
@@ -323,6 +356,12 @@ export interface UpdateProjectServiceBody {
   name?: string;
   kind?: UpdateProjectServiceBodyKind;
   sortOrder?: number;
+  /** Full replacement set of sub-items. Items with `id` are kept
+(rename / reorder); items without `id` are inserted; existing
+sub-items not present are deleted. Add/remove is rejected with
+409 once any cost entry references the parent service.
+ */
+  subItems?: SubItemInput[];
 }
 
 export interface ReorderProjectServiceItem {
@@ -448,6 +487,7 @@ export type ServiceCatalogItemKind =
 export const ServiceCatalogItemKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;
 
 export interface ServiceCatalogItem {
@@ -482,12 +522,28 @@ export interface AuditLogEntry {
   occurredAt: string;
 }
 
+export interface SubServiceCostInput {
+  subItemId: string;
+  /** @minimum 0 */
+  cost?: number;
+  /** @minimum 0 */
+  mandays?: number;
+}
+
+export interface SubServiceCostBreakdown {
+  subItemId: string;
+  subItemName: string;
+  cost: number;
+  mandays: number;
+}
+
 export type ServiceCostInputKind =
   (typeof ServiceCostInputKind)[keyof typeof ServiceCostInputKind];
 
 export const ServiceCostInputKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;
 
 export interface ServiceCostInput {
@@ -518,6 +574,11 @@ mandays not captured by the meal counts.
   midnightQty?: number;
   /** @minimum 0 */
   mealBoxQty?: number;
+  /** Per sub-item cost+mandays rows for kind=group services. Cost and
+mandays for the parent service line are derived as the sum of
+these rows (plus manualMandays for mandays). Ignored for other kinds.
+ */
+  subCosts?: SubServiceCostInput[];
 }
 
 export type ServiceCostBreakdownKind =
@@ -526,6 +587,7 @@ export type ServiceCostBreakdownKind =
 export const ServiceCostBreakdownKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;
 
 export interface ServiceCostBreakdown {
@@ -550,6 +612,8 @@ export interface ServiceCostBreakdown {
   midnightQty?: number | null;
   /** @nullable */
   mealBoxQty?: number | null;
+  /** Per sub-item rows for kind=group; empty for other kinds. */
+  subCosts?: SubServiceCostBreakdown[];
 }
 
 export interface EntryApproval {
@@ -704,6 +768,7 @@ export type ServiceTotalKind =
 export const ServiceTotalKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;
 
 export interface ServiceTotal {
@@ -719,6 +784,7 @@ export type ProjectServiceTotalKind =
 export const ProjectServiceTotalKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;
 
 /**
@@ -744,6 +810,7 @@ export type ServiceEntryRowKind =
 export const ServiceEntryRowKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;
 
 /**

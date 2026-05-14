@@ -1577,17 +1577,45 @@ components:
         notes: { type: string }
         pdfRequired: { type: boolean }
 
+    ServiceSubItem:
+      type: object
+      required: [id, name, sortOrder]
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        sortOrder: { type: integer }
+    SubItemInput:
+      type: object
+      required: [name]
+      properties:
+        id:
+          type: string
+          description: When set, identifies an existing sub-item to rename / reorder.
+        name: { type: string, minLength: 1, maxLength: 255 }
+        sortOrder: { type: integer }
+
     ProjectService:
       type: object
-      required: [id, projectId, name, kind, sortOrder]
+      required: [id, projectId, name, kind, sortOrder, subItems, hasEntries]
       properties:
         id: { type: string }
         projectId: { type: string }
         name: { type: string }
         kind:
           type: string
-          enum: [food, standard]
+          enum: [food, standard, group]
         sortOrder: { type: integer }
+        subItems:
+          type: array
+          description: Defined sub-services for kind=group; empty array otherwise.
+          items:
+            $ref: '#/components/schemas/ServiceSubItem'
+        hasEntries:
+          type: boolean
+          description: |
+            True if at least one daily-entry cost row references this service.
+            Used by the UI to lock add/remove of sub-items on group services
+            once historical entries exist (rename/reorder remain allowed).
     CreateProjectServiceBody:
       type: object
       required: [name, kind]
@@ -1595,16 +1623,30 @@ components:
         name: { type: string, minLength: 1 }
         kind:
           type: string
-          enum: [food, standard]
+          enum: [food, standard, group]
         sortOrder: { type: integer }
+        subItems:
+          type: array
+          description: Initial sub-items (only meaningful when kind=group).
+          items:
+            $ref: '#/components/schemas/SubItemInput'
     UpdateProjectServiceBody:
       type: object
       properties:
         name: { type: string, minLength: 1 }
         kind:
           type: string
-          enum: [food, standard]
+          enum: [food, standard, group]
         sortOrder: { type: integer }
+        subItems:
+          type: array
+          description: |
+            Full replacement set of sub-items. Items with `id` are kept
+            (rename / reorder); items without `id` are inserted; existing
+            sub-items not present are deleted. Add/remove is rejected with
+            409 once any cost entry references the parent service.
+          items:
+            $ref: '#/components/schemas/SubItemInput'
     ReorderProjectServiceItem:
       type: object
       required: [id, sortOrder]
@@ -1781,7 +1823,7 @@ components:
         name: { type: string }
         kind:
           type: string
-          enum: [food, standard]
+          enum: [food, standard, group]
 
     AuditLogEntry:
       type: object
@@ -1810,6 +1852,28 @@ components:
           type: [string, 'null']
         occurredAt: { type: string, format: date-time }
 
+    SubServiceCostInput:
+      type: object
+      required: [subItemId]
+      properties:
+        subItemId: { type: string }
+        cost:
+          type: number
+          minimum: 0
+          default: 0
+        mandays:
+          type: number
+          minimum: 0
+          default: 0
+    SubServiceCostBreakdown:
+      type: object
+      required: [subItemId, subItemName, cost, mandays]
+      properties:
+        subItemId: { type: string }
+        subItemName: { type: string }
+        cost: { type: number }
+        mandays: { type: number }
+
     ServiceCostInput:
       type: object
       required: [projectServiceId, kind]
@@ -1817,7 +1881,7 @@ components:
         projectServiceId: { type: string }
         kind:
           type: string
-          enum: [food, standard]
+          enum: [food, standard, group]
         cost:
           type: number
           description: Total daily cost for this service line (SAR)
@@ -1847,6 +1911,14 @@ components:
         mealBoxQty:
           type: integer
           minimum: 0
+        subCosts:
+          type: array
+          description: |
+            Per sub-item cost+mandays rows for kind=group services. Cost and
+            mandays for the parent service line are derived as the sum of
+            these rows (plus manualMandays for mandays). Ignored for other kinds.
+          items:
+            $ref: '#/components/schemas/SubServiceCostInput'
     ServiceCostBreakdown:
       type: object
       required: [id, projectServiceId, serviceName, kind, cost, mandayContribution, costPerManday]
@@ -1856,7 +1928,7 @@ components:
         serviceName: { type: string }
         kind:
           type: string
-          enum: [food, standard]
+          enum: [food, standard, group]
         cost: { type: number }
         mandays:
           type: [number, 'null']
@@ -1875,6 +1947,11 @@ components:
           type: [integer, 'null']
         mealBoxQty:
           type: [integer, 'null']
+        subCosts:
+          type: array
+          description: Per sub-item rows for kind=group; empty for other kinds.
+          items:
+            $ref: '#/components/schemas/SubServiceCostBreakdown'
 
     EntryApproval:
       type: object
@@ -2040,7 +2117,7 @@ components:
         serviceName: { type: string }
         kind:
           type: string
-          enum: [food, standard]
+          enum: [food, standard, group]
         totalCost: { type: number }
         totalMandayContribution: { type: number }
     ProjectServiceTotal:
@@ -2065,7 +2142,7 @@ components:
         serviceName: { type: string }
         kind:
           type: string
-          enum: [food, standard]
+          enum: [food, standard, group]
         totalCost: { type: number }
         totalMandayContribution: { type: number }
         costPerManday: { type: number }
@@ -2093,7 +2170,7 @@ components:
         serviceName: { type: string }
         kind:
           type: string
-          enum: [food, standard]
+          enum: [food, standard, group]
         entryDate: { type: string, format: date }
         location: { type: string }
         cost: { type: number }

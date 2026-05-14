@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateProjectServiceBodyKind } from "./createProjectServiceBodyKind";
+import type { SubItemInput } from "./subItemInput";
 
 export interface CreateProjectServiceBody {
   /** @minLength 1 */
   name: string;
   kind: CreateProjectServiceBodyKind;
   sortOrder?: number;
+  /** Initial sub-items (only meaningful when kind=group). */
+  subItems?: SubItemInput[];
 }

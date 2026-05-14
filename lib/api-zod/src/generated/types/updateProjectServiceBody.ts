@@ -5,6 +5,7 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { SubItemInput } from "./subItemInput";
 import type { UpdateProjectServiceBodyKind } from "./updateProjectServiceBodyKind";
 
 export interface UpdateProjectServiceBody {
@@ -12,4 +13,10 @@ export interface UpdateProjectServiceBody {
   name?: string;
   kind?: UpdateProjectServiceBodyKind;
   sortOrder?: number;
+  /** Full replacement set of sub-items. Items with `id` are kept
+(rename / reorder); items without `id` are inserted; existing
+sub-items not present are deleted. Add/remove is rejected with
+409 once any cost entry references the parent service.
+ */
+  subItems?: SubItemInput[];
 }

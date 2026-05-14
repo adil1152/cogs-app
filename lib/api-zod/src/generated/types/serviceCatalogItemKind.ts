@@ -12,4 +12,5 @@ export type ServiceCatalogItemKind =
 export const ServiceCatalogItemKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;

@@ -382,6 +382,8 @@ export const GetProjectParams = zod.object({
 
 export const getProjectResponseOneApprovalChainItemLevelNameMax = 32;
 
+export const getProjectResponseTwoServicesItemSubItemsItemNameMax = 255;
+
 export const GetProjectResponse = zod
   .object({
     id: zod.string(),
@@ -422,8 +424,27 @@ export const GetProjectResponse = zod
           id: zod.string(),
           projectId: zod.string(),
           name: zod.string(),
-          kind: zod.enum(["food", "standard"]),
+          kind: zod.enum(["food", "standard", "group"]),
           sortOrder: zod.number(),
+          subItems: zod
+            .array(
+              zod.object({
+                id: zod.string(),
+                name: zod
+                  .string()
+                  .min(1)
+                  .max(getProjectResponseTwoServicesItemSubItemsItemNameMax),
+                sortOrder: zod.number(),
+              }),
+            )
+            .describe(
+              "Defined sub-services for kind=group; empty array otherwise.",
+            ),
+          hasEntries: zod
+            .boolean()
+            .describe(
+              "True if at least one daily-entry cost row references this service.\nUsed by the UI to lock add\/remove of sub-items on group services\nonce historical entries exist (rename\/reorder remain allowed).\n",
+            ),
         }),
       ),
     }),
@@ -488,12 +509,31 @@ export const ListProjectServicesParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const listProjectServicesResponseSubItemsItemNameMax = 255;
+
 export const ListProjectServicesResponseItem = zod.object({
   id: zod.string(),
   projectId: zod.string(),
   name: zod.string(),
-  kind: zod.enum(["food", "standard"]),
+  kind: zod.enum(["food", "standard", "group"]),
   sortOrder: zod.number(),
+  subItems: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod
+          .string()
+          .min(1)
+          .max(listProjectServicesResponseSubItemsItemNameMax),
+        sortOrder: zod.number(),
+      }),
+    )
+    .describe("Defined sub-services for kind=group; empty array otherwise."),
+  hasEntries: zod
+    .boolean()
+    .describe(
+      "True if at least one daily-entry cost row references this service.\nUsed by the UI to lock add\/remove of sub-items on group services\nonce historical entries exist (rename\/reorder remain allowed).\n",
+    ),
 });
 export const ListProjectServicesResponse = zod.array(
   ListProjectServicesResponseItem,
@@ -503,10 +543,30 @@ export const CreateProjectServiceParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const createProjectServiceBodySubItemsItemNameMax = 255;
+
 export const CreateProjectServiceBody = zod.object({
   name: zod.string().min(1),
-  kind: zod.enum(["food", "standard"]),
+  kind: zod.enum(["food", "standard", "group"]),
   sortOrder: zod.number().optional(),
+  subItems: zod
+    .array(
+      zod.object({
+        id: zod
+          .string()
+          .optional()
+          .describe(
+            "When set, identifies an existing sub-item to rename \/ reorder.",
+          ),
+        name: zod
+          .string()
+          .min(1)
+          .max(createProjectServiceBodySubItemsItemNameMax),
+        sortOrder: zod.number().optional(),
+      }),
+    )
+    .optional()
+    .describe("Initial sub-items (only meaningful when kind=group)."),
 });
 
 /**
@@ -525,12 +585,31 @@ export const ReorderProjectServicesBody = zod.object({
   ),
 });
 
+export const reorderProjectServicesResponseSubItemsItemNameMax = 255;
+
 export const ReorderProjectServicesResponseItem = zod.object({
   id: zod.string(),
   projectId: zod.string(),
   name: zod.string(),
-  kind: zod.enum(["food", "standard"]),
+  kind: zod.enum(["food", "standard", "group"]),
   sortOrder: zod.number(),
+  subItems: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod
+          .string()
+          .min(1)
+          .max(reorderProjectServicesResponseSubItemsItemNameMax),
+        sortOrder: zod.number(),
+      }),
+    )
+    .describe("Defined sub-services for kind=group; empty array otherwise."),
+  hasEntries: zod
+    .boolean()
+    .describe(
+      "True if at least one daily-entry cost row references this service.\nUsed by the UI to lock add\/remove of sub-items on group services\nonce historical entries exist (rename\/reorder remain allowed).\n",
+    ),
 });
 export const ReorderProjectServicesResponse = zod.array(
   ReorderProjectServicesResponseItem,
@@ -540,18 +619,59 @@ export const UpdateProjectServiceParams = zod.object({
   id: zod.coerce.string(),
 });
 
+export const updateProjectServiceBodySubItemsItemNameMax = 255;
+
 export const UpdateProjectServiceBody = zod.object({
   name: zod.string().min(1).optional(),
-  kind: zod.enum(["food", "standard"]).optional(),
+  kind: zod.enum(["food", "standard", "group"]).optional(),
   sortOrder: zod.number().optional(),
+  subItems: zod
+    .array(
+      zod.object({
+        id: zod
+          .string()
+          .optional()
+          .describe(
+            "When set, identifies an existing sub-item to rename \/ reorder.",
+          ),
+        name: zod
+          .string()
+          .min(1)
+          .max(updateProjectServiceBodySubItemsItemNameMax),
+        sortOrder: zod.number().optional(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Full replacement set of sub-items. Items with `id` are kept\n(rename \/ reorder); items without `id` are inserted; existing\nsub-items not present are deleted. Add\/remove is rejected with\n409 once any cost entry references the parent service.\n",
+    ),
 });
+
+export const updateProjectServiceResponseSubItemsItemNameMax = 255;
 
 export const UpdateProjectServiceResponse = zod.object({
   id: zod.string(),
   projectId: zod.string(),
   name: zod.string(),
-  kind: zod.enum(["food", "standard"]),
+  kind: zod.enum(["food", "standard", "group"]),
   sortOrder: zod.number(),
+  subItems: zod
+    .array(
+      zod.object({
+        id: zod.string(),
+        name: zod
+          .string()
+          .min(1)
+          .max(updateProjectServiceResponseSubItemsItemNameMax),
+        sortOrder: zod.number(),
+      }),
+    )
+    .describe("Defined sub-services for kind=group; empty array otherwise."),
+  hasEntries: zod
+    .boolean()
+    .describe(
+      "True if at least one daily-entry cost row references this service.\nUsed by the UI to lock add\/remove of sub-items on group services\nonce historical entries exist (rename\/reorder remain allowed).\n",
+    ),
 });
 
 export const DeleteProjectServiceParams = zod.object({
@@ -912,6 +1032,12 @@ export const createDailyEntryBodyServiceCostsItemMidnightQtyMin = 0;
 
 export const createDailyEntryBodyServiceCostsItemMealBoxQtyMin = 0;
 
+export const createDailyEntryBodyServiceCostsItemSubCostsItemCostDefault = 0;
+export const createDailyEntryBodyServiceCostsItemSubCostsItemCostMin = 0;
+
+export const createDailyEntryBodyServiceCostsItemSubCostsItemMandaysDefault = 0;
+export const createDailyEntryBodyServiceCostsItemSubCostsItemMandaysMin = 0;
+
 export const CreateDailyEntryBody = zod.object({
   entryDate: zod.coerce.date(),
   location: zod.string().min(1),
@@ -936,7 +1062,7 @@ export const CreateDailyEntryBody = zod.object({
   serviceCosts: zod.array(
     zod.object({
       projectServiceId: zod.string(),
-      kind: zod.enum(["food", "standard"]),
+      kind: zod.enum(["food", "standard", "group"]),
       cost: zod
         .number()
         .optional()
@@ -973,6 +1099,28 @@ export const CreateDailyEntryBody = zod.object({
         .number()
         .min(createDailyEntryBodyServiceCostsItemMealBoxQtyMin)
         .optional(),
+      subCosts: zod
+        .array(
+          zod.object({
+            subItemId: zod.string(),
+            cost: zod
+              .number()
+              .min(createDailyEntryBodyServiceCostsItemSubCostsItemCostMin)
+              .default(
+                createDailyEntryBodyServiceCostsItemSubCostsItemCostDefault,
+              ),
+            mandays: zod
+              .number()
+              .min(createDailyEntryBodyServiceCostsItemSubCostsItemMandaysMin)
+              .default(
+                createDailyEntryBodyServiceCostsItemSubCostsItemMandaysDefault,
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          "Per sub-item cost+mandays rows for kind=group services. Cost and\nmandays for the parent service line are derived as the sum of\nthese rows (plus manualMandays for mandays). Ignored for other kinds.\n",
+        ),
     }),
   ),
 });
@@ -1027,7 +1175,7 @@ export const GetDailyEntryResponse = zod
           id: zod.string(),
           projectServiceId: zod.string(),
           serviceName: zod.string(),
-          kind: zod.enum(["food", "standard"]),
+          kind: zod.enum(["food", "standard", "group"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
           manualMandays: zod
@@ -1043,6 +1191,19 @@ export const GetDailyEntryResponse = zod
           dinnerQty: zod.number().nullish(),
           midnightQty: zod.number().nullish(),
           mealBoxQty: zod.number().nullish(),
+          subCosts: zod
+            .array(
+              zod.object({
+                subItemId: zod.string(),
+                subItemName: zod.string(),
+                cost: zod.number(),
+                mandays: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per sub-item rows for kind=group; empty for other kinds.",
+            ),
         }),
       ),
       attachments: zod.array(
@@ -1088,6 +1249,12 @@ export const updateDailyEntryBodyServiceCostsItemMidnightQtyMin = 0;
 
 export const updateDailyEntryBodyServiceCostsItemMealBoxQtyMin = 0;
 
+export const updateDailyEntryBodyServiceCostsItemSubCostsItemCostDefault = 0;
+export const updateDailyEntryBodyServiceCostsItemSubCostsItemCostMin = 0;
+
+export const updateDailyEntryBodyServiceCostsItemSubCostsItemMandaysDefault = 0;
+export const updateDailyEntryBodyServiceCostsItemSubCostsItemMandaysMin = 0;
+
 export const UpdateDailyEntryBody = zod.object({
   entryDate: zod.coerce.date().optional(),
   location: zod.string().min(1).optional(),
@@ -1105,7 +1272,7 @@ export const UpdateDailyEntryBody = zod.object({
     .array(
       zod.object({
         projectServiceId: zod.string(),
-        kind: zod.enum(["food", "standard"]),
+        kind: zod.enum(["food", "standard", "group"]),
         cost: zod
           .number()
           .optional()
@@ -1142,6 +1309,28 @@ export const UpdateDailyEntryBody = zod.object({
           .number()
           .min(updateDailyEntryBodyServiceCostsItemMealBoxQtyMin)
           .optional(),
+        subCosts: zod
+          .array(
+            zod.object({
+              subItemId: zod.string(),
+              cost: zod
+                .number()
+                .min(updateDailyEntryBodyServiceCostsItemSubCostsItemCostMin)
+                .default(
+                  updateDailyEntryBodyServiceCostsItemSubCostsItemCostDefault,
+                ),
+              mandays: zod
+                .number()
+                .min(updateDailyEntryBodyServiceCostsItemSubCostsItemMandaysMin)
+                .default(
+                  updateDailyEntryBodyServiceCostsItemSubCostsItemMandaysDefault,
+                ),
+            }),
+          )
+          .optional()
+          .describe(
+            "Per sub-item cost+mandays rows for kind=group services. Cost and\nmandays for the parent service line are derived as the sum of\nthese rows (plus manualMandays for mandays). Ignored for other kinds.\n",
+          ),
       }),
     )
     .optional(),
@@ -1193,7 +1382,7 @@ export const UpdateDailyEntryResponse = zod
           id: zod.string(),
           projectServiceId: zod.string(),
           serviceName: zod.string(),
-          kind: zod.enum(["food", "standard"]),
+          kind: zod.enum(["food", "standard", "group"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
           manualMandays: zod
@@ -1209,6 +1398,19 @@ export const UpdateDailyEntryResponse = zod
           dinnerQty: zod.number().nullish(),
           midnightQty: zod.number().nullish(),
           mealBoxQty: zod.number().nullish(),
+          subCosts: zod
+            .array(
+              zod.object({
+                subItemId: zod.string(),
+                subItemName: zod.string(),
+                cost: zod.number(),
+                mandays: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per sub-item rows for kind=group; empty for other kinds.",
+            ),
         }),
       ),
       attachments: zod.array(
@@ -1289,7 +1491,7 @@ export const ApproveDailyEntryResponse = zod
           id: zod.string(),
           projectServiceId: zod.string(),
           serviceName: zod.string(),
-          kind: zod.enum(["food", "standard"]),
+          kind: zod.enum(["food", "standard", "group"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
           manualMandays: zod
@@ -1305,6 +1507,19 @@ export const ApproveDailyEntryResponse = zod
           dinnerQty: zod.number().nullish(),
           midnightQty: zod.number().nullish(),
           mealBoxQty: zod.number().nullish(),
+          subCosts: zod
+            .array(
+              zod.object({
+                subItemId: zod.string(),
+                subItemName: zod.string(),
+                cost: zod.number(),
+                mandays: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per sub-item rows for kind=group; empty for other kinds.",
+            ),
         }),
       ),
       attachments: zod.array(
@@ -1381,7 +1596,7 @@ export const RejectDailyEntryResponse = zod
           id: zod.string(),
           projectServiceId: zod.string(),
           serviceName: zod.string(),
-          kind: zod.enum(["food", "standard"]),
+          kind: zod.enum(["food", "standard", "group"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
           manualMandays: zod
@@ -1397,6 +1612,19 @@ export const RejectDailyEntryResponse = zod
           dinnerQty: zod.number().nullish(),
           midnightQty: zod.number().nullish(),
           mealBoxQty: zod.number().nullish(),
+          subCosts: zod
+            .array(
+              zod.object({
+                subItemId: zod.string(),
+                subItemName: zod.string(),
+                cost: zod.number(),
+                mandays: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per sub-item rows for kind=group; empty for other kinds.",
+            ),
         }),
       ),
       attachments: zod.array(
@@ -1495,7 +1723,7 @@ export const SubmitDailyEntryResponse = zod
           id: zod.string(),
           projectServiceId: zod.string(),
           serviceName: zod.string(),
-          kind: zod.enum(["food", "standard"]),
+          kind: zod.enum(["food", "standard", "group"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
           manualMandays: zod
@@ -1511,6 +1739,19 @@ export const SubmitDailyEntryResponse = zod
           dinnerQty: zod.number().nullish(),
           midnightQty: zod.number().nullish(),
           mealBoxQty: zod.number().nullish(),
+          subCosts: zod
+            .array(
+              zod.object({
+                subItemId: zod.string(),
+                subItemName: zod.string(),
+                cost: zod.number(),
+                mandays: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per sub-item rows for kind=group; empty for other kinds.",
+            ),
         }),
       ),
       attachments: zod.array(
@@ -1587,7 +1828,7 @@ export const ResetDailyEntryResponse = zod
           id: zod.string(),
           projectServiceId: zod.string(),
           serviceName: zod.string(),
-          kind: zod.enum(["food", "standard"]),
+          kind: zod.enum(["food", "standard", "group"]),
           cost: zod.number(),
           mandays: zod.number().nullish(),
           manualMandays: zod
@@ -1603,6 +1844,19 @@ export const ResetDailyEntryResponse = zod
           dinnerQty: zod.number().nullish(),
           midnightQty: zod.number().nullish(),
           mealBoxQty: zod.number().nullish(),
+          subCosts: zod
+            .array(
+              zod.object({
+                subItemId: zod.string(),
+                subItemName: zod.string(),
+                cost: zod.number(),
+                mandays: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per sub-item rows for kind=group; empty for other kinds.",
+            ),
         }),
       ),
       attachments: zod.array(
@@ -1832,6 +2086,8 @@ export const GetProjectEntryMatrixQueryParams = zod.object({
 
 export const getProjectEntryMatrixResponseProjectApprovalChainItemLevelNameMax = 32;
 
+export const getProjectEntryMatrixResponseServicesItemSubItemsItemNameMax = 255;
+
 export const GetProjectEntryMatrixResponse = zod
   .object({
     project: zod.object({
@@ -1877,8 +2133,29 @@ export const GetProjectEntryMatrixResponse = zod
         id: zod.string(),
         projectId: zod.string(),
         name: zod.string(),
-        kind: zod.enum(["food", "standard"]),
+        kind: zod.enum(["food", "standard", "group"]),
         sortOrder: zod.number(),
+        subItems: zod
+          .array(
+            zod.object({
+              id: zod.string(),
+              name: zod
+                .string()
+                .min(1)
+                .max(
+                  getProjectEntryMatrixResponseServicesItemSubItemsItemNameMax,
+                ),
+              sortOrder: zod.number(),
+            }),
+          )
+          .describe(
+            "Defined sub-services for kind=group; empty array otherwise.",
+          ),
+        hasEntries: zod
+          .boolean()
+          .describe(
+            "True if at least one daily-entry cost row references this service.\nUsed by the UI to lock add\/remove of sub-items on group services\nonce historical entries exist (rename\/reorder remain allowed).\n",
+          ),
       }),
     ),
     entries: zod.array(
@@ -1948,7 +2225,7 @@ export const GetDashboardResponse = zod.object({
   serviceBreakdown: zod.array(
     zod.object({
       serviceName: zod.string(),
-      kind: zod.enum(["food", "standard"]),
+      kind: zod.enum(["food", "standard", "group"]),
       totalCost: zod.number(),
       totalMandayContribution: zod.number(),
     }),
@@ -2062,7 +2339,7 @@ export const GetProjectSummaryResponse = zod.object({
         projectName: zod.string(),
         serviceId: zod.string(),
         serviceName: zod.string(),
-        kind: zod.enum(["food", "standard"]),
+        kind: zod.enum(["food", "standard", "group"]),
         totalCost: zod.number(),
         totalMandayContribution: zod.number(),
         costPerManday: zod.number(),
@@ -2147,7 +2424,7 @@ export const GetAggregateReportResponse = zod.object({
         projectName: zod.string(),
         serviceId: zod.string(),
         serviceName: zod.string(),
-        kind: zod.enum(["food", "standard"]),
+        kind: zod.enum(["food", "standard", "group"]),
         totalCost: zod.number(),
         totalMandayContribution: zod.number(),
         costPerManday: zod.number(),
@@ -2236,7 +2513,7 @@ export const ListServiceEntriesResponseItem = zod
     projectName: zod.string(),
     serviceId: zod.string(),
     serviceName: zod.string(),
-    kind: zod.enum(["food", "standard"]),
+    kind: zod.enum(["food", "standard", "group"]),
     entryDate: zod.coerce.date(),
     location: zod.string(),
     cost: zod.number(),
@@ -2266,7 +2543,7 @@ export const ListVisibleServicesResponseItem = zod.object({
   projectId: zod.string(),
   projectName: zod.string(),
   name: zod.string(),
-  kind: zod.enum(["food", "standard"]),
+  kind: zod.enum(["food", "standard", "group"]),
 });
 export const ListVisibleServicesResponse = zod.array(
   ListVisibleServicesResponseItem,

@@ -65,10 +65,18 @@ const DEFAULT_APPROVAL_LEVELS = [
   "Additional",
 ] as const;
 
+interface SubLine {
+  subItemId: string;
+  name: string;
+  sortOrder: number;
+  cost: string;
+  mandays: string;
+}
+
 interface ServiceLine {
   projectServiceId: string;
   name: string;
-  kind: "food" | "standard";
+  kind: "food" | "standard" | "group";
   cost: string;
   mandays: string;
   // Food-only meal counts; auto-derive mandays via MEAL_WEIGHTS.
@@ -79,9 +87,27 @@ interface ServiceLine {
   mealBoxQty: string;
   // Food-only manual mandays added on top of the meal-formula auto value.
   foodManualMandays: string;
+  // Group-only: per-sub-item cost+mandays. Total cost/mandays are sums.
+  subItems: SubLine[];
 }
 
-function emptyLine(svc: { id: string; name: string; kind: "food" | "standard" }): ServiceLine {
+function emptyLine(svc: {
+  id: string;
+  name: string;
+  kind: "food" | "standard" | "group";
+  subItems?: Array<{ id: string; name: string; sortOrder: number }>;
+}): ServiceLine {
+  const subs: SubLine[] = svc.kind === "group"
+    ? [...(svc.subItems ?? [])]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((s) => ({
+          subItemId: s.id,
+          name: s.name,
+          sortOrder: s.sortOrder,
+          cost: "",
+          mandays: "",
+        }))
+    : [];
   return {
     projectServiceId: svc.id,
     name: svc.name,
@@ -94,7 +120,19 @@ function emptyLine(svc: { id: string; name: string; kind: "food" | "standard" })
     midnightQty: "",
     mealBoxQty: "",
     foodManualMandays: "",
+    subItems: subs,
   };
+}
+
+function lineCost(l: ServiceLine): number {
+  if (l.kind === "group") {
+    return l.subItems.reduce((s, r) => {
+      const n = Number(r.cost);
+      return s + (Number.isNaN(n) ? 0 : n);
+    }, 0);
+  }
+  const n = Number(l.cost);
+  return Number.isNaN(n) ? 0 : n;
 }
 
 function lineMandays(l: ServiceLine): number {
@@ -108,6 +146,12 @@ function lineMandays(l: ServiceLine): number {
     });
     const manual = Number(l.foodManualMandays);
     return auto + (Number.isNaN(manual) ? 0 : manual);
+  }
+  if (l.kind === "group") {
+    return l.subItems.reduce((s, r) => {
+      const n = Number(r.mandays);
+      return s + (Number.isNaN(n) ? 0 : n);
+    }, 0);
   }
   const n = Number(l.mandays);
   return Number.isNaN(n) ? 0 : n;
@@ -212,12 +256,40 @@ export default function EntryForm() {
       setLines(
         services.map((svc) => {
           const sc = byId.get(svc.id);
-          const kind = svc.kind as "food" | "standard";
+          const kind = svc.kind as "food" | "standard" | "group";
+          const projectSubs = ((svc as any).subItems ?? []) as Array<{
+            id: string;
+            name: string;
+            sortOrder: number;
+          }>;
+          const subById = new Map(
+            (sc?.subCosts ?? []).map((s: any) => [s.subItemId, s]),
+          );
+          const subs: SubLine[] =
+            kind === "group"
+              ? [...projectSubs]
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((s) => {
+                    const sub: any = subById.get(s.id);
+                    return {
+                      subItemId: s.id,
+                      name: s.name,
+                      sortOrder: s.sortOrder,
+                      cost: sub?.cost != null ? String(sub.cost) : "",
+                      mandays: sub?.mandays != null ? String(sub.mandays) : "",
+                    };
+                  })
+              : [];
           return {
             projectServiceId: svc.id,
             name: svc.name,
             kind,
-            cost: sc?.cost != null ? String(sc.cost) : "",
+            cost:
+              kind === "group"
+                ? ""
+                : sc?.cost != null
+                ? String(sc.cost)
+                : "",
             mandays:
               kind === "standard" && sc?.mandays != null ? String(sc.mandays) : "",
             breakfastQty: sc?.breakfastQty != null ? String(sc.breakfastQty) : "",
@@ -229,11 +301,21 @@ export default function EntryForm() {
               kind === "food" && sc?.manualMandays != null && Number(sc.manualMandays) !== 0
                 ? String(sc.manualMandays)
                 : "",
+            subItems: subs,
           };
         }),
       );
     } else {
-      setLines(services.map((s) => emptyLine({ id: s.id, name: s.name, kind: s.kind as any })));
+      setLines(
+        services.map((s) =>
+          emptyLine({
+            id: s.id,
+            name: s.name,
+            kind: s.kind as any,
+            subItems: (s as any).subItems,
+          }),
+        ),
+      );
       if (project && !location) setLocation(project.location);
     }
   }, [services, existingEntry, isEdit, project]);
@@ -242,8 +324,7 @@ export default function EntryForm() {
     let totalCost = 0;
     let summedMandays = 0;
     for (const l of lines) {
-      const c = Number(l.cost);
-      if (!Number.isNaN(c)) totalCost += c;
+      totalCost += lineCost(l);
       summedMandays += lineMandays(l);
     }
     const manual = Number(manualMandays) || 0;
@@ -366,6 +447,9 @@ export default function EntryForm() {
     try {
       serviceCosts = lines
       .filter((l) => {
+        if (l.kind === "group") {
+          return l.subItems.some((s) => s.cost !== "" || s.mandays !== "");
+        }
         if (l.cost !== "") return true;
         if (l.kind === "food") {
           return (
@@ -380,6 +464,30 @@ export default function EntryForm() {
         return l.mandays !== "";
       })
       .map((l) => {
+        if (l.kind === "group") {
+          const subCosts = l.subItems
+            .filter((s) => s.cost !== "" || s.mandays !== "")
+            .map((s) => {
+              const cost = s.cost !== "" ? Number(s.cost) : 0;
+              const mandays = s.mandays !== "" ? Number(s.mandays) : 0;
+              if (Number.isNaN(cost) || cost < 0) {
+                throw new Error(`Invalid cost for ${l.name} → ${s.name}`);
+              }
+              if (Number.isNaN(mandays) || mandays < 0) {
+                throw new Error(`Invalid mandays for ${l.name} → ${s.name}`);
+              }
+              return { subItemId: s.subItemId, cost, mandays };
+            });
+          const totalCost = subCosts.reduce((acc, s) => acc + s.cost, 0);
+          const totalMd = subCosts.reduce((acc, s) => acc + s.mandays, 0);
+          return {
+            projectServiceId: l.projectServiceId,
+            kind: "group",
+            cost: totalCost,
+            mandays: totalMd,
+            subCosts,
+          } as ServiceCostInput;
+        }
         const base: any = {
           projectServiceId: l.projectServiceId,
           kind: l.kind,
@@ -607,7 +715,7 @@ export default function EntryForm() {
                   </div>
                 )}
                 {lines.map((l, i) => {
-                  const cost = Number(l.cost) || 0;
+                  const cost = lineCost(l);
                   const md = lineMandays(l);
                   const cpm = md ? cost / md : null;
                   return (
@@ -623,7 +731,83 @@ export default function EntryForm() {
                           {cpm != null ? `${formatCurrency(cpm)} / manday` : "—"}
                         </span>
                       </div>
-                      {l.kind === "food" ? (
+                      {l.kind === "group" ? (
+                        <div className="space-y-2">
+                          {l.subItems.length === 0 && (
+                            <div className="text-xs text-muted-foreground italic">
+                              No sub-services configured. Add some on the
+                              project's Services tab.
+                            </div>
+                          )}
+                          {l.subItems.length > 0 && (
+                            <div className="overflow-hidden rounded-md border border-border">
+                              <table className="w-full text-sm">
+                                <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
+                                  <tr>
+                                    <th className="px-3 py-1.5 text-left font-medium">Sub-service</th>
+                                    <th className="px-3 py-1.5 text-right font-medium">Cost (SAR)</th>
+                                    <th className="px-3 py-1.5 text-right font-medium">Mandays</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                  {l.subItems.map((s, si) => (
+                                    <tr key={s.subItemId} data-testid={`sub-row-${i}-${si}`}>
+                                      <td className="px-3 py-1.5 font-medium">{s.name}</td>
+                                      <td className="px-2 py-1">
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={s.cost}
+                                          onChange={(e) =>
+                                            setLine(i, {
+                                              subItems: l.subItems.map((x, xi) =>
+                                                xi === si ? { ...x, cost: e.target.value } : x,
+                                              ),
+                                            })
+                                          }
+                                          placeholder="0.00"
+                                          className="h-8 text-right tabular-nums"
+                                          data-testid={`input-sub-cost-${i}-${si}`}
+                                        />
+                                      </td>
+                                      <td className="px-2 py-1">
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={s.mandays}
+                                          onChange={(e) =>
+                                            setLine(i, {
+                                              subItems: l.subItems.map((x, xi) =>
+                                                xi === si ? { ...x, mandays: e.target.value } : x,
+                                              ),
+                                            })
+                                          }
+                                          placeholder="0"
+                                          className="h-8 text-right tabular-nums"
+                                          data-testid={`input-sub-mandays-${i}-${si}`}
+                                        />
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot className="bg-muted/30 text-xs">
+                                  <tr>
+                                    <td className="px-3 py-1.5 font-medium text-muted-foreground">Totals</td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">
+                                      {formatCurrency(cost)}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">
+                                      {formatNumber(md, 2)}
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      ) : l.kind === "food" ? (
                         <div className="space-y-3">
                           <div className="space-y-1.5">
                             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Cost (SAR)</Label>

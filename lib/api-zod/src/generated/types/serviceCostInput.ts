@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ServiceCostInputKind } from "./serviceCostInputKind";
+import type { SubServiceCostInput } from "./subServiceCostInput";
 
 export interface ServiceCostInput {
   projectServiceId: string;
@@ -35,4 +36,9 @@ mandays not captured by the meal counts.
   midnightQty?: number;
   /** @minimum 0 */
   mealBoxQty?: number;
+  /** Per sub-item cost+mandays rows for kind=group services. Cost and
+mandays for the parent service line are derived as the sum of
+these rows (plus manualMandays for mandays). Ignored for other kinds.
+ */
+  subCosts?: SubServiceCostInput[];
 }

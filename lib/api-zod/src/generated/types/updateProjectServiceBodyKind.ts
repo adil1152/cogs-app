@@ -12,4 +12,5 @@ export type UpdateProjectServiceBodyKind =
 export const UpdateProjectServiceBodyKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;

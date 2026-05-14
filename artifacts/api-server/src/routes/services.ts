@@ -3,6 +3,8 @@ import {
   db,
   projectServicesTable,
   serviceCostEntriesTable,
+  serviceSubItemsTable,
+  subServiceCostEntriesTable,
   dailyEntriesTable,
   projectsTable,
 } from "@workspace/db";
@@ -17,14 +19,62 @@ import { getProjectVisibility, listVisibleProjects } from "../lib/projectAccess"
 
 const router: IRouter = Router();
 
-function serialize(s: typeof projectServicesTable.$inferSelect) {
-  return {
+type ServiceKind = "food" | "standard" | "group";
+
+interface SerializedService {
+  id: string;
+  projectId: string;
+  name: string;
+  kind: ServiceKind;
+  sortOrder: number;
+  subItems: Array<{ id: string; name: string; sortOrder: number }>;
+  hasEntries: boolean;
+}
+
+async function serializeMany(
+  rows: (typeof projectServicesTable.$inferSelect)[],
+): Promise<SerializedService[]> {
+  if (rows.length === 0) return [];
+  const ids = rows.map((r) => r.id);
+  const [subItems, usedRows] = await Promise.all([
+    db
+      .select()
+      .from(serviceSubItemsTable)
+      .where(inArray(serviceSubItemsTable.projectServiceId, ids))
+      .orderBy(asc(serviceSubItemsTable.sortOrder)),
+    db
+      .selectDistinct({
+        projectServiceId: serviceCostEntriesTable.projectServiceId,
+      })
+      .from(serviceCostEntriesTable)
+      .where(inArray(serviceCostEntriesTable.projectServiceId, ids)),
+  ]);
+  const byService = new Map<
+    string,
+    Array<{ id: string; name: string; sortOrder: number }>
+  >();
+  for (const si of subItems) {
+    const list = byService.get(si.projectServiceId) ?? [];
+    list.push({ id: si.id, name: si.name, sortOrder: si.sortOrder });
+    byService.set(si.projectServiceId, list);
+  }
+  const usedSet = new Set(usedRows.map((r) => r.projectServiceId));
+  return rows.map((s) => ({
     id: s.id,
     projectId: s.projectId,
     name: s.name,
-    kind: s.kind as "food" | "standard",
+    kind: s.kind as ServiceKind,
     sortOrder: s.sortOrder,
-  };
+    subItems: byService.get(s.id) ?? [],
+    hasEntries: usedSet.has(s.id),
+  }));
+}
+
+async function serializeOne(
+  row: typeof projectServicesTable.$inferSelect,
+): Promise<SerializedService> {
+  const [out] = await serializeMany([row]);
+  return out;
 }
 
 /**
@@ -72,7 +122,7 @@ router.get(
         projectId: s.projectId,
         projectName: p?.name ?? "",
         name: s.name,
-        kind: s.kind as "food" | "standard",
+        kind: s.kind as ServiceKind,
       })),
     );
   },
@@ -104,7 +154,7 @@ router.get(
       .from(projectServicesTable)
       .where(eq(projectServicesTable.projectId, (req.params.id as string)))
       .orderBy(projectServicesTable.sortOrder);
-    res.json(rows.map(serialize));
+    res.json(await serializeMany(rows));
   },
 );
 
@@ -117,18 +167,128 @@ router.post(
       res.status(400).json({ error: "Invalid body" });
       return;
     }
-    const [created] = await db
-      .insert(projectServicesTable)
-      .values({
-        projectId: (req.params.id as string),
-        name: parsed.data.name,
-        kind: parsed.data.kind,
-        sortOrder: parsed.data.sortOrder ?? 0,
-      })
-      .returning();
-    res.status(201).json(serialize(created));
+    const subItems = parsed.data.subItems ?? [];
+    if (subItems.length > 0 && parsed.data.kind !== "group") {
+      res
+        .status(400)
+        .json({ error: "subItems are only allowed for kind=group services" });
+      return;
+    }
+    const created = await db.transaction(async (tx) => {
+      const [svc] = await tx
+        .insert(projectServicesTable)
+        .values({
+          projectId: req.params.id as string,
+          name: parsed.data.name,
+          kind: parsed.data.kind,
+          sortOrder: parsed.data.sortOrder ?? 0,
+        })
+        .returning();
+      if (subItems.length > 0) {
+        await tx.insert(serviceSubItemsTable).values(
+          subItems.map((si, idx) => ({
+            projectServiceId: svc.id,
+            name: si.name,
+            sortOrder: si.sortOrder ?? idx,
+          })),
+        );
+      }
+      return svc;
+    });
+    res.status(201).json(await serializeOne(created));
   },
 );
+
+/**
+ * Reconcile a service's sub-items against the incoming desired set.
+ * - Items with `id` matching an existing row are renamed/reordered.
+ * - Items without `id` are inserted.
+ * - Existing items not present in the input are deleted.
+ *
+ * Adds and removes are blocked (409) once any cost row references the parent
+ * service — historical entries must keep referencing a stable sub-item set.
+ * Renames and reorders remain allowed.
+ */
+async function reconcileSubItems(
+  serviceId: string,
+  desired: Array<{ id?: string; name: string; sortOrder?: number }>,
+): Promise<{ status: "ok" } | { status: "locked"; message: string }> {
+  return db.transaction(async (tx) => {
+    const existing = await tx
+      .select()
+      .from(serviceSubItemsTable)
+      .where(eq(serviceSubItemsTable.projectServiceId, serviceId));
+    const existingById = new Map(existing.map((e) => [e.id, e]));
+    const desiredIds = new Set(
+      desired.map((d) => d.id).filter((id): id is string => !!id),
+    );
+
+    const toDelete = existing.filter((e) => !desiredIds.has(e.id));
+    const toInsert = desired.filter((d) => !d.id);
+    const toUpdate = desired.filter(
+      (d): d is { id: string; name: string; sortOrder?: number } =>
+        !!d.id && existingById.has(d.id),
+    );
+    const unknown = desired.filter((d) => d.id && !existingById.has(d.id));
+    if (unknown.length > 0) {
+      return {
+        status: "locked" as const,
+        message: "Unknown sub-item id in payload",
+      };
+    }
+
+    const isStructuralChange = toDelete.length > 0 || toInsert.length > 0;
+    if (isStructuralChange) {
+      const [{ n }] = await tx
+        .select({ n: sql<number>`COUNT(*)::int` })
+        .from(serviceCostEntriesTable)
+        .where(eq(serviceCostEntriesTable.projectServiceId, serviceId));
+      if (Number(n ?? 0) > 0) {
+        return {
+          status: "locked" as const,
+          message:
+            "Sub-services cannot be added or removed once daily entries exist for this service. Renaming and reordering are still allowed.",
+        };
+      }
+    }
+
+    for (const u of toUpdate) {
+      const cur = existingById.get(u.id)!;
+      const nameChanged = u.name !== cur.name;
+      const orderChanged =
+        u.sortOrder !== undefined && u.sortOrder !== cur.sortOrder;
+      if (nameChanged || orderChanged) {
+        await tx
+          .update(serviceSubItemsTable)
+          .set({
+            name: u.name,
+            ...(u.sortOrder !== undefined ? { sortOrder: u.sortOrder } : {}),
+          })
+          .where(eq(serviceSubItemsTable.id, u.id));
+      }
+    }
+    if (toInsert.length > 0) {
+      await tx.insert(serviceSubItemsTable).values(
+        toInsert.map((d, idx) => ({
+          projectServiceId: serviceId,
+          name: d.name,
+          sortOrder: d.sortOrder ?? existing.length + idx,
+        })),
+      );
+    }
+    if (toDelete.length > 0) {
+      await tx
+        .delete(serviceSubItemsTable)
+        .where(
+          inArray(
+            serviceSubItemsTable.id,
+            toDelete.map((d) => d.id),
+          ),
+        );
+    }
+    return { status: "ok" as const };
+  });
+}
 
 router.patch(
   "/services/:id",
@@ -139,20 +299,46 @@ router.patch(
       res.status(400).json({ error: "Invalid body" });
       return;
     }
+    const serviceId = req.params.id as string;
     const data: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
     if (parsed.data.kind !== undefined) data.kind = parsed.data.kind;
     if (parsed.data.sortOrder !== undefined) data.sortOrder = parsed.data.sortOrder;
-    const [updated] = await db
-      .update(projectServicesTable)
-      .set(data)
-      .where(eq(projectServicesTable.id, (req.params.id as string)))
-      .returning();
-    if (!updated) {
-      res.status(404).json({ error: "Service not found" });
-      return;
+
+    if (Object.keys(data).length > 0) {
+      const updated = await db
+        .update(projectServicesTable)
+        .set(data)
+        .where(eq(projectServicesTable.id, serviceId))
+        .returning();
+      if (updated.length === 0) {
+        res.status(404).json({ error: "Service not found" });
+        return;
+      }
+    } else {
+      const [exists] = await db
+        .select()
+        .from(projectServicesTable)
+        .where(eq(projectServicesTable.id, serviceId));
+      if (!exists) {
+        res.status(404).json({ error: "Service not found" });
+        return;
+      }
     }
-    res.json(serialize(updated));
+
+    if (parsed.data.subItems !== undefined) {
+      const result = await reconcileSubItems(serviceId, parsed.data.subItems);
+      if (result.status === "locked") {
+        res.status(409).json({ error: result.message });
+        return;
+      }
+    }
+
+    const [row] = await db
+      .select()
+      .from(projectServicesTable)
+      .where(eq(projectServicesTable.id, serviceId));
+    res.json(await serializeOne(row));
   },
 );
 
@@ -177,15 +363,56 @@ router.delete(
           isNotNull(dailyEntriesTable.lockedAt),
         ),
       );
-    const deleted = await db
-      .delete(projectServicesTable)
-      .where(
-        and(
-          eq(projectServicesTable.id, serviceId),
-          sql`NOT EXISTS ${lockedRefSubquery}`,
-        ),
-      )
-      .returning({ id: projectServicesTable.id });
+    // Sub-item RESTRICT FK would block deletion as long as any sub_service_cost_entries
+    // reference this service's sub-items. Clear them up-front in the same transaction
+    // (the parent service_cost_entries CASCADE chain already handles it on delete).
+    // Critical: if the parent delete is blocked by the locked-entries guard, we
+    // throw to roll back the sub-row delete — otherwise we'd silently erase
+    // historical group breakdowns while keeping the service alive.
+    let deleted: Array<{ id: string }> = [];
+    try {
+      deleted = await db.transaction(async (tx) => {
+        // Clear sub-item rows referencing any cost entry for this service so
+        // RESTRICT FKs don't block the cascading delete below.
+        await tx.execute(sql`
+          DELETE FROM ${subServiceCostEntriesTable}
+          WHERE service_cost_entry_id IN (
+            SELECT id FROM ${serviceCostEntriesTable}
+            WHERE project_service_id = ${serviceId}
+          )
+        `);
+        const result = await tx
+          .delete(projectServicesTable)
+          .where(
+            and(
+              eq(projectServicesTable.id, serviceId),
+              sql`NOT EXISTS ${lockedRefSubquery}`,
+            ),
+          )
+          .returning({ id: projectServicesTable.id });
+        if (result.length === 0) {
+          // Distinguish "not found" from "locked-blocked" while still inside tx.
+          const [stillExists] = await tx
+            .select({ id: projectServicesTable.id })
+            .from(projectServicesTable)
+            .where(eq(projectServicesTable.id, serviceId));
+          if (stillExists) {
+            // Throw to roll back the sub-row delete above.
+            throw new Error("__LOCKED__");
+          }
+        }
+        return result;
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message === "__LOCKED__") {
+        res.status(409).json({
+          error:
+            "This service has cost entries on locked records and cannot be deleted",
+        });
+        return;
+      }
+      throw err;
+    }
     if (deleted.length === 0) {
       // Distinguish "not found" from "locked-blocked" with a follow-up read.
       const [stillExists] = await db
@@ -221,7 +448,7 @@ router.patch(
         .from(projectServicesTable)
         .where(eq(projectServicesTable.projectId, projectId))
         .orderBy(projectServicesTable.sortOrder);
-      res.json(rows.map(serialize));
+      res.json(await serializeMany(rows));
       return;
     }
     await db.transaction(async (tx) => {
@@ -242,7 +469,7 @@ router.patch(
       .from(projectServicesTable)
       .where(eq(projectServicesTable.projectId, projectId))
       .orderBy(projectServicesTable.sortOrder);
-    res.json(rows.map(serialize));
+    res.json(await serializeMany(rows));
   },
 );
 

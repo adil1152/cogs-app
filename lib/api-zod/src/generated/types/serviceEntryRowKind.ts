@@ -12,4 +12,5 @@ export type ServiceEntryRowKind =
 export const ServiceEntryRowKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;

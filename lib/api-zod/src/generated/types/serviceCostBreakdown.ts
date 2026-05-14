@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ServiceCostBreakdownKind } from "./serviceCostBreakdownKind";
+import type { SubServiceCostBreakdown } from "./subServiceCostBreakdown";
 
 export interface ServiceCostBreakdown {
   id: string;
@@ -29,4 +30,6 @@ export interface ServiceCostBreakdown {
   midnightQty?: number | null;
   /** @nullable */
   mealBoxQty?: number | null;
+  /** Per sub-item rows for kind=group; empty for other kinds. */
+  subCosts?: SubServiceCostBreakdown[];
 }

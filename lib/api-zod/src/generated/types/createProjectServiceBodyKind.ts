@@ -12,4 +12,5 @@ export type CreateProjectServiceBodyKind =
 export const CreateProjectServiceBodyKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;

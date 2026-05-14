@@ -12,4 +12,5 @@ export type ServiceCostBreakdownKind =
 export const ServiceCostBreakdownKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;

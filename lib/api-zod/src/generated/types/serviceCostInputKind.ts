@@ -12,4 +12,5 @@ export type ServiceCostInputKind =
 export const ServiceCostInputKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;

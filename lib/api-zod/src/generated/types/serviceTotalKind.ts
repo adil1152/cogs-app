@@ -12,4 +12,5 @@ export type ServiceTotalKind =
 export const ServiceTotalKind = {
   food: "food",
   standard: "standard",
+  group: "group",
 } as const;

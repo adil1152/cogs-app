@@ -56,7 +56,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
-import { Lock, Plus, Trash2, MapPin, Calendar, Pencil, BarChart3, ArrowUp, ArrowDown, Check, X, GripVertical } from "lucide-react";
+import { useProjectSwitcher } from "@/lib/useProjectSwitcher";
+import { ProjectSwitcherButtons } from "@/components/ProjectSwitcher";
+import { Lock, Plus, Trash2, MapPin, Calendar, Pencil, BarChart3, ArrowUp, ArrowDown, Check, X, GripVertical, ChevronDown, ChevronRight } from "lucide-react";
 
 export default function ProjectDetail() {
   const [, params] = useRoute("/projects/:id");
@@ -73,13 +75,21 @@ export default function ProjectDetail() {
   const { data: entries } = useListProjectEntries(id, undefined, {
     query: { enabled: !!id, queryKey: getListProjectEntriesQueryKey(id) },
   });
+  const switcher = useProjectSwitcher(id, (pid) => `/projects/${pid}`);
 
   if (!id) return null;
 
   return (
     <AppLayout>
       <PageHeader
-        title={isLoading ? "Loading…" : project?.name ?? "Project"}
+        title={
+          (
+            <span className="inline-flex items-center gap-2">
+              <ProjectSwitcherButtons switcher={switcher} />
+              <span>{isLoading ? "Loading…" : project?.name ?? "Project"}</span>
+            </span>
+          ) as any
+        }
         subtitle={
           project ? (
             <span className="inline-flex items-center gap-3 text-sm text-muted-foreground">
@@ -126,7 +136,11 @@ export default function ProjectDetail() {
           </TabsContent>
 
           <TabsContent value="services" className="mt-4">
-            <ServicesPanel projectId={id} services={services ?? []} canEdit={isAdmin} />
+            <ServicesPanel
+              projectId={id}
+              services={services ?? []}
+              canEdit={isAdmin}
+            />
           </TabsContent>
 
           <TabsContent value="security" className="mt-4">
@@ -212,13 +226,22 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
   );
 }
 
-function ServicesPanel({ projectId, services, canEdit }: { projectId: string; services: Array<any>; canEdit: boolean }) {
+function ServicesPanel({
+  projectId,
+  services,
+  canEdit,
+}: {
+  projectId: string;
+  services: Array<any>;
+  canEdit: boolean;
+}) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { register, handleSubmit, reset, watch, setValue } = useForm<CreateProjectServiceBody>({
     defaultValues: { kind: "standard" as any },
   });
   const kind = watch("kind");
+  const [newSubItems, setNewSubItems] = useState<string[]>([""]);
   const sorted = useMemo(
     () => [...services].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)),
     [services],
@@ -233,6 +256,7 @@ function ServicesPanel({ projectId, services, canEdit }: { projectId: string; se
         toast({ title: "Service added" });
         invalidateServices();
         reset({ kind: "standard" as any });
+        setNewSubItems([""]);
       },
       onError: (err: any) => toast({ title: "Could not add service", description: err.message, variant: "destructive" }),
     },
@@ -305,7 +329,24 @@ function ServicesPanel({ projectId, services, canEdit }: { projectId: string; se
           <CardHeader><CardTitle className="text-base">Add a service</CardTitle></CardHeader>
           <CardContent>
             <form
-              onSubmit={handleSubmit((data) => createService.mutate({ id: projectId, data }))}
+              onSubmit={handleSubmit((data) => {
+                const payload: any = { ...data };
+                if (data.kind === ("group" as any)) {
+                  const items = newSubItems
+                    .map((n) => n.trim())
+                    .filter((n) => n.length > 0)
+                    .map((name) => ({ name }));
+                  if (items.length === 0) {
+                    toast({
+                      title: "Add at least one sub-service",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  payload.subItems = items;
+                }
+                createService.mutate({ id: projectId, data: payload });
+              })}
               className="space-y-3"
             >
               <div className="space-y-1.5">
@@ -319,9 +360,65 @@ function ServicesPanel({ projectId, services, canEdit }: { projectId: string; se
                   <SelectContent>
                     <SelectItem value="standard">Standard</SelectItem>
                     <SelectItem value="food">Food</SelectItem>
+                    <SelectItem value="group">Group</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {kind === ("group" as any) && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Sub-services
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Define each sub-item once here. After daily entries
+                    exist for this service you can rename and reorder
+                    sub-items, but you can't add or remove them.
+                  </p>
+                  <div className="space-y-1.5">
+                    {newSubItems.map((v, i) => (
+                      <div key={i} className="flex gap-1.5">
+                        <Input
+                          value={v}
+                          onChange={(e) =>
+                            setNewSubItems((prev) =>
+                              prev.map((p, idx) =>
+                                idx === i ? e.target.value : p,
+                              ),
+                            )
+                          }
+                          placeholder={`Sub-service ${i + 1}`}
+                          data-testid={`input-new-sub-item-${i}`}
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 text-destructive hover:text-destructive"
+                          onClick={() =>
+                            setNewSubItems((prev) =>
+                              prev.length === 1
+                                ? [""]
+                                : prev.filter((_, idx) => idx !== i),
+                            )
+                          }
+                          data-testid={`button-remove-new-sub-item-${i}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setNewSubItems((prev) => [...prev, ""])}
+                    data-testid="button-add-new-sub-item"
+                  >
+                    + Add sub-service
+                  </Button>
+                </div>
+              )}
               <Button type="submit" className="w-full" disabled={createService.isPending} data-testid="button-add-service">
                 Add service
               </Button>
@@ -355,6 +452,10 @@ function ServiceRow({
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(service.name);
+  const isGroup = service.kind === "group";
+  const subItems: Array<{ id: string; name: string; sortOrder: number }> =
+    service.subItems ?? [];
+  const [expanded, setExpanded] = useState(false);
   const update = useUpdateProjectService({
     mutation: {
       onSuccess: () => {
@@ -367,68 +468,319 @@ function ServiceRow({
   });
 
   return (
-    <TableRow data-testid={`service-row-${service.id}`}>
-      <TableCell className="font-medium">
-        {editing ? (
-          <div className="flex items-center gap-1">
+    <>
+      <TableRow data-testid={`service-row-${service.id}`}>
+        <TableCell className="font-medium">
+          <div className="flex items-center gap-1.5">
+            {isGroup && canEdit ? (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 -ml-1"
+                onClick={() => setExpanded((x) => !x)}
+                data-testid={`expand-service-${service.id}`}
+                title={expanded ? "Collapse sub-services" : "Expand sub-services"}
+              >
+                {expanded ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            ) : (
+              <span className="inline-block w-6" />
+            )}
+            {editing ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="h-8 max-w-xs"
+                  autoFocus
+                  data-testid={`input-rename-${service.id}`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") update.mutate({ id: service.id, data: { name } });
+                    if (e.key === "Escape") { setName(service.name); setEditing(false); }
+                  }}
+                />
+                <Button
+                  size="icon" variant="ghost" className="h-8 w-8"
+                  onClick={() => update.mutate({ id: service.id, data: { name } })}
+                  disabled={update.isPending || !name.trim()}
+                  data-testid={`save-rename-${service.id}`}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  size="icon" variant="ghost" className="h-8 w-8"
+                  onClick={() => { setName(service.name); setEditing(false); }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <span>
+                {service.name}
+                {isGroup && subItems.length > 0 && (
+                  <span className="ml-2 text-[11px] text-muted-foreground">
+                    {subItems.length} sub-{subItems.length === 1 ? "service" : "services"}
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        </TableCell>
+        <TableCell>
+          <Badge
+            variant={
+              service.kind === "food"
+                ? "default"
+                : service.kind === "group"
+                ? "outline"
+                : "secondary"
+            }
+          >
+            {service.kind}
+          </Badge>
+        </TableCell>
+        {canEdit && (
+          <TableCell className="text-right">
+            <div className="inline-flex items-center gap-0.5">
+              <Button size="icon" variant="ghost" className="h-8 w-8" disabled={isFirst} onClick={onMoveUp} data-testid={`move-up-${service.id}`}>
+                <ArrowUp className="h-3.5 w-3.5" />
+              </Button>
+              <Button size="icon" variant="ghost" className="h-8 w-8" disabled={isLast} onClick={onMoveDown} data-testid={`move-down-${service.id}`}>
+                <ArrowDown className="h-3.5 w-3.5" />
+              </Button>
+              {!editing && (
+                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditing(true)} data-testid={`rename-${service.id}`}>
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              <Button
+                size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive"
+                onClick={onDelete}
+                data-testid={`delete-service-${service.id}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </TableCell>
+        )}
+      </TableRow>
+      {isGroup && canEdit && expanded && (
+        <TableRow>
+          <TableCell colSpan={3} className="bg-muted/30">
+            <SubItemsEditor
+              serviceId={service.id}
+              initial={subItems}
+              addRemoveLocked={Boolean(service.hasEntries)}
+              onSaved={onRenamed}
+            />
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
+function SubItemsEditor({
+  serviceId,
+  initial,
+  addRemoveLocked,
+  onSaved,
+}: {
+  serviceId: string;
+  initial: Array<{ id: string; name: string; sortOrder: number }>;
+  addRemoveLocked: boolean;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  type Draft = { id?: string; name: string; sortOrder: number; isNew?: boolean };
+  const sortedInitial = useMemo(
+    () => [...initial].sort((a, b) => a.sortOrder - b.sortOrder),
+    [initial],
+  );
+  const [draft, setDraft] = useState<Draft[]>(() =>
+    sortedInitial.map((s) => ({ id: s.id, name: s.name, sortOrder: s.sortOrder })),
+  );
+  // Reset local draft if the server list changes (e.g. another save).
+  useEffect(() => {
+    setDraft(
+      sortedInitial.map((s) => ({ id: s.id, name: s.name, sortOrder: s.sortOrder })),
+    );
+  }, [sortedInitial]);
+
+  const update = useUpdateProjectService({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Sub-services saved" });
+        onSaved();
+      },
+      onError: (err: any) =>
+        toast({
+          title: "Save failed",
+          description: err.message,
+          variant: "destructive",
+        }),
+    },
+  });
+
+  function rename(idx: number, val: string) {
+    setDraft((prev) => prev.map((d, i) => (i === idx ? { ...d, name: val } : d)));
+  }
+  function moveSub(idx: number, dir: -1 | 1) {
+    const target = idx + dir;
+    if (target < 0 || target >= draft.length) return;
+    setDraft((prev) => {
+      const next = prev.slice();
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next.map((d, i) => ({ ...d, sortOrder: i }));
+    });
+  }
+  function addSub() {
+    setDraft((prev) => [
+      ...prev,
+      { name: "", sortOrder: prev.length, isNew: true },
+    ]);
+  }
+  function removeSub(idx: number) {
+    setDraft((prev) =>
+      prev.filter((_, i) => i !== idx).map((d, i) => ({ ...d, sortOrder: i })),
+    );
+  }
+  function save() {
+    const cleaned = draft
+      .map((d) => ({ ...d, name: d.name.trim() }))
+      .filter((d) => d.name.length > 0);
+    if (cleaned.length === 0) {
+      toast({
+        title: "Cannot save",
+        description: "At least one sub-service is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    update.mutate({
+      id: serviceId,
+      data: {
+        subItems: cleaned.map((d, i) => ({
+          ...(d.id ? { id: d.id } : {}),
+          name: d.name,
+          sortOrder: i,
+        })),
+      } as any,
+    });
+  }
+  function reset() {
+    setDraft(
+      sortedInitial.map((s) => ({ id: s.id, name: s.name, sortOrder: s.sortOrder })),
+    );
+  }
+
+  const dirty =
+    draft.length !== sortedInitial.length ||
+    draft.some(
+      (d, i) =>
+        d.id !== sortedInitial[i]?.id || d.name !== sortedInitial[i]?.name,
+    );
+
+  return (
+    <div className="space-y-2 py-1">
+      {addRemoveLocked && (
+        <p className="text-[11px] text-muted-foreground">
+          Daily entries already exist for this service — you can rename and
+          reorder sub-services, but adding or removing them is locked.
+        </p>
+      )}
+      <div className="space-y-1.5">
+        {draft.map((d, i) => (
+          <div key={d.id ?? `new-${i}`} className="flex items-center gap-1.5">
+            <Badge variant="secondary" className="tabular-nums w-7 justify-center">
+              {i + 1}
+            </Badge>
             <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="h-8 max-w-xs"
-              autoFocus
-              data-testid={`input-rename-${service.id}`}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") update.mutate({ id: service.id, data: { name } });
-                if (e.key === "Escape") { setName(service.name); setEditing(false); }
-              }}
+              value={d.name}
+              onChange={(e) => rename(i, e.target.value)}
+              className="h-8 max-w-sm"
+              data-testid={`sub-item-name-${serviceId}-${i}`}
             />
             <Button
-              size="icon" variant="ghost" className="h-8 w-8"
-              onClick={() => update.mutate({ id: service.id, data: { name } })}
-              disabled={update.isPending || !name.trim()}
-              data-testid={`save-rename-${service.id}`}
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => moveSub(i, -1)}
+              disabled={i === 0}
+              data-testid={`sub-item-up-${serviceId}-${i}`}
+              title="Move up"
             >
-              <Check className="h-3.5 w-3.5" />
+              <ArrowUp className="h-3.5 w-3.5" />
             </Button>
             <Button
-              size="icon" variant="ghost" className="h-8 w-8"
-              onClick={() => { setName(service.name); setEditing(false); }}
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => moveSub(i, 1)}
+              disabled={i === draft.length - 1}
+              data-testid={`sub-item-down-${serviceId}-${i}`}
+              title="Move down"
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 text-destructive hover:text-destructive"
+              onClick={() => removeSub(i)}
+              disabled={addRemoveLocked && !d.isNew}
+              title={
+                addRemoveLocked && !d.isNew
+                  ? "Cannot remove — daily entries already use this sub-service"
+                  : "Remove"
+              }
+              data-testid={`sub-item-remove-${serviceId}-${i}`}
             >
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
-        ) : (
-          service.name
-        )}
-      </TableCell>
-      <TableCell>
-        <Badge variant={service.kind === "food" ? "default" : "secondary"}>{service.kind}</Badge>
-      </TableCell>
-      {canEdit && (
-        <TableCell className="text-right">
-          <div className="inline-flex items-center gap-0.5">
-            <Button size="icon" variant="ghost" className="h-8 w-8" disabled={isFirst} onClick={onMoveUp} data-testid={`move-up-${service.id}`}>
-              <ArrowUp className="h-3.5 w-3.5" />
-            </Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8" disabled={isLast} onClick={onMoveDown} data-testid={`move-down-${service.id}`}>
-              <ArrowDown className="h-3.5 w-3.5" />
-            </Button>
-            {!editing && (
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditing(true)} data-testid={`rename-${service.id}`}>
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-            )}
-            <Button
-              size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive"
-              onClick={onDelete}
-              data-testid={`delete-service-${service.id}`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </TableCell>
-      )}
-    </TableRow>
+        ))}
+      </div>
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={addSub}
+          disabled={addRemoveLocked}
+          title={
+            addRemoveLocked
+              ? "Cannot add — daily entries already exist for this service"
+              : undefined
+          }
+          data-testid={`sub-item-add-${serviceId}`}
+        >
+          + Add sub-service
+        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={reset}
+            disabled={!dirty || update.isPending}
+            data-testid={`sub-item-reset-${serviceId}`}
+          >
+            Reset
+          </Button>
+          <Button
+            size="sm"
+            onClick={save}
+            disabled={!dirty || update.isPending}
+            data-testid={`sub-item-save-${serviceId}`}
+          >
+            Save sub-services
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

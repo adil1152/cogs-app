@@ -59,6 +59,8 @@ import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
 import { useProjectSwitcher } from "@/lib/useProjectSwitcher";
 import { ProjectSwitcherButtons } from "@/components/ProjectSwitcher";
 import { Lock, Plus, Trash2, MapPin, Calendar, Pencil, BarChart3, ArrowUp, ArrowDown, Check, X, GripVertical, ChevronDown, ChevronRight } from "lucide-react";
+import { ColorDot } from "@/components/ColorDot";
+import { ColorPicker } from "@/components/ColorPicker";
 
 export default function ProjectDetail() {
   const [, params] = useRoute("/projects/:id");
@@ -241,7 +243,10 @@ function ServicesPanel({
     defaultValues: { kind: "standard" as any },
   });
   const kind = watch("kind");
-  const [newSubItems, setNewSubItems] = useState<string[]>([""]);
+  const [newColor, setNewColor] = useState<string | null>(null);
+  const [newSubItems, setNewSubItems] = useState<Array<{ name: string; color: string | null }>>([
+    { name: "", color: null },
+  ]);
   const sorted = useMemo(
     () => [...services].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)),
     [services],
@@ -256,7 +261,8 @@ function ServicesPanel({
         toast({ title: "Service added" });
         invalidateServices();
         reset({ kind: "standard" as any });
-        setNewSubItems([""]);
+        setNewColor(null);
+        setNewSubItems([{ name: "", color: null }]);
       },
       onError: (err: any) => toast({ title: "Could not add service", description: err.message, variant: "destructive" }),
     },
@@ -330,12 +336,12 @@ function ServicesPanel({
           <CardContent>
             <form
               onSubmit={handleSubmit((data) => {
-                const payload: any = { ...data };
+                const payload: any = { ...data, color: newColor };
                 if (data.kind === ("group" as any)) {
                   const items = newSubItems
-                    .map((n) => n.trim())
-                    .filter((n) => n.length > 0)
-                    .map((name) => ({ name }));
+                    .map((n) => ({ name: n.name.trim(), color: n.color }))
+                    .filter((n) => n.name.length > 0)
+                    .map(({ name, color }) => ({ name, color }));
                   if (items.length === 0) {
                     toast({
                       title: "Add at least one sub-service",
@@ -351,7 +357,18 @@ function ServicesPanel({
             >
               <div className="space-y-1.5">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Name</Label>
-                <Input {...register("name", { required: true })} placeholder="e.g. Catering" data-testid="input-service-name" />
+                <div className="flex items-center gap-2">
+                  <ColorPicker
+                    value={newColor}
+                    onChange={setNewColor}
+                    fallbackName={watch("name")}
+                  />
+                  <Input
+                    {...register("name", { required: true })}
+                    placeholder="e.g. Catering"
+                    data-testid="input-service-name"
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Kind</Label>
@@ -376,13 +393,24 @@ function ServicesPanel({
                   </p>
                   <div className="space-y-1.5">
                     {newSubItems.map((v, i) => (
-                      <div key={i} className="flex gap-1.5">
+                      <div key={i} className="flex items-center gap-1.5">
+                        <ColorPicker
+                          value={v.color}
+                          onChange={(c) =>
+                            setNewSubItems((prev) =>
+                              prev.map((p, idx) =>
+                                idx === i ? { ...p, color: c } : p,
+                              ),
+                            )
+                          }
+                          fallbackName={v.name}
+                        />
                         <Input
-                          value={v}
+                          value={v.name}
                           onChange={(e) =>
                             setNewSubItems((prev) =>
                               prev.map((p, idx) =>
-                                idx === i ? e.target.value : p,
+                                idx === i ? { ...p, name: e.target.value } : p,
                               ),
                             )
                           }
@@ -397,7 +425,7 @@ function ServicesPanel({
                           onClick={() =>
                             setNewSubItems((prev) =>
                               prev.length === 1
-                                ? [""]
+                                ? [{ name: "", color: null }]
                                 : prev.filter((_, idx) => idx !== i),
                             )
                           }
@@ -412,7 +440,9 @@ function ServicesPanel({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => setNewSubItems((prev) => [...prev, ""])}
+                    onClick={() =>
+                      setNewSubItems((prev) => [...prev, { name: "", color: null }])
+                    }
                     data-testid="button-add-new-sub-item"
                   >
                     + Add sub-service
@@ -453,7 +483,7 @@ function ServiceRow({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(service.name);
   const isGroup = service.kind === "group";
-  const subItems: Array<{ id: string; name: string; sortOrder: number }> =
+  const subItems: Array<{ id: string; name: string; sortOrder: number; color?: string | null }> =
     service.subItems ?? [];
   const [expanded, setExpanded] = useState(false);
   const update = useUpdateProjectService({
@@ -519,13 +549,27 @@ function ServiceRow({
                 </Button>
               </div>
             ) : (
-              <span>
-                {service.name}
-                {isGroup && subItems.length > 0 && (
-                  <span className="ml-2 text-[11px] text-muted-foreground">
-                    {subItems.length} sub-{subItems.length === 1 ? "service" : "services"}
-                  </span>
+              <span className="inline-flex items-center gap-2">
+                {canEdit ? (
+                  <ColorPicker
+                    value={service.color ?? null}
+                    onChange={(c) =>
+                      update.mutate({ id: service.id, data: { color: c } as any })
+                    }
+                    fallbackName={service.name}
+                    size={14}
+                  />
+                ) : (
+                  <ColorDot color={service.color ?? null} name={service.name} />
                 )}
+                <span>
+                  {service.name}
+                  {isGroup && subItems.length > 0 && (
+                    <span className="ml-2 text-[11px] text-muted-foreground">
+                      {subItems.length} sub-{subItems.length === 1 ? "service" : "services"}
+                    </span>
+                  )}
+                </span>
               </span>
             )}
           </div>
@@ -591,23 +635,39 @@ function SubItemsEditor({
   onSaved,
 }: {
   serviceId: string;
-  initial: Array<{ id: string; name: string; sortOrder: number }>;
+  initial: Array<{ id: string; name: string; sortOrder: number; color?: string | null }>;
   addRemoveLocked: boolean;
   onSaved: () => void;
 }) {
   const { toast } = useToast();
-  type Draft = { id?: string; name: string; sortOrder: number; isNew?: boolean };
+  type Draft = {
+    id?: string;
+    name: string;
+    sortOrder: number;
+    color: string | null;
+    isNew?: boolean;
+  };
   const sortedInitial = useMemo(
     () => [...initial].sort((a, b) => a.sortOrder - b.sortOrder),
     [initial],
   );
   const [draft, setDraft] = useState<Draft[]>(() =>
-    sortedInitial.map((s) => ({ id: s.id, name: s.name, sortOrder: s.sortOrder })),
+    sortedInitial.map((s) => ({
+      id: s.id,
+      name: s.name,
+      sortOrder: s.sortOrder,
+      color: s.color ?? null,
+    })),
   );
   // Reset local draft if the server list changes (e.g. another save).
   useEffect(() => {
     setDraft(
-      sortedInitial.map((s) => ({ id: s.id, name: s.name, sortOrder: s.sortOrder })),
+      sortedInitial.map((s) => ({
+        id: s.id,
+        name: s.name,
+        sortOrder: s.sortOrder,
+        color: s.color ?? null,
+      })),
     );
   }, [sortedInitial]);
 
@@ -629,6 +689,9 @@ function SubItemsEditor({
   function rename(idx: number, val: string) {
     setDraft((prev) => prev.map((d, i) => (i === idx ? { ...d, name: val } : d)));
   }
+  function recolor(idx: number, val: string | null) {
+    setDraft((prev) => prev.map((d, i) => (i === idx ? { ...d, color: val } : d)));
+  }
   function moveSub(idx: number, dir: -1 | 1) {
     const target = idx + dir;
     if (target < 0 || target >= draft.length) return;
@@ -641,7 +704,7 @@ function SubItemsEditor({
   function addSub() {
     setDraft((prev) => [
       ...prev,
-      { name: "", sortOrder: prev.length, isNew: true },
+      { name: "", sortOrder: prev.length, color: null, isNew: true },
     ]);
   }
   function removeSub(idx: number) {
@@ -668,13 +731,19 @@ function SubItemsEditor({
           ...(d.id ? { id: d.id } : {}),
           name: d.name,
           sortOrder: i,
+          color: d.color,
         })),
       } as any,
     });
   }
   function reset() {
     setDraft(
-      sortedInitial.map((s) => ({ id: s.id, name: s.name, sortOrder: s.sortOrder })),
+      sortedInitial.map((s) => ({
+        id: s.id,
+        name: s.name,
+        sortOrder: s.sortOrder,
+        color: s.color ?? null,
+      })),
     );
   }
 
@@ -682,7 +751,9 @@ function SubItemsEditor({
     draft.length !== sortedInitial.length ||
     draft.some(
       (d, i) =>
-        d.id !== sortedInitial[i]?.id || d.name !== sortedInitial[i]?.name,
+        d.id !== sortedInitial[i]?.id ||
+        d.name !== sortedInitial[i]?.name ||
+        (d.color ?? null) !== (sortedInitial[i]?.color ?? null),
     );
 
   return (
@@ -699,6 +770,12 @@ function SubItemsEditor({
             <Badge variant="secondary" className="tabular-nums w-7 justify-center">
               {i + 1}
             </Badge>
+            <ColorPicker
+              value={d.color}
+              onChange={(c) => recolor(i, c)}
+              fallbackName={d.name}
+              size={18}
+            />
             <Input
               value={d.name}
               onChange={(e) => rename(i, e.target.value)}

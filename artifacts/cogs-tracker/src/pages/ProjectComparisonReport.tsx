@@ -37,6 +37,8 @@ import {
 } from "@/lib/format";
 import { readSearch, useSyncUrlParams } from "@/lib/return-to";
 import { Download, SlidersHorizontal } from "lucide-react";
+import { ColorDot } from "@/components/ColorDot";
+import { tintBgStyle, resolveServiceColor } from "@/lib/serviceColor";
 
 type Metric = "cost" | "mandays" | "avg";
 
@@ -158,6 +160,7 @@ export default function ProjectComparisonReport() {
     key: string; // service name (lower-cased) used as group key
     label: string; // display name
     kind: string;
+    color: string; // resolved hex (defaults via name hash)
   };
 
   // Services across projects are grouped by (name, kind) so a service named
@@ -172,12 +175,22 @@ export default function ProjectComparisonReport() {
     const seen = new Map<string, ServiceColumn>();
     for (const row of agg.serviceBreakdown) {
       const key = groupKey(row.serviceName, row.kind);
-      if (!seen.has(key)) {
+      const existing = seen.get(key);
+      if (!existing) {
         seen.set(key, {
           key,
           label: row.serviceName,
           kind: row.kind,
+          color: resolveServiceColor(
+            (row as any).color ?? null,
+            row.serviceName,
+          ),
         });
+      } else if (!existing.color && (row as any).color) {
+        existing.color = resolveServiceColor(
+          (row as any).color,
+          row.serviceName,
+        );
       }
     }
     return Array.from(seen.values()).sort((a, b) =>
@@ -596,8 +609,12 @@ export default function ProjectComparisonReport() {
                           key={col.key}
                           colSpan={visibleMetrics.length}
                           className="text-center border-l border-border whitespace-nowrap"
+                          style={tintBgStyle(col.color, 0.18)}
                         >
-                          <div className="font-medium">{col.label}</div>
+                          <div className="font-medium inline-flex items-center justify-center gap-1.5">
+                            <ColorDot color={col.color} name={col.label} />
+                            {col.label}
+                          </div>
                           <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
                             {col.kind}
                           </div>
@@ -666,6 +683,7 @@ export default function ProjectComparisonReport() {
                                   (idx === 0 ? "border-l border-border " : "") +
                                   (cell ? "" : "text-muted-foreground")
                                 }
+                                style={tintBgStyle(col.color, 0.06)}
                               >
                                 {value}
                               </TableCell>
@@ -705,6 +723,7 @@ export default function ProjectComparisonReport() {
                                 "text-right tabular-nums font-semibold whitespace-nowrap " +
                                 (idx === 0 ? "border-l border-border" : "")
                               }
+                              style={tintBgStyle(col.color, 0.12)}
                             >
                               {value}
                             </TableCell>

@@ -426,6 +426,12 @@ export const GetProjectResponse = zod
           name: zod.string(),
           kind: zod.enum(["food", "standard", "group"]),
           sortOrder: zod.number(),
+          color: zod
+            .string()
+            .nullish()
+            .describe(
+              "Optional hex color (#RRGGBB) used as the service's brand color in tables and charts.",
+            ),
           subItems: zod
             .array(
               zod.object({
@@ -435,6 +441,12 @@ export const GetProjectResponse = zod
                   .min(1)
                   .max(getProjectResponseTwoServicesItemSubItemsItemNameMax),
                 sortOrder: zod.number(),
+                color: zod
+                  .string()
+                  .nullish()
+                  .describe(
+                    "Optional hex color (#RRGGBB) for charts\/legends.",
+                  ),
               }),
             )
             .describe(
@@ -517,6 +529,12 @@ export const ListProjectServicesResponseItem = zod.object({
   name: zod.string(),
   kind: zod.enum(["food", "standard", "group"]),
   sortOrder: zod.number(),
+  color: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional hex color (#RRGGBB) used as the service's brand color in tables and charts.",
+    ),
   subItems: zod
     .array(
       zod.object({
@@ -526,6 +544,10 @@ export const ListProjectServicesResponseItem = zod.object({
           .min(1)
           .max(listProjectServicesResponseSubItemsItemNameMax),
         sortOrder: zod.number(),
+        color: zod
+          .string()
+          .nullish()
+          .describe("Optional hex color (#RRGGBB) for charts\/legends."),
       }),
     )
     .describe("Defined sub-services for kind=group; empty array otherwise."),
@@ -549,6 +571,7 @@ export const CreateProjectServiceBody = zod.object({
   name: zod.string().min(1),
   kind: zod.enum(["food", "standard", "group"]),
   sortOrder: zod.number().optional(),
+  color: zod.string().nullish(),
   subItems: zod
     .array(
       zod.object({
@@ -563,6 +586,7 @@ export const CreateProjectServiceBody = zod.object({
           .min(1)
           .max(createProjectServiceBodySubItemsItemNameMax),
         sortOrder: zod.number().optional(),
+        color: zod.string().nullish().describe("Optional hex color (#RRGGBB)."),
       }),
     )
     .optional()
@@ -593,6 +617,12 @@ export const ReorderProjectServicesResponseItem = zod.object({
   name: zod.string(),
   kind: zod.enum(["food", "standard", "group"]),
   sortOrder: zod.number(),
+  color: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional hex color (#RRGGBB) used as the service's brand color in tables and charts.",
+    ),
   subItems: zod
     .array(
       zod.object({
@@ -602,6 +632,10 @@ export const ReorderProjectServicesResponseItem = zod.object({
           .min(1)
           .max(reorderProjectServicesResponseSubItemsItemNameMax),
         sortOrder: zod.number(),
+        color: zod
+          .string()
+          .nullish()
+          .describe("Optional hex color (#RRGGBB) for charts\/legends."),
       }),
     )
     .describe("Defined sub-services for kind=group; empty array otherwise."),
@@ -625,6 +659,7 @@ export const UpdateProjectServiceBody = zod.object({
   name: zod.string().min(1).optional(),
   kind: zod.enum(["food", "standard", "group"]).optional(),
   sortOrder: zod.number().optional(),
+  color: zod.string().nullish(),
   subItems: zod
     .array(
       zod.object({
@@ -639,6 +674,7 @@ export const UpdateProjectServiceBody = zod.object({
           .min(1)
           .max(updateProjectServiceBodySubItemsItemNameMax),
         sortOrder: zod.number().optional(),
+        color: zod.string().nullish().describe("Optional hex color (#RRGGBB)."),
       }),
     )
     .optional()
@@ -655,6 +691,12 @@ export const UpdateProjectServiceResponse = zod.object({
   name: zod.string(),
   kind: zod.enum(["food", "standard", "group"]),
   sortOrder: zod.number(),
+  color: zod
+    .string()
+    .nullish()
+    .describe(
+      "Optional hex color (#RRGGBB) used as the service's brand color in tables and charts.",
+    ),
   subItems: zod
     .array(
       zod.object({
@@ -664,6 +706,10 @@ export const UpdateProjectServiceResponse = zod.object({
           .min(1)
           .max(updateProjectServiceResponseSubItemsItemNameMax),
         sortOrder: zod.number(),
+        color: zod
+          .string()
+          .nullish()
+          .describe("Optional hex color (#RRGGBB) for charts\/legends."),
       }),
     )
     .describe("Defined sub-services for kind=group; empty array otherwise."),
@@ -2135,6 +2181,12 @@ export const GetProjectEntryMatrixResponse = zod
         name: zod.string(),
         kind: zod.enum(["food", "standard", "group"]),
         sortOrder: zod.number(),
+        color: zod
+          .string()
+          .nullish()
+          .describe(
+            "Optional hex color (#RRGGBB) used as the service's brand color in tables and charts.",
+          ),
         subItems: zod
           .array(
             zod.object({
@@ -2146,6 +2198,10 @@ export const GetProjectEntryMatrixResponse = zod
                   getProjectEntryMatrixResponseServicesItemSubItemsItemNameMax,
                 ),
               sortOrder: zod.number(),
+              color: zod
+                .string()
+                .nullish()
+                .describe("Optional hex color (#RRGGBB) for charts\/legends."),
             }),
           )
           .describe(
@@ -2226,6 +2282,7 @@ export const GetDashboardResponse = zod.object({
     zod.object({
       serviceName: zod.string(),
       kind: zod.enum(["food", "standard", "group"]),
+      color: zod.string().nullish(),
       totalCost: zod.number(),
       totalMandayContribution: zod.number(),
     }),
@@ -2340,9 +2397,29 @@ export const GetProjectSummaryResponse = zod.object({
         serviceId: zod.string(),
         serviceName: zod.string(),
         kind: zod.enum(["food", "standard", "group"]),
+        color: zod.string().nullish(),
         totalCost: zod.number(),
         totalMandayContribution: zod.number(),
         costPerManday: zod.number(),
+        subBreakdown: zod
+          .array(
+            zod
+              .object({
+                subItemId: zod.string(),
+                name: zod.string(),
+                color: zod.string().nullish(),
+                totalCost: zod.number(),
+                totalMandayContribution: zod.number(),
+                costPerManday: zod.number(),
+              })
+              .describe(
+                'Per-sub-service totals inside a group service\'s breakdown row.\nOnly present when the parent service kind is \"group\".\n',
+              ),
+          )
+          .optional()
+          .describe(
+            'For kind=\"group\" services: per-sub-service totals so the UI can\nexpand the row inline. Empty \/ omitted for non-group services.\n',
+          ),
       })
       .describe(
         "Per-project, per-service totals for the selected date range. The same\nservice NAME in different projects is reported as separate rows\n(keyed on projectId + serviceId).\n",
@@ -2425,9 +2502,29 @@ export const GetAggregateReportResponse = zod.object({
         serviceId: zod.string(),
         serviceName: zod.string(),
         kind: zod.enum(["food", "standard", "group"]),
+        color: zod.string().nullish(),
         totalCost: zod.number(),
         totalMandayContribution: zod.number(),
         costPerManday: zod.number(),
+        subBreakdown: zod
+          .array(
+            zod
+              .object({
+                subItemId: zod.string(),
+                name: zod.string(),
+                color: zod.string().nullish(),
+                totalCost: zod.number(),
+                totalMandayContribution: zod.number(),
+                costPerManday: zod.number(),
+              })
+              .describe(
+                'Per-sub-service totals inside a group service\'s breakdown row.\nOnly present when the parent service kind is \"group\".\n',
+              ),
+          )
+          .optional()
+          .describe(
+            'For kind=\"group\" services: per-sub-service totals so the UI can\nexpand the row inline. Empty \/ omitted for non-group services.\n',
+          ),
       })
       .describe(
         "Per-project, per-service totals for the selected date range. The same\nservice NAME in different projects is reported as separate rows\n(keyed on projectId + serviceId).\n",
@@ -2514,6 +2611,7 @@ export const ListServiceEntriesResponseItem = zod
     serviceId: zod.string(),
     serviceName: zod.string(),
     kind: zod.enum(["food", "standard", "group"]),
+    color: zod.string().nullish(),
     entryDate: zod.coerce.date(),
     location: zod.string(),
     cost: zod.number(),
@@ -2544,6 +2642,7 @@ export const ListVisibleServicesResponseItem = zod.object({
   projectName: zod.string(),
   name: zod.string(),
   kind: zod.enum(["food", "standard", "group"]),
+  color: zod.string().nullish(),
 });
 export const ListVisibleServicesResponse = zod.array(
   ListVisibleServicesResponseItem,

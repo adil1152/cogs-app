@@ -14,4 +14,6 @@ export interface ServiceSubItem {
    */
   name: string;
   sortOrder: number;
+  /** Optional hex color (#RRGGBB) for charts/legends. */
+  color?: string | null;
 }

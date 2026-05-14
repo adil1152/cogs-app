@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ProjectServiceTotalKind } from "./projectServiceTotalKind";
+import type { SubServiceTotal } from "./subServiceTotal";
 
 /**
  * Per-project, per-service totals for the selected date range. The same
@@ -19,7 +20,12 @@ export interface ProjectServiceTotal {
   serviceId: string;
   serviceName: string;
   kind: ProjectServiceTotalKind;
+  color?: string | null;
   totalCost: number;
   totalMandayContribution: number;
   costPerManday: number;
+  /** For kind="group" services: per-sub-service totals so the UI can
+expand the row inline. Empty / omitted for non-group services.
+ */
+  subBreakdown?: SubServiceTotal[];
 }

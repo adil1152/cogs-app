@@ -1584,6 +1584,10 @@ components:
         id: { type: string }
         name: { type: string, minLength: 1, maxLength: 255 }
         sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
+          description: Optional hex color (#RRGGBB) for charts/legends.
     SubItemInput:
       type: object
       required: [name]
@@ -1593,6 +1597,10 @@ components:
           description: When set, identifies an existing sub-item to rename / reorder.
         name: { type: string, minLength: 1, maxLength: 255 }
         sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
+          description: Optional hex color (#RRGGBB).
 
     ProjectService:
       type: object
@@ -1605,6 +1613,10 @@ components:
           type: string
           enum: [food, standard, group]
         sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
+          description: Optional hex color (#RRGGBB) used as the service's brand color in tables and charts.
         subItems:
           type: array
           description: Defined sub-services for kind=group; empty array otherwise.
@@ -1625,6 +1637,9 @@ components:
           type: string
           enum: [food, standard, group]
         sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
         subItems:
           type: array
           description: Initial sub-items (only meaningful when kind=group).
@@ -1638,6 +1653,9 @@ components:
           type: string
           enum: [food, standard, group]
         sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
         subItems:
           type: array
           description: |
@@ -1824,6 +1842,9 @@ components:
         kind:
           type: string
           enum: [food, standard, group]
+        color:
+          type: string
+          nullable: true
 
     AuditLogEntry:
       type: object
@@ -2118,8 +2139,26 @@ components:
         kind:
           type: string
           enum: [food, standard, group]
+        color:
+          type: string
+          nullable: true
         totalCost: { type: number }
         totalMandayContribution: { type: number }
+    SubServiceTotal:
+      type: object
+      description: |
+        Per-sub-service totals inside a group service's breakdown row.
+        Only present when the parent service kind is "group".
+      required: [subItemId, name, totalCost, totalMandayContribution, costPerManday]
+      properties:
+        subItemId: { type: string }
+        name: { type: string }
+        color:
+          type: string
+          nullable: true
+        totalCost: { type: number }
+        totalMandayContribution: { type: number }
+        costPerManday: { type: number }
     ProjectServiceTotal:
       type: object
       description: |
@@ -2143,9 +2182,19 @@ components:
         kind:
           type: string
           enum: [food, standard, group]
+        color:
+          type: string
+          nullable: true
         totalCost: { type: number }
         totalMandayContribution: { type: number }
         costPerManday: { type: number }
+        subBreakdown:
+          type: array
+          description: |
+            For kind="group" services: per-sub-service totals so the UI can
+            expand the row inline. Empty / omitted for non-group services.
+          items:
+            $ref: '#/components/schemas/SubServiceTotal'
     ServiceEntryRow:
       type: object
       description: |
@@ -2171,6 +2220,9 @@ components:
         kind:
           type: string
           enum: [food, standard, group]
+        color:
+          type: string
+          nullable: true
         entryDate: { type: string, format: date }
         location: { type: string }
         cost: { type: number }

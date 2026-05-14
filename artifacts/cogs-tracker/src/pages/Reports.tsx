@@ -41,6 +41,7 @@ import { downloadCsv } from "@/lib/csv";
 import { formatCurrency, formatNumber, daysAgoISO, todayISO } from "@/lib/format";
 import { buildUrl, readSearch, useSyncUrlParams } from "@/lib/return-to";
 import { Download } from "lucide-react";
+import { ServiceBreakdownRows } from "@/components/ServiceBreakdownRows";
 import { useLocation } from "wouter";
 
 export default function Reports() {
@@ -427,10 +428,10 @@ export default function Reports() {
                 </TableHeader>
                 <TableBody>
                   {agg.serviceBreakdown.map((s) => (
-                    <TableRow
+                    <ServiceBreakdownRows
                       key={`${s.projectId}-${s.serviceId}`}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() =>
+                      row={s}
+                      onOpen={() =>
                         setDrilldown({
                           serviceId: s.serviceId,
                           serviceName: s.serviceName,
@@ -442,27 +443,8 @@ export default function Reports() {
                           returnTo: returnUrl,
                         })
                       }
-                      data-testid={`report-service-row-${s.projectId}-${s.serviceId}`}
-                    >
-                      <TableCell>{s.projectName}</TableCell>
-                      <TableCell>
-                        <div className="font-medium">{s.serviceName}</div>
-                        <div className="text-xs text-muted-foreground capitalize">
-                          {s.kind}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatCurrency(s.totalCost)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {formatNumber(s.totalMandayContribution, 2)}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {s.totalMandayContribution > 0
-                          ? formatCurrency(s.costPerManday)
-                          : "—"}
-                      </TableCell>
-                    </TableRow>
+                      testId={`report-service-row-${s.projectId}-${s.serviceId}`}
+                    />
                   ))}
                 </TableBody>
                 <TableFooter>

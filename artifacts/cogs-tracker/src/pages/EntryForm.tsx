@@ -31,6 +31,7 @@ import {
   type ServiceCostInput,
 } from "@workspace/api-client-react";
 import { useUpload } from "@workspace/object-storage-web";
+import { ColorDot } from "@/components/ColorDot";
 import { useAuth } from "@workspace/replit-auth-web";
 import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,6 +70,7 @@ interface SubLine {
   subItemId: string;
   name: string;
   sortOrder: number;
+  color: string | null;
   cost: string;
   mandays: string;
 }
@@ -76,6 +78,7 @@ interface SubLine {
 interface ServiceLine {
   projectServiceId: string;
   name: string;
+  color: string | null;
   kind: "food" | "standard" | "group";
   cost: string;
   mandays: string;
@@ -95,7 +98,8 @@ function emptyLine(svc: {
   id: string;
   name: string;
   kind: "food" | "standard" | "group";
-  subItems?: Array<{ id: string; name: string; sortOrder: number }>;
+  color?: string | null;
+  subItems?: Array<{ id: string; name: string; sortOrder: number; color?: string | null }>;
 }): ServiceLine {
   const subs: SubLine[] = svc.kind === "group"
     ? [...(svc.subItems ?? [])]
@@ -104,6 +108,7 @@ function emptyLine(svc: {
           subItemId: s.id,
           name: s.name,
           sortOrder: s.sortOrder,
+          color: s.color ?? null,
           cost: "",
           mandays: "",
         }))
@@ -111,6 +116,7 @@ function emptyLine(svc: {
   return {
     projectServiceId: svc.id,
     name: svc.name,
+    color: svc.color ?? null,
     kind: svc.kind,
     cost: "",
     mandays: "",
@@ -265,9 +271,15 @@ export default function EntryForm() {
           const subById = new Map(
             (sc?.subCosts ?? []).map((s: any) => [s.subItemId, s]),
           );
+          const projectSubsTyped = projectSubs as Array<{
+            id: string;
+            name: string;
+            sortOrder: number;
+            color?: string | null;
+          }>;
           const subs: SubLine[] =
             kind === "group"
-              ? [...projectSubs]
+              ? [...projectSubsTyped]
                   .sort((a, b) => a.sortOrder - b.sortOrder)
                   .map((s) => {
                     const sub: any = subById.get(s.id);
@@ -275,6 +287,7 @@ export default function EntryForm() {
                       subItemId: s.id,
                       name: s.name,
                       sortOrder: s.sortOrder,
+                      color: s.color ?? null,
                       cost: sub?.cost != null ? String(sub.cost) : "",
                       mandays: sub?.mandays != null ? String(sub.mandays) : "",
                     };
@@ -283,6 +296,7 @@ export default function EntryForm() {
           return {
             projectServiceId: svc.id,
             name: svc.name,
+            color: (svc as any).color ?? null,
             kind,
             cost:
               kind === "group"
@@ -312,6 +326,7 @@ export default function EntryForm() {
             id: s.id,
             name: s.name,
             kind: s.kind as any,
+            color: (s as any).color ?? null,
             subItems: (s as any).subItems,
           }),
         ),
@@ -721,9 +736,10 @@ export default function EntryForm() {
                   return (
                     <div key={l.projectServiceId} className="rounded-md border border-border bg-card p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <span className="font-medium">
+                        <span className="font-medium inline-flex items-center gap-2">
+                          <ColorDot color={l.color} name={l.name} />
                           {l.name}
-                          <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <span className="ml-1 text-[10px] uppercase tracking-wider text-muted-foreground">
                             {l.kind}
                           </span>
                         </span>
@@ -752,7 +768,12 @@ export default function EntryForm() {
                                 <tbody className="divide-y divide-border">
                                   {l.subItems.map((s, si) => (
                                     <tr key={s.subItemId} data-testid={`sub-row-${i}-${si}`}>
-                                      <td className="px-3 py-1.5 font-medium">{s.name}</td>
+                                      <td className="px-3 py-1.5 font-medium">
+                                        <span className="inline-flex items-center gap-2">
+                                          <ColorDot color={s.color ?? l.color} name={s.name} size={8} />
+                                          {s.name}
+                                        </span>
+                                      </td>
                                       <td className="px-2 py-1">
                                         <Input
                                           type="number"

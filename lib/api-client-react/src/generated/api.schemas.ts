@@ -260,6 +260,8 @@ export interface ServiceSubItem {
    */
   name: string;
   sortOrder: number;
+  /** Optional hex color (#RRGGBB) for charts/legends. */
+  color?: string | null;
 }
 
 export interface ProjectService {
@@ -268,6 +270,8 @@ export interface ProjectService {
   name: string;
   kind: ProjectServiceKind;
   sortOrder: number;
+  /** Optional hex color (#RRGGBB) used as the service's brand color in tables and charts. */
+  color?: string | null;
   /** Defined sub-services for kind=group; empty array otherwise. */
   subItems: ServiceSubItem[];
   /** True if at least one daily-entry cost row references this service.
@@ -322,6 +326,8 @@ export interface SubItemInput {
    */
   name: string;
   sortOrder?: number;
+  /** Optional hex color (#RRGGBB). */
+  color?: string | null;
 }
 
 export type CreateProjectServiceBodyKind =
@@ -338,6 +344,7 @@ export interface CreateProjectServiceBody {
   name: string;
   kind: CreateProjectServiceBodyKind;
   sortOrder?: number;
+  color?: string | null;
   /** Initial sub-items (only meaningful when kind=group). */
   subItems?: SubItemInput[];
 }
@@ -356,6 +363,7 @@ export interface UpdateProjectServiceBody {
   name?: string;
   kind?: UpdateProjectServiceBodyKind;
   sortOrder?: number;
+  color?: string | null;
   /** Full replacement set of sub-items. Items with `id` are kept
 (rename / reorder); items without `id` are inserted; existing
 sub-items not present are deleted. Add/remove is rejected with
@@ -496,6 +504,7 @@ export interface ServiceCatalogItem {
   projectName: string;
   name: string;
   kind: ServiceCatalogItemKind;
+  color?: string | null;
 }
 
 export interface AuditLogEntry {
@@ -774,8 +783,23 @@ export const ServiceTotalKind = {
 export interface ServiceTotal {
   serviceName: string;
   kind: ServiceTotalKind;
+  color?: string | null;
   totalCost: number;
   totalMandayContribution: number;
+}
+
+/**
+ * Per-sub-service totals inside a group service's breakdown row.
+Only present when the parent service kind is "group".
+
+ */
+export interface SubServiceTotal {
+  subItemId: string;
+  name: string;
+  color?: string | null;
+  totalCost: number;
+  totalMandayContribution: number;
+  costPerManday: number;
 }
 
 export type ProjectServiceTotalKind =
@@ -799,9 +823,14 @@ export interface ProjectServiceTotal {
   serviceId: string;
   serviceName: string;
   kind: ProjectServiceTotalKind;
+  color?: string | null;
   totalCost: number;
   totalMandayContribution: number;
   costPerManday: number;
+  /** For kind="group" services: per-sub-service totals so the UI can
+expand the row inline. Empty / omitted for non-group services.
+ */
+  subBreakdown?: SubServiceTotal[];
 }
 
 export type ServiceEntryRowKind =
@@ -824,6 +853,7 @@ export interface ServiceEntryRow {
   serviceId: string;
   serviceName: string;
   kind: ServiceEntryRowKind;
+  color?: string | null;
   entryDate: string;
   location: string;
   cost: number;

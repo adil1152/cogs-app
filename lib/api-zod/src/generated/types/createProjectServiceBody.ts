@@ -13,6 +13,7 @@ export interface CreateProjectServiceBody {
   name: string;
   kind: CreateProjectServiceBodyKind;
   sortOrder?: number;
+  color?: string | null;
   /** Initial sub-items (only meaningful when kind=group). */
   subItems?: SubItemInput[];
 }

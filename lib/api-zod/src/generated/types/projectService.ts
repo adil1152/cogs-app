@@ -14,6 +14,8 @@ export interface ProjectService {
   name: string;
   kind: ProjectServiceKind;
   sortOrder: number;
+  /** Optional hex color (#RRGGBB) used as the service's brand color in tables and charts. */
+  color?: string | null;
   /** Defined sub-services for kind=group; empty array otherwise. */
   subItems: ServiceSubItem[];
   /** True if at least one daily-entry cost row references this service.

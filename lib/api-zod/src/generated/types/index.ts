@@ -81,6 +81,7 @@ export * from "./setProjectApproversBodyAssignmentsItem";
 export * from "./subItemInput";
 export * from "./subServiceCostBreakdown";
 export * from "./subServiceCostInput";
+export * from "./subServiceTotal";
 export * from "./successResponse";
 export * from "./trendPoint";
 export * from "./trendsReport";

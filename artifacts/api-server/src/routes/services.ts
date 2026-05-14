@@ -27,7 +27,13 @@ interface SerializedService {
   name: string;
   kind: ServiceKind;
   sortOrder: number;
-  subItems: Array<{ id: string; name: string; sortOrder: number }>;
+  color: string | null;
+  subItems: Array<{
+    id: string;
+    name: string;
+    sortOrder: number;
+    color: string | null;
+  }>;
   hasEntries: boolean;
 }
 
@@ -51,11 +57,16 @@ async function serializeMany(
   ]);
   const byService = new Map<
     string,
-    Array<{ id: string; name: string; sortOrder: number }>
+    Array<{ id: string; name: string; sortOrder: number; color: string | null }>
   >();
   for (const si of subItems) {
     const list = byService.get(si.projectServiceId) ?? [];
-    list.push({ id: si.id, name: si.name, sortOrder: si.sortOrder });
+    list.push({
+      id: si.id,
+      name: si.name,
+      sortOrder: si.sortOrder,
+      color: si.color ?? null,
+    });
     byService.set(si.projectServiceId, list);
   }
   const usedSet = new Set(usedRows.map((r) => r.projectServiceId));
@@ -65,6 +76,7 @@ async function serializeMany(
     name: s.name,
     kind: s.kind as ServiceKind,
     sortOrder: s.sortOrder,
+    color: s.color ?? null,
     subItems: byService.get(s.id) ?? [],
     hasEntries: usedSet.has(s.id),
   }));
@@ -123,6 +135,7 @@ router.get(
         projectName: p?.name ?? "",
         name: s.name,
         kind: s.kind as ServiceKind,
+        color: s.color ?? null,
       })),
     );
   },
@@ -182,6 +195,7 @@ router.post(
           name: parsed.data.name,
           kind: parsed.data.kind,
           sortOrder: parsed.data.sortOrder ?? 0,
+          color: parsed.data.color ?? null,
         })
         .returning();
       if (subItems.length > 0) {
@@ -190,6 +204,7 @@ router.post(
             projectServiceId: svc.id,
             name: si.name,
             sortOrder: si.sortOrder ?? idx,
+            color: si.color ?? null,
           })),
         );
       }
@@ -211,7 +226,12 @@ router.post(
  */
 async function reconcileSubItems(
   serviceId: string,
-  desired: Array<{ id?: string; name: string; sortOrder?: number }>,
+  desired: Array<{
+    id?: string;
+    name: string;
+    sortOrder?: number;
+    color?: string | null;
+  }>,
 ): Promise<{ status: "ok" } | { status: "locked"; message: string }> {
   return db.transaction(async (tx) => {
     const existing = await tx
@@ -226,8 +246,14 @@ async function reconcileSubItems(
     const toDelete = existing.filter((e) => !desiredIds.has(e.id));
     const toInsert = desired.filter((d) => !d.id);
     const toUpdate = desired.filter(
-      (d): d is { id: string; name: string; sortOrder?: number } =>
-        !!d.id && existingById.has(d.id),
+      (
+        d,
+      ): d is {
+        id: string;
+        name: string;
+        sortOrder?: number;
+        color?: string | null;
+      } => !!d.id && existingById.has(d.id),
     );
     const unknown = desired.filter((d) => d.id && !existingById.has(d.id));
     if (unknown.length > 0) {
@@ -257,12 +283,15 @@ async function reconcileSubItems(
       const nameChanged = u.name !== cur.name;
       const orderChanged =
         u.sortOrder !== undefined && u.sortOrder !== cur.sortOrder;
-      if (nameChanged || orderChanged) {
+      const colorChanged =
+        u.color !== undefined && (u.color ?? null) !== (cur.color ?? null);
+      if (nameChanged || orderChanged || colorChanged) {
         await tx
           .update(serviceSubItemsTable)
           .set({
             name: u.name,
             ...(u.sortOrder !== undefined ? { sortOrder: u.sortOrder } : {}),
+            ...(u.color !== undefined ? { color: u.color } : {}),
           })
           .where(eq(serviceSubItemsTable.id, u.id));
       }
@@ -273,6 +302,7 @@ async function reconcileSubItems(
           projectServiceId: serviceId,
           name: d.name,
           sortOrder: d.sortOrder ?? existing.length + idx,
+          color: d.color ?? null,
         })),
       );
     }
@@ -304,6 +334,7 @@ router.patch(
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
     if (parsed.data.kind !== undefined) data.kind = parsed.data.kind;
     if (parsed.data.sortOrder !== undefined) data.sortOrder = parsed.data.sortOrder;
+    if (parsed.data.color !== undefined) data.color = parsed.data.color;
 
     if (Object.keys(data).length > 0) {
       const updated = await db

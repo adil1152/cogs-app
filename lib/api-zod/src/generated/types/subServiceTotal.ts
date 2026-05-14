@@ -5,12 +5,17 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { ServiceTotalKind } from "./serviceTotalKind";
 
-export interface ServiceTotal {
-  serviceName: string;
-  kind: ServiceTotalKind;
+/**
+ * Per-sub-service totals inside a group service's breakdown row.
+Only present when the parent service kind is "group".
+
+ */
+export interface SubServiceTotal {
+  subItemId: string;
+  name: string;
   color?: string | null;
   totalCost: number;
   totalMandayContribution: number;
+  costPerManday: number;
 }

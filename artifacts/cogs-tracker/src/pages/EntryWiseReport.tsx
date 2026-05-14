@@ -46,6 +46,8 @@ import {
 } from "@/lib/format";
 import { buildUrl, readSearch, useSyncUrlParams } from "@/lib/return-to";
 import { Download, SlidersHorizontal, Lock } from "lucide-react";
+import { ColorDot } from "@/components/ColorDot";
+import { tintBgStyle } from "@/lib/serviceColor";
 
 type Metric = "cost" | "mandays" | "avg";
 
@@ -435,6 +437,7 @@ export default function EntryWiseReport() {
                                 checked={!hiddenServices.has(s.id)}
                                 onCheckedChange={() => toggleService(s.id)}
                               />
+                              <ColorDot color={(s as any).color} name={s.name} />
                               <span className="flex-1">{s.name}</span>
                               <span className="text-xs text-muted-foreground capitalize">
                                 {s.kind}
@@ -539,8 +542,12 @@ export default function EntryWiseReport() {
                           key={s.id}
                           colSpan={visibleMetrics.length}
                           className="text-center border-l border-border whitespace-nowrap"
+                          style={tintBgStyle((s as any).color, 0.18, s.name)}
                         >
-                          <div className="font-medium">{s.name}</div>
+                          <div className="font-medium inline-flex items-center justify-center gap-1.5">
+                            <ColorDot color={(s as any).color} name={s.name} />
+                            {s.name}
+                          </div>
                           <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
                             {s.kind}
                           </div>
@@ -627,6 +634,7 @@ export default function EntryWiseReport() {
                                     ? "cursor-pointer hover:bg-muted/50"
                                     : "text-muted-foreground")
                                 }
+                                style={tintBgStyle((s as any).color, 0.06, s.name)}
                                 onClick={() => {
                                   if (!c) return;
                                   setDrilldown({
@@ -681,6 +689,7 @@ export default function EntryWiseReport() {
                                 "text-right tabular-nums font-semibold whitespace-nowrap " +
                                 (idx === 0 ? "border-l border-border" : "")
                               }
+                              style={tintBgStyle((s as any).color, 0.12, s.name)}
                             >
                               {value}
                             </TableCell>

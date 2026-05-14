@@ -15,4 +15,6 @@ export interface SubItemInput {
    */
   name: string;
   sortOrder?: number;
+  /** Optional hex color (#RRGGBB). */
+  color?: string | null;
 }

@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatNumber, formatDate, todayISO } from "@/lib/format";
 import { ArrowRight } from "lucide-react";
+import { resolveServiceColor } from "@/lib/serviceColor";
 
 const CHART_COLORS = ["hsl(var(--accent))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "hsl(var(--primary))"];
 
@@ -197,8 +198,11 @@ export default function Dashboard() {
                         formatter={(v: number) => formatCurrency(v)}
                       />
                       <Bar dataKey="totalCost">
-                        {dashboard.serviceBreakdown.map((_, i) => (
-                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        {dashboard.serviceBreakdown.map((row: any, i) => (
+                          <Cell
+                            key={i}
+                            fill={resolveServiceColor(row.color, row.serviceName)}
+                          />
                         ))}
                       </Bar>
                     </BarChart>

@@ -13,4 +13,5 @@ export interface ServiceCatalogItem {
   projectName: string;
   name: string;
   kind: ServiceCatalogItemKind;
+  color?: string | null;
 }

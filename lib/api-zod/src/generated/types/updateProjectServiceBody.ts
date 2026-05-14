@@ -13,6 +13,7 @@ export interface UpdateProjectServiceBody {
   name?: string;
   kind?: UpdateProjectServiceBodyKind;
   sortOrder?: number;
+  color?: string | null;
   /** Full replacement set of sub-items. Items with `id` are kept
 (rename / reorder); items without `id` are inserted; existing
 sub-items not present are deleted. Add/remove is rejected with

@@ -48,6 +48,7 @@ export const projectServicesTable = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     kind: varchar("kind", { length: 16 }).notNull().default("standard"),
     sortOrder: integer("sort_order").notNull().default(0),
+    color: varchar("color", { length: 9 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -71,6 +72,7 @@ export const serviceSubItemsTable = pgTable(
       .references(() => projectServicesTable.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
+    color: varchar("color", { length: 9 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

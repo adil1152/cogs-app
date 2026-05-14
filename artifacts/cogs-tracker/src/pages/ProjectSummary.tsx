@@ -21,6 +21,7 @@ import { formatCurrency, formatNumber, formatDate, daysAgoISO, todayISO } from "
 import { useProjectSwitcher } from "@/lib/useProjectSwitcher";
 import { ProjectSwitcherButtons } from "@/components/ProjectSwitcher";
 import { ArrowLeft, ArrowRight, Download, Lock } from "lucide-react";
+import { ServiceBreakdownRows } from "@/components/ServiceBreakdownRows";
 
 export default function ProjectSummary() {
   const [, params] = useRoute("/projects/:id/summary");
@@ -224,10 +225,10 @@ export default function ProjectSummary() {
                     </TableHeader>
                     <TableBody>
                       {summary.serviceBreakdown.map((s) => (
-                        <TableRow
+                        <ServiceBreakdownRows
                           key={`${s.projectId}-${s.serviceId}`}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() =>
+                          row={s}
+                          onOpen={() =>
                             setDrilldown({
                               serviceId: s.serviceId,
                               serviceName: s.serviceName,
@@ -238,27 +239,8 @@ export default function ProjectSummary() {
                               scopeToProject: true,
                             })
                           }
-                          data-testid={`summary-service-row-${s.serviceId}`}
-                        >
-                          <TableCell>{s.projectName}</TableCell>
-                          <TableCell>
-                            <div className="font-medium">{s.serviceName}</div>
-                            <div className="text-xs text-muted-foreground capitalize">
-                              {s.kind}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {formatCurrency(s.totalCost)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {formatNumber(s.totalMandayContribution, 2)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {s.totalMandayContribution > 0
-                              ? formatCurrency(s.costPerManday)
-                              : "—"}
-                          </TableCell>
-                        </TableRow>
+                          testId={`summary-service-row-${s.serviceId}`}
+                        />
                       ))}
                     </TableBody>
                     <TableFooter>

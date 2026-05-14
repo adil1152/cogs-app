@@ -6,6 +6,8 @@ import {
   projectServicesTable,
   projectsTable,
   usersTable,
+  subServiceCostEntriesTable,
+  serviceSubItemsTable,
 } from "@workspace/db";
 import { and, eq, gte, lte, inArray, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
@@ -93,6 +95,84 @@ function parseStatuses(v: unknown): string[] | null {
   return filtered.length > 0 ? filtered : null;
 }
 
+interface SubBreakdownRow {
+  subItemId: string;
+  name: string;
+  color: string | null;
+  totalCost: number;
+  totalMandayContribution: number;
+  costPerManday: number;
+}
+
+/**
+ * Given a map of parent-key -> set of serviceCostEntry IDs (for group-kind
+ * parent services only), compute per-sub-item totals from
+ * sub_service_cost_entries. Returned map is keyed by the same parent-key.
+ */
+async function fetchSubBreakdownByKey(
+  costRowsByKey: Map<string, Set<string>>,
+): Promise<Map<string, SubBreakdownRow[]>> {
+  const out = new Map<string, SubBreakdownRow[]>();
+  if (costRowsByKey.size === 0) return out;
+  const costToKey = new Map<string, string>();
+  for (const [key, ids] of costRowsByKey) {
+    for (const id of ids) costToKey.set(id, key);
+  }
+  const allIds = Array.from(costToKey.keys());
+  if (allIds.length === 0) return out;
+  const subRows = await db
+    .select({ sub: subServiceCostEntriesTable, item: serviceSubItemsTable })
+    .from(subServiceCostEntriesTable)
+    .leftJoin(
+      serviceSubItemsTable,
+      eq(serviceSubItemsTable.id, subServiceCostEntriesTable.subItemId),
+    )
+    .where(inArray(subServiceCostEntriesTable.serviceCostEntryId, allIds));
+
+  interface Acc {
+    name: string;
+    color: string | null;
+    sortOrder: number;
+    cost: number;
+    mandays: number;
+  }
+  const buckets = new Map<string, Map<string, Acc>>();
+  for (const r of subRows) {
+    if (!r.item) continue;
+    const key = costToKey.get(r.sub.serviceCostEntryId);
+    if (!key) continue;
+    let m = buckets.get(key);
+    if (!m) {
+      m = new Map();
+      buckets.set(key, m);
+    }
+    const prev = m.get(r.sub.subItemId) ?? {
+      name: r.item.name,
+      color: r.item.color ?? null,
+      sortOrder: r.item.sortOrder,
+      cost: 0,
+      mandays: 0,
+    };
+    prev.cost += Number(r.sub.cost ?? 0);
+    prev.mandays += Number(r.sub.mandays ?? 0);
+    m.set(r.sub.subItemId, prev);
+  }
+  for (const [key, m] of buckets) {
+    const arr = Array.from(m.entries())
+      .sort((a, b) => a[1].sortOrder - b[1].sortOrder)
+      .map(([subItemId, v]) => ({
+        subItemId,
+        name: v.name,
+        color: v.color,
+        totalCost: v.cost,
+        totalMandayContribution: v.mandays,
+        costPerManday: safeDivide(v.cost, v.mandays),
+      }));
+    out.set(key, arr);
+  }
+  return out;
+}
+
 function rowMandayContribution(row: JoinedRow): number {
   if (!row.cost) return 0;
   return serviceMandays({
@@ -172,7 +252,13 @@ router.get(
 
     const serviceTotals = new Map<
       string,
-      { name: string; kind: "food" | "standard"; totalCost: number; mandayContribution: number }
+      {
+        name: string;
+        kind: "food" | "standard" | "group";
+        color: string | null;
+        totalCost: number;
+        mandayContribution: number;
+      }
     >();
     const projectTotals = new Map<
       string,
@@ -195,7 +281,8 @@ router.get(
         const key = `${row.service.id}`;
         const prev = serviceTotals.get(key) ?? {
           name: row.service.name,
-          kind: row.service.kind as "food" | "standard",
+          kind: row.service.kind as "food" | "standard" | "group",
+          color: row.service.color ?? null,
           totalCost: 0,
           mandayContribution: 0,
         };
@@ -226,6 +313,7 @@ router.get(
       serviceBreakdown: Array.from(serviceTotals.values()).map((s) => ({
         serviceName: s.name,
         kind: s.kind,
+        color: s.color,
         totalCost: s.totalCost,
         totalMandayContribution: s.mandayContribution,
       })),
@@ -345,11 +433,13 @@ router.get(
         projectName: string;
         serviceId: string;
         name: string;
-        kind: "food" | "standard";
+        kind: "food" | "standard" | "group";
+        color: string | null;
         totalCost: number;
         mandayContribution: number;
       }
     >();
+    const groupCostRowsByService = new Map<string, Set<string>>();
     const entriesById = new Map<
       string,
       {
@@ -376,13 +466,22 @@ router.get(
           projectName: v.project!.name,
           serviceId: row.service.id,
           name: row.service.name,
-          kind: row.service.kind as "food" | "standard",
+          kind: row.service.kind as "food" | "standard" | "group",
+          color: row.service.color ?? null,
           totalCost: 0,
           mandayContribution: 0,
         };
         prev.totalCost += Number(row.cost!.cost ?? 0);
         prev.mandayContribution += rowMandayContribution(row);
         serviceTotals.set(key, prev);
+        if (row.service.kind === "group" && row.cost) {
+          let s = groupCostRowsByService.get(key);
+          if (!s) {
+            s = new Set();
+            groupCostRowsByService.set(key, s);
+          }
+          s.add(row.cost.id);
+        }
       }
 
       const eprev = entriesById.get(row.entry.id) ?? {
@@ -398,6 +497,10 @@ router.get(
       }
       entriesById.set(row.entry.id, eprev);
     }
+
+    const subBreakdownByKey = await fetchSubBreakdownByKey(
+      groupCostRowsByService,
+    );
 
     res.json({
       project: serializeProject(
@@ -418,9 +521,11 @@ router.get(
         serviceId: s.serviceId,
         serviceName: s.name,
         kind: s.kind,
+        color: s.color,
         totalCost: s.totalCost,
         totalMandayContribution: s.mandayContribution,
         costPerManday: safeDivide(s.totalCost, s.mandayContribution),
+        subBreakdown: subBreakdownByKey.get(s.serviceId) ?? [],
       })),
       dailyEntries: Array.from(entriesById.values())
         // When service-filtered, omit entries whose costs were all filtered out.
@@ -491,11 +596,13 @@ router.get(
         projectName: string;
         serviceId: string;
         name: string;
-        kind: "food" | "standard";
+        kind: "food" | "standard" | "group";
+        color: string | null;
         totalCost: number;
         mandayContribution: number;
       }
     >();
+    const groupCostRowsByKey = new Map<string, Set<string>>();
     const projectTotals = new Map<
       string,
       {
@@ -526,13 +633,22 @@ router.get(
           projectName: row.project.name,
           serviceId: row.service.id,
           name: row.service.name,
-          kind: row.service.kind as "food" | "standard",
+          kind: row.service.kind as "food" | "standard" | "group",
+          color: row.service.color ?? null,
           totalCost: 0,
           mandayContribution: 0,
         };
         prev.totalCost += Number(row.cost!.cost ?? 0);
         prev.mandayContribution += rowMandayContribution(row);
         serviceTotals.set(key, prev);
+        if (row.service.kind === "group" && row.cost) {
+          let s = groupCostRowsByKey.get(key);
+          if (!s) {
+            s = new Set();
+            groupCostRowsByKey.set(key, s);
+          }
+          s.add(row.cost.id);
+        }
       }
 
       if (row.project) {
@@ -554,18 +670,22 @@ router.get(
       }
     }
 
+    const subBreakdownByKey = await fetchSubBreakdownByKey(groupCostRowsByKey);
+
     res.json({
       range: { from, to },
       kpi: kpiOut(kpi, useEntryMandays),
-      serviceBreakdown: Array.from(serviceTotals.values()).map((s) => ({
+      serviceBreakdown: Array.from(serviceTotals.entries()).map(([key, s]) => ({
         projectId: s.projectId,
         projectName: s.projectName,
         serviceId: s.serviceId,
         serviceName: s.name,
         kind: s.kind,
+        color: s.color,
         totalCost: s.totalCost,
         totalMandayContribution: s.mandayContribution,
         costPerManday: safeDivide(s.totalCost, s.mandayContribution),
+        subBreakdown: subBreakdownByKey.get(key) ?? [],
       })),
       projectBreakdown: Array.from(projectTotals.values())
         .filter((p) => p.totalCost > 0 || p.entryMandays.size > 0 || p.contributedMandays > 0)
@@ -708,7 +828,8 @@ router.get(
           projectName: r.project!.name,
           serviceId: r.service!.id,
           serviceName: r.service!.name,
-          kind: r.service!.kind as "food" | "standard",
+          kind: r.service!.kind as "food" | "standard" | "group",
+          color: r.service!.color ?? null,
           entryDate: r.entry.entryDate,
           location: r.entry.location,
           cost,
@@ -871,8 +992,11 @@ router.get(
         id: s.id,
         projectId: s.projectId,
         name: s.name,
-        kind: s.kind as "food" | "standard",
+        kind: s.kind as "food" | "standard" | "group",
         sortOrder: s.sortOrder,
+        color: s.color ?? null,
+        subItems: [],
+        hasEntries: false,
       })),
       entries,
       serviceTotals,

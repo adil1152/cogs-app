@@ -18,6 +18,7 @@ export interface ServiceEntryRow {
   serviceId: string;
   serviceName: string;
   kind: ServiceEntryRowKind;
+  color?: string | null;
   entryDate: Date;
   location: string;
   cost: number;

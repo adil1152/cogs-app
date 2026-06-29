@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
+    "start": "pnpm run build && pnpm --filter @workspace/api-server run start",
     "dev": "pnpm --filter @workspace/api-server --filter @workspace/cogs-tracker --parallel run dev",
     "preinstall": "node -e \"if (process.env.npm_config_user_agent && !process.env.npm_config_user_agent.startsWith('pnpm/')) { console.error('Use pnpm instead'); process.exit(1); }\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",

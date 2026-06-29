@@ -19,14 +19,14 @@ COPY lib/api-zod/package.json ./lib/api-zod/
 # Copy the rest of the application code
 COPY . .
 
-# Install all dependencies (including devDependencies required for build)
-RUN pnpm install --frozen-lockfile
+# Install all dependencies without scripts, then manually trigger esbuild's postinstall
+RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN pnpm rebuild esbuild
 
 # Build the frontend and backend
 RUN pnpm run build
 
-# Remove devDependencies to significantly reduce the size of the final image
-RUN pnpm prune --prod
+# Skip pnpm prune --prod because it deletes workspace dependencies in pnpm v11
 
 # Stage 2: Production runtime environment
 FROM node:22-slim AS runner
@@ -47,5 +47,8 @@ ENV PORT=8080
 ENV NODE_ENV=production
 EXPOSE 8080
 
-# Run the API server directly (bypassing the root build command so it starts instantly)
-CMD ["pnpm", "--filter", "@workspace/api-server", "run", "start"]
+# Set working directory to the api-server so relative paths resolve correctly
+WORKDIR /app/artifacts/api-server
+
+# Run the API server directly (bypassing pnpm so it starts instantly without needing corepack)
+CMD ["node", "--enable-source-maps", "--env-file=../../.env", "./dist/index.mjs"]

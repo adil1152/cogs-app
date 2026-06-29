@@ -14,5 +14,10 @@
   "devDependencies": {
     "typescript": "~5.9.2",
     "prettier": "^3.8.1"
+  },
+  "pnpm": {
+    "approvedBuilds": {
+      "esbuild": "0.27.3"
+    }
   }
 }

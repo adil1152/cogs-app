@@ -51,14 +51,17 @@ jobs:
     
     steps:
       - name: Set environment variables
+        env:
+          PROD_ENV: ${{ secrets.PROD_ENV_FILE }}
+          STAGING_ENV: ${{ secrets.STAGING_ENV_FILE }}
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "TARGET_HOST=${{ secrets.PROD_HOST }}" >> $GITHUB_ENV
-            echo "ENV_FILE_SECRET=${{ secrets.PROD_ENV_FILE }}" >> $GITHUB_ENV
+            echo "ENV_FILE_SECRET_B64=$(echo "$PROD_ENV" | base64 -w 0)" >> $GITHUB_ENV
             echo "CONTAINER_PORT=80" >> $GITHUB_ENV
           elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
             echo "TARGET_HOST=${{ secrets.STAGING_HOST }}" >> $GITHUB_ENV
-            echo "ENV_FILE_SECRET=${{ secrets.STAGING_ENV_FILE }}" >> $GITHUB_ENV
+            echo "ENV_FILE_SECRET_B64=$(echo "$STAGING_ENV" | base64 -w 0)" >> $GITHUB_ENV
             echo "CONTAINER_PORT=8080" >> $GITHUB_ENV
           fi
 
@@ -68,7 +71,7 @@ jobs:
           host: ${{ env.TARGET_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: REGISTRY,IMAGE_NAME,ENV_FILE_SECRET,CONTAINER_PORT
+          envs: REGISTRY,IMAGE_NAME,ENV_FILE_SECRET_B64,CONTAINER_PORT
           script: |
             # Login to GitHub Container Registry
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -78,7 +81,7 @@ jobs:
             docker pull $IMAGE_URL
             
             # Recreate the .env file securely on the EC2 instance
-            echo "$ENV_FILE_SECRET" > .env
+            echo "$ENV_FILE_SECRET_B64" | base64 -d > .env
             
             # Stop and remove the old container if it exists
             docker stop cogs-tracker-app || true

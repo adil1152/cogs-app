@@ -84,7 +84,7 @@ jobs:
             echo "$ENV_FILE_SECRET_B64" | base64 -d > .env
             
             # Sync database schema
-            docker run --rm --env-file .env -w /app/lib/db $IMAGE_URL npx drizzle-kit push --config ./drizzle.config.ts || true
+            docker run --rm -e NODE_ENV=production --env-file .env -w /app/lib/db $IMAGE_URL npx drizzle-kit push --force --config ./drizzle.config.ts
             
             # Stop and remove the old container if it exists
             docker stop cogs-tracker-app || true

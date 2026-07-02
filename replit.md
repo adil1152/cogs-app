@@ -185,4 +185,4 @@ wouter's `useLocation` to navigate without a full page reload.
   `lib/api-zod/src/index.ts` if you added new schemas.
 - `pnpm --filter @workspace/db run push` — push schema changes to the dev database.
 - `pnpm run typecheck` — full repo typecheck.
-- Workflows are managed by the platform; do not run `pnpm dev` from the repo root. 
+- Workflows are managed by the platform; do not run `pnpm dev` from the repo root.

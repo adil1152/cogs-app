@@ -83,6 +83,9 @@ jobs:
             # Recreate the .env file securely on the EC2 instance
             echo "$ENV_FILE_SECRET_B64" | base64 -d > .env
             
+            # Sync database schema
+            docker run --rm --env-file .env -w /app/lib/db $IMAGE_URL npx drizzle-kit push --config ./drizzle.config.ts || true
+            
             # Stop and remove the old container if it exists
             docker stop cogs-tracker-app || true
             docker rm cogs-tracker-app || true

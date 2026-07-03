@@ -12,6 +12,6 @@ export default defineConfig({
   dialect: "postgresql",
   dbCredentials: {
     url: process.env.DATABASE_URL,
-    ...((process.env.NODE_ENV === "production" || process.env.NODE_ENV === "staging") ? { ssl: { rejectUnauthorized: false } } : {}),
+    ...((process.env.DATABASE_URL.includes("rds.amazonaws.com") || process.env.NODE_ENV === "production" || process.env.NODE_ENV === "staging") ? { ssl: { rejectUnauthorized: false } } : {}),
   },
 });

@@ -62,7 +62,7 @@ jobs:
           elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
             echo "TARGET_HOST=${{ secrets.STAGING_HOST }}" >> $GITHUB_ENV
             echo "ENV_FILE_SECRET_B64=$(echo "$STAGING_ENV" | base64 -w 0)" >> $GITHUB_ENV
-            echo "CONTAINER_PORT=8080" >> $GITHUB_ENV
+            echo "CONTAINER_PORT=80" >> $GITHUB_ENV
           fi
 
       - name: Deploy to EC2 via SSH

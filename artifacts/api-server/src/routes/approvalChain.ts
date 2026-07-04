@@ -6,11 +6,15 @@ import {
   projectApproverAssignmentsTable,
   dailyEntriesTable,
 } from "@workspace/db";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { SetProjectApprovalChainBody } from "@workspace/api-zod";
 import { requireAdmin, requireAuth } from "../middlewares/requireAuth";
 import { getProjectVisibility } from "../lib/projectAccess";
-import { getProjectChain } from "../lib/approvalChain";
+import {
+  defaultChain,
+  getProjectChain,
+  midApprovalCondition,
+} from "../lib/approvalChain";
 
 const router: IRouter = Router();
 
@@ -92,124 +96,166 @@ router.put(
       names.add(n.toLowerCase());
     }
 
-    const newPosByName = new Map<string, number>();
-    for (const c of sorted) {
-      newPosByName.set(c.levelName.trim().toLowerCase(), c.position);
-    }
-
     const newChainRows = await db.transaction(async (tx) => {
-      // Lock the project row so two concurrent reorders serialize on the same
+      // Lock the project row so two concurrent edits serialize on the same
       // project. We must read old chain INSIDE the transaction so the remap
       // can't be computed against stale data.
       await tx.execute(
         sql`SELECT id FROM ${projectsTable} WHERE id = ${projectId} FOR UPDATE`,
       );
 
-      const oldRows = await tx
+      // Single gate: the approval chain routes approvals by numeric position.
+      // Editing it (rename/reorder/delete) while an entry is actively moving
+      // through the chain would misroute that entry. Only entries that are
+      // submitted AND partway through (pending, currentApprovalLevel > 0) are at
+      // risk — draft entries haven't entered the chain, and fully-approved
+      // entries are locked and keep their own snapshot of each step's name.
+      // Require the admin to clear just those in-flight entries first.
+      const [tied] = await tx
+        .select({ n: sql<number>`COUNT(DISTINCT ${dailyEntriesTable.id})::int` })
+        .from(dailyEntriesTable)
+        .where(midApprovalCondition(projectId));
+      const tiedCount = tied?.n ?? 0;
+      if (tiedCount > 0) {
+        const e = new Error(
+          `This project has ${tiedCount} ${
+            tiedCount === 1 ? "entry" : "entries"
+          } in the middle of approval. Reset ${
+            tiedCount === 1 ? "it" : "them"
+          } to draft (or delete ${
+            tiedCount === 1 ? "it" : "them"
+          }) before changing the approval order.`,
+        ) as Error & { httpStatus: number };
+        e.httpStatus = 409;
+        throw e;
+      }
+
+      const persistedRows = await tx
         .select()
         .from(projectApprovalChainTable)
         .where(eq(projectApprovalChainTable.projectId, projectId))
         .orderBy(projectApprovalChainTable.position);
 
-      const oldChain =
-        oldRows.length > 0
-          ? oldRows.map((r) => ({
+      // The effective "old" chain we are editing. Projects created after the
+      // seed-on-creation change always have persisted rows (with ids). For any
+      // legacy project that still has none, fall back to the synthetic default
+      // chain so its approver assignments (keyed by the default positions) can
+      // still be tracked across this edit.
+      const oldRows =
+        persistedRows.length > 0
+          ? persistedRows.map((r) => ({
+              id: r.id as string | null,
               position: r.position,
               levelName: r.levelName,
             }))
-          : [
-              { position: 1, levelName: "OP" },
-              { position: 2, levelName: "SOP" },
-              { position: 3, levelName: "COO" },
-              { position: 4, levelName: "CC" },
-              { position: 5, levelName: "Additional" },
-            ];
+          : defaultChain();
 
-      // Existing levels must be preserved (no removes — entry approvals
-      // already reference them by position). New levels may be appended,
-      // and existing levels may be reordered freely.
-      if (sorted.length < oldChain.length) {
-        const e = new Error(
-          `Chain length cannot shrink below existing (${oldChain.length}).`,
-        ) as Error & { httpStatus: number };
-        e.httpStatus = 400;
-        throw e;
+      // Determine which old level each surviving payload row came from.
+      //   - Persisted chains: match by stable id, so a rename keeps its
+      //     approvers. A brand-new row (no id / unknown id) has no old level.
+      //   - Legacy default chains (no ids): match null-id rows by name, so
+      //     reorder/delete keep their approvers. (Rename+no-id can't be tracked,
+      //     but seed-on-creation + backfill means real projects have ids.)
+      const oldById = new Map<string, (typeof oldRows)[number]>();
+      const oldByName = new Map<string, (typeof oldRows)[number]>();
+      for (const r of oldRows) {
+        if (r.id) oldById.set(r.id, r);
+        oldByName.set(r.levelName.trim().toLowerCase(), r);
       }
-      for (const c of oldChain) {
-        if (!newPosByName.has(c.levelName.toLowerCase())) {
-          const e = new Error(
-            `Cannot remove level "${c.levelName}" — existing levels must be kept.`,
-          ) as Error & { httpStatus: number };
-          e.httpStatus = 400;
-          throw e;
+
+      const survivorRemap = new Map<number, number>(); // oldPos → newPos
+      const reuseIdByNewPos = new Map<number, string>(); // newPos → old id
+      const claimedOldPos = new Set<number>();
+      for (const c of sorted) {
+        let src: (typeof oldRows)[number] | undefined;
+        if (c.id) {
+          src = oldById.get(c.id);
+        } else {
+          const m = oldByName.get(c.levelName.trim().toLowerCase());
+          // Only treat a name match as a survivor when it maps to a real old
+          // level we haven't already claimed (defends against a new row whose
+          // name collides with a surviving level matched by id).
+          if (m && !claimedOldPos.has(m.position)) src = m;
+        }
+        if (src && !claimedOldPos.has(src.position)) {
+          claimedOldPos.add(src.position);
+          survivorRemap.set(src.position, c.position);
+          if (src.id) reuseIdByNewPos.set(c.position, src.id);
         }
       }
 
-      // Build oldPosition → newPosition map.
-      const remap = new Map<number, number>();
-      let reordered = false;
-      for (const c of oldChain) {
-        const np = newPosByName.get(c.levelName.toLowerCase())!;
-        remap.set(c.position, np);
-        if (np !== c.position) reordered = true;
-      }
-
-      // Reordering existing positions would misroute in-flight approvals
-      // (entry_approvals.level + daily_entries.currentApprovalLevel reference
-      // positions, not names). Pure appends are always safe. Block reorders
-      // while any partially-approved or pending entries exist.
-      if (reordered) {
-        const [inflight] = await tx
-          .select({ n: sql<number>`COUNT(*)::int` })
-          .from(dailyEntriesTable)
-          .where(
-            and(
-              eq(dailyEntriesTable.projectId, projectId),
-              gt(dailyEntriesTable.currentApprovalLevel, 0),
-            ),
-          );
-        if ((inflight?.n ?? 0) > 0) {
-          const e = new Error(
-            "Cannot reorder existing levels while there are entries with approvals in progress. Reset those entries to draft first, or only append new levels.",
-          ) as Error & { httpStatus: number };
-          e.httpStatus = 409;
-          throw e;
-        }
-      }
-
-      // Two-step assignment level remap to dodge unique(project_id, level, user_id) conflicts.
-      await tx
-        .update(projectApproverAssignmentsTable)
-        .set({ level: sql`-${projectApproverAssignmentsTable.level}` })
-        .where(eq(projectApproverAssignmentsTable.projectId, projectId));
-
-      for (const [oldPos, newPos] of remap.entries()) {
-        await tx
-          .update(projectApproverAssignmentsTable)
-          .set({ level: newPos })
-          .where(
-            and(
-              eq(projectApproverAssignmentsTable.projectId, projectId),
-              eq(projectApproverAssignmentsTable.level, -oldPos),
-            ),
-          );
-      }
-
+      // Rebuild the chain rows from the payload (renames/reorders/deletes/appends).
+      // Surviving levels keep their existing id so ids stay stable across saves
+      // (a stale client re-saving with old ids still matches correctly).
       await tx
         .delete(projectApprovalChainTable)
         .where(eq(projectApprovalChainTable.projectId, projectId));
-      await tx.insert(projectApprovalChainTable).values(
-        sorted.map((c) => ({
-          projectId,
-          position: c.position,
-          levelName: c.levelName.trim(),
-        })),
-      );
+      const insertedRows = await tx
+        .insert(projectApprovalChainTable)
+        .values(
+          sorted.map((c) => {
+            const reuseId = reuseIdByNewPos.get(c.position);
+            return {
+              ...(reuseId ? { id: reuseId } : {}),
+              projectId,
+              position: c.position,
+              levelName: c.levelName.trim(),
+            };
+          }),
+        )
+        .returning();
 
-      return sorted.map((c) => ({
-        position: c.position,
-        levelName: c.levelName.trim(),
-      }));
+      // Rebuild approver assignments for the new positions. Drop assignments
+      // for deleted levels (old positions not in survivorRemap), and remap
+      // survivors to their new positions. Two-step negate-then-set dodges the
+      // unique(project_id, level, user_id) constraint during the shuffle.
+      const survivingOldPositions = [...survivorRemap.keys()];
+      // Remove assignments whose old level is not surviving.
+      if (survivingOldPositions.length > 0) {
+        await tx
+          .delete(projectApproverAssignmentsTable)
+          .where(
+            and(
+              eq(projectApproverAssignmentsTable.projectId, projectId),
+              sql`${projectApproverAssignmentsTable.level} NOT IN (${sql.join(
+                survivingOldPositions.map((p) => sql`${p}`),
+                sql`, `,
+              )})`,
+            ),
+          );
+      } else {
+        await tx
+          .delete(projectApproverAssignmentsTable)
+          .where(eq(projectApproverAssignmentsTable.projectId, projectId));
+      }
+
+      if (survivingOldPositions.length > 0) {
+        // Negate all remaining levels first.
+        await tx
+          .update(projectApproverAssignmentsTable)
+          .set({ level: sql`-${projectApproverAssignmentsTable.level}` })
+          .where(eq(projectApproverAssignmentsTable.projectId, projectId));
+
+        for (const [oldPos, newPos] of survivorRemap.entries()) {
+          await tx
+            .update(projectApproverAssignmentsTable)
+            .set({ level: newPos })
+            .where(
+              and(
+                eq(projectApproverAssignmentsTable.projectId, projectId),
+                eq(projectApproverAssignmentsTable.level, -oldPos),
+              ),
+            );
+        }
+      }
+
+      return insertedRows
+        .sort((a, b) => a.position - b.position)
+        .map((r) => ({
+          id: r.id,
+          position: r.position,
+          levelName: r.levelName,
+        }));
     }).catch((err: Error & { httpStatus?: number }) => {
       if (err.httpStatus) {
         res.status(err.httpStatus).json({ error: err.message });

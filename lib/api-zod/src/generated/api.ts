@@ -341,6 +341,12 @@ export const ListProjectsResponseItem = zod.object({
   approvalChain: zod
     .array(
       zod.object({
+        id: zod
+          .string()
+          .nullish()
+          .describe(
+            "Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders.",
+          ),
         position: zod.number().min(1),
         levelName: zod
           .string()
@@ -406,6 +412,12 @@ export const GetProjectResponse = zod
     approvalChain: zod
       .array(
         zod.object({
+            id: zod
+            .string()
+            .nullish()
+            .describe(
+              "Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders.",
+            ),
           position: zod.number().min(1),
           levelName: zod
             .string()
@@ -501,6 +513,12 @@ export const UpdateProjectResponse = zod.object({
   approvalChain: zod
     .array(
       zod.object({
+              id: zod
+          .string()
+          .nullish()
+          .describe(
+            "Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders.",
+          ),
         position: zod.number().min(1),
         levelName: zod
           .string()
@@ -2157,6 +2175,12 @@ export const GetProjectEntryMatrixResponse = zod
       approvalChain: zod
         .array(
           zod.object({
+                id: zod
+              .string()
+              .nullish()
+              .describe(
+                "Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders.",
+              ),
             position: zod.number().min(1),
             levelName: zod
               .string()
@@ -2368,6 +2392,12 @@ export const GetProjectSummaryResponse = zod.object({
     approvalChain: zod
       .array(
         zod.object({
+            id: zod
+            .string()
+            .nullish()
+            .describe(
+              "Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders.",
+            ),
           position: zod.number().min(1),
           levelName: zod
             .string()
@@ -2658,6 +2688,12 @@ export const GetProjectApprovalChainParams = zod.object({
 export const getProjectApprovalChainResponseLevelNameMax = 32;
 
 export const GetProjectApprovalChainResponseItem = zod.object({
+     id: zod
+    .string()
+    .nullish()
+    .describe(
+      "Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders.",
+    ),
   position: zod.number().min(1),
   levelName: zod
     .string()
@@ -2681,6 +2717,12 @@ export const SetProjectApprovalChainBody = zod.object({
   chain: zod
     .array(
       zod.object({
+            id: zod
+          .string()
+          .nullish()
+          .describe(
+            "Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders.",
+          ),
         position: zod.number().min(1),
         levelName: zod
           .string()
@@ -2694,6 +2736,12 @@ export const SetProjectApprovalChainBody = zod.object({
 export const setProjectApprovalChainResponseLevelNameMax = 32;
 
 export const SetProjectApprovalChainResponseItem = zod.object({
+     id: zod
+    .string()
+    .nullish()
+    .describe(
+      "Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders.",
+    ),
   position: zod.number().min(1),
   levelName: zod
     .string()

@@ -213,6 +213,8 @@ export interface UpdateUserRoleBody {
 }
 
 export interface ApprovalChainEntry {
+    /** Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders. */
+  id?: string | null;
   /** @minimum 1 */
   position: number;
   /**

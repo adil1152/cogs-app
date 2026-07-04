@@ -5,13 +5,16 @@ import {
   projectApprovalChainTable,
   projectApproverAssignmentsTable,
   dailyEntriesTable,
-  entryApprovalsTable,
 } from "@workspace/db";
-import { and, eq, gt, or, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { SetProjectApprovalChainBody } from "@workspace/api-zod";
 import { requireAdmin, requireAuth } from "../middlewares/requireAuth";
 import { getProjectVisibility } from "../lib/projectAccess";
-import { defaultChain, getProjectChain } from "../lib/approvalChain";
+import {
+  defaultChain,
+  getProjectChain,
+  midApprovalCondition,
+} from "../lib/approvalChain";
 
 const router: IRouter = Router();
 
@@ -101,33 +104,23 @@ router.put(
         sql`SELECT id FROM ${projectsTable} WHERE id = ${projectId} FOR UPDATE`,
       );
 
-      // Single gate: the approval chain routes approvals by numeric position
-      // and records history keyed by position. Editing it while any entry is
-      // still tied to the cycle (an approval in progress and/or any recorded
-      // approval history) would corrupt in-flight routing and history. Require
-      // the admin to clear those entries first.
+      // Single gate: the approval chain routes approvals by numeric position.
+      // Editing it (rename/reorder/delete) while an entry is actively moving
+      // through the chain would misroute that entry. Only entries that are
+      // submitted AND partway through (pending, currentApprovalLevel > 0) are at
+      // risk — draft entries haven't entered the chain, and fully-approved
+      // entries are locked and keep their own snapshot of each step's name.
+      // Require the admin to clear just those in-flight entries first.
       const [tied] = await tx
         .select({ n: sql<number>`COUNT(DISTINCT ${dailyEntriesTable.id})::int` })
         .from(dailyEntriesTable)
-        .leftJoin(
-          entryApprovalsTable,
-          eq(entryApprovalsTable.dailyEntryId, dailyEntriesTable.id),
-        )
-        .where(
-          and(
-            eq(dailyEntriesTable.projectId, projectId),
-            or(
-              gt(dailyEntriesTable.currentApprovalLevel, 0),
-              sql`${entryApprovalsTable.id} IS NOT NULL`,
-            ),
-          ),
-        );
+        .where(midApprovalCondition(projectId));
       const tiedCount = tied?.n ?? 0;
       if (tiedCount > 0) {
         const e = new Error(
           `This project has ${tiedCount} ${
             tiedCount === 1 ? "entry" : "entries"
-          } in the approval cycle. Reset ${
+          } in the middle of approval. Reset ${
             tiedCount === 1 ? "it" : "them"
           } to draft (or delete ${
             tiedCount === 1 ? "it" : "them"

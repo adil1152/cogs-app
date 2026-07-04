@@ -15,15 +15,55 @@ export const DEFAULT_CHAIN: readonly string[] = [
 ] as const;
 
 export interface ChainEntry {
+  id: string | null;
   position: number;
   levelName: string;
 }
 
 export function defaultChain(): ChainEntry[] {
   return DEFAULT_CHAIN.map((levelName, i) => ({
+    id: null,
     position: i + 1,
     levelName,
   }));
+}
+
+/**
+ * Persist the default chain rows for a project that has none yet, returning the
+ * freshly-inserted rows (with real ids). Seeding on project creation guarantees
+ * every project has stable level ids from day one, so the first edit of the
+ * approval order can track surviving levels by id (and keep their approvers)
+ * even when the admin renames a built-in level. A no-op if rows already exist.
+ */
+export async function seedDefaultChain(
+  projectId: string,
+): Promise<ChainEntry[]> {
+  const existing = await db
+    .select({
+      id: projectApprovalChainTable.id,
+      position: projectApprovalChainTable.position,
+      levelName: projectApprovalChainTable.levelName,
+    })
+    .from(projectApprovalChainTable)
+    .where(eq(projectApprovalChainTable.projectId, projectId))
+    .orderBy(asc(projectApprovalChainTable.position));
+  if (existing.length > 0) return existing;
+
+  const inserted = await db
+    .insert(projectApprovalChainTable)
+    .values(
+      DEFAULT_CHAIN.map((levelName, i) => ({
+        projectId,
+        position: i + 1,
+        levelName,
+      })),
+    )
+    .returning({
+      id: projectApprovalChainTable.id,
+      position: projectApprovalChainTable.position,
+      levelName: projectApprovalChainTable.levelName,
+    });
+  return inserted.sort((a, b) => a.position - b.position);
 }
 
 export async function getProjectChain(
@@ -31,6 +71,7 @@ export async function getProjectChain(
 ): Promise<ChainEntry[]> {
   const rows = await db
     .select({
+      id: projectApprovalChainTable.id,
       position: projectApprovalChainTable.position,
       levelName: projectApprovalChainTable.levelName,
     })
@@ -56,7 +97,7 @@ export async function getProjectChainsMap(
     );
   for (const r of rows) {
     const arr = out.get(r.projectId) ?? [];
-    arr.push({ position: r.position, levelName: r.levelName });
+    arr.push({ id: r.id, position: r.position, levelName: r.levelName });
     out.set(r.projectId, arr);
   }
   for (const id of projectIds) {

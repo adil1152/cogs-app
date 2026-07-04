@@ -1219,11 +1219,11 @@ function ApproversPanel({
       project?.approvalChain && project.approvalChain.length > 0
         ? [...project.approvalChain].sort((a, b) => a.position - b.position)
         : [
-            { position: 1, levelName: "OP" },
-            { position: 2, levelName: "SOP" },
-            { position: 3, levelName: "COO" },
-            { position: 4, levelName: "CC" },
-            { position: 5, levelName: "Additional" },
+            { id: null, position: 1, levelName: "OP" },
+            { id: null, position: 2, levelName: "SOP" },
+            { id: null, position: 3, levelName: "COO" },
+            { id: null, position: 4, levelName: "CC" },
+            { id: null, position: 5, levelName: "Additional" },
           ],
     [project],
   );
@@ -1236,18 +1236,20 @@ function ApproversPanel({
     );
   }, [users, access]);
 
-  // Local edit state, seeded from server.
-  // - chainDraft: ordered array of { name, isNew }. Rows with isNew=true are
-  //   pending additions (renamable + removable client-side); existing rows are
-  //   locked (the backend rejects removes/renames to preserve audit history).
-  // - assignmentsDraft: keyed by ORIGINAL position (1..N) on the SERVER chain
-  //   for already-saved levels. Newly-added levels are keyed by their
-  //   negative draft index (-1, -2, …) until they're saved.
-  type ChainDraftRow = { name: string; isNew: boolean };
+ // Local edit state, seeded from server.
+  // - chainDraft: ordered array of { id, name }. `id` is the stable persisted
+  //   level id (null for brand-new rows and for the synthetic default chain).
+  //   Every row is freely renamable, reorderable and removable; the backend
+  //   remaps approver assignments by id so they follow renames/reorders.
+  // - assignmentsDraft: keyed by position (1..N) on the SERVER chain.
+  type ChainDraftRow = { id: string | null; name: string };
   const [chainDraft, setChainDraft] = useState<ChainDraftRow[] | null>(null);
   const [assignmentsDraft, setAssignmentsDraft] = useState<
     Record<number, string[]> | null
   >(null);
+  // Inline notice shown on the Approval order card when a save is rejected
+  // because entries are still tied to the approval cycle.
+  const [chainError, setChainError] = useState<string | null>(null);
 
   useEffect(() => {
     if (assignments && assignmentsDraft === null) {
@@ -1264,7 +1266,7 @@ function ApproversPanel({
   useEffect(() => {
     if (chainDraft === null) {
       setChainDraft(
-        serverChain.map((c) => ({ name: c.levelName, isNew: false })),
+        serverChain.map((c) => ({ id: c.id ?? null, name: c.levelName })),
       );
     }
   }, [chainDraft, serverChain]);
@@ -1291,22 +1293,27 @@ function ApproversPanel({
     mutation: {
       onSuccess: () => {
         toast({ title: "Approval order saved" });
+        setChainError(null);
         queryClient.invalidateQueries({
           queryKey: getGetProjectQueryKey(projectId),
         });
         queryClient.invalidateQueries({
           queryKey: getListProjectApproversQueryKey(projectId),
         });
-        // Reset assignments draft so it re-seeds from the new server-truth.
+        // Reset both drafts so they re-seed from the new server-truth
+        // (covers renames, reorders and deletions).
         setAssignmentsDraft(null);
         setChainDraft(null);
       },
-      onError: (err: any) =>
+      onError: (err: any) => {
+        const message = err?.message ?? "Save order failed";
+        setChainError(message);
         toast({
           title: "Save order failed",
-          description: err.message,
+          description: message,
           variant: "destructive",
-        }),
+        });
+     },
     },
   });
 
@@ -1356,15 +1363,13 @@ function ApproversPanel({
       while (used.has(name.toLowerCase())) {
         name = `Additional ${i++}`;
       }
-      return [...base, { name, isNew: true }];
+      return [...base, { id: null, name }];
     });
   }
   function renameLevel(idx: number, name: string) {
     setChainDraft((prev) => {
       if (!prev) return prev;
       const next = [...prev];
-      // Guard: only newly-added rows are renameable from the UI.
-      if (!next[idx].isNew) return prev;
       next[idx] = { ...next[idx], name };
       return next;
     });
@@ -1372,10 +1377,7 @@ function ApproversPanel({
   function removeLevel(idx: number) {
     setChainDraft((prev) => {
       if (!prev) return prev;
-      // Guard: only newly-added (unsaved) rows can be removed.
-      if (!prev[idx].isNew) return prev;
-      const next = prev.filter((_, i) => i !== idx);
-      return next;
+      return prev.filter((_, i) => i !== idx);
     });
   }
   function saveChain() {
@@ -1397,12 +1399,14 @@ function ApproversPanel({
       });
       return;
     }
+    setChainError(null);
     setChain.mutate({
       id: projectId,
       data: {
-        chain: trimmed.map((levelName, i) => ({
+          chain: chainDraft.map((row, i) => ({
+          id: row.id,
           position: i + 1,
-          levelName,
+          levelName: trimmed[i],
         })),
       },
     });
@@ -1411,7 +1415,11 @@ function ApproversPanel({
   const chainDirty = useMemo(() => {
     if (!chainDraft) return false;
     if (chainDraft.length !== serverChain.length) return true;
-    return chainDraft.some((r, i) => r.name !== serverChain[i].levelName);
+    return chainDraft.some(
+      (r, i) =>
+        r.name !== serverChain[i].levelName ||
+        (r.id ?? null) !== (serverChain[i].id ?? null),
+    );
   }, [chainDraft, serverChain]);
 
   if (!assignmentsDraft || !chainDraft) {
@@ -1431,20 +1439,26 @@ function ApproversPanel({
           <CardHeader>
             <CardTitle className="text-base">Approval order</CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              Drag the arrows to reorder the chain. Approvals run top-to-bottom
-              and the last position locks the entry. Approver assignments stay
-              attached to each role when you reorder. Use{" "}
-              <span className="font-medium">Add level</span> to insert extra
-              approval steps after CC; you can rename or remove newly-added
-              rows here, but saved levels are kept to preserve approval
-              history.
+              Rename, reorder, add or remove any approval step. Approvals run
+              top-to-bottom and the last position locks the entry. Approver
+              assignments stay attached to each step when you rename or reorder
+              it. If any entries are still in the approval cycle you'll need to
+              reset them to draft (or delete them) before the order can change.
             </p>
           </CardHeader>
           <CardContent>
+            {chainError && (
+              <div
+                className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                data-testid="chain-error-notice"
+              >
+                {chainError}
+              </div>
+            )}
             <div className="rounded-md border border-border divide-y divide-border bg-card">
               {chainDraft.map((row, i) => (
                 <div
-                  key={`${row.isNew ? "new" : "old"}-${i}`}
+                  key={row.id ?? `new-${i}`}
                   className="flex items-center gap-3 px-3 py-2.5"
                   data-testid={`chain-row-${i}`}
                 >
@@ -1452,17 +1466,13 @@ function ApproversPanel({
                   <Badge variant="secondary" className="tabular-nums">
                     {i + 1}
                   </Badge>
-                  {row.isNew ? (
                     <Input
-                      value={row.name}
-                      onChange={(e) => renameLevel(i, e.target.value)}
-                      placeholder="Level name"
-                      className="h-8 flex-1 text-sm font-medium"
-                      data-testid={`chain-name-${i}`}
-                    />
-                  ) : (
-                    <span className="flex-1 text-sm font-medium">{row.name}</span>
-                  )}
+                    value={row.name}
+                    onChange={(e) => renameLevel(i, e.target.value)}
+                    placeholder="Level name"
+                    className="h-8 flex-1 text-sm font-medium"
+                    data-testid={`chain-name-${i}`}
+                  />
                   <Button
                     size="icon"
                     variant="ghost"
@@ -1485,18 +1495,17 @@ function ApproversPanel({
                   >
                     <ArrowDown className="h-3.5 w-3.5" />
                   </Button>
-                  {row.isNew && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => removeLevel(i)}
-                      data-testid={`chain-remove-${i}`}
-                      title="Remove this new level"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-destructive hover:text-destructive"
+                    onClick={() => removeLevel(i)}
+                    disabled={chainDraft.length <= 1}
+                    data-testid={`chain-remove-${i}`}
+                    title="Remove this level"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               ))}
             </div>
@@ -1514,14 +1523,15 @@ function ApproversPanel({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
+                onClick={() => {
                   setChainDraft(
                     serverChain.map((c) => ({
+                      id: c.id ?? null,
                       name: c.levelName,
-                      isNew: false,
                     })),
-                  )
-                }
+                   );
+                  setChainError(null);
+                }}
                 disabled={!chainDirty || setChain.isPending}
                 data-testid="button-reset-chain"
               >

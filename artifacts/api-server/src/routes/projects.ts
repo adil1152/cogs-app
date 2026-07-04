@@ -12,6 +12,7 @@ import {
   defaultChain,
   getProjectChain,
   getProjectChainsMap,
+  seedDefaultChain,
 } from "../lib/approvalChain";
 
 const router: IRouter = Router();
@@ -60,6 +61,8 @@ router.post(
         })
         .returning();
 
+      const chain = await seedDefaultChain(created.id);
+
       res.status(201).json(
         serializeProject(
           {
@@ -69,7 +72,7 @@ router.post(
             canResetApproval: true,
             isAdminOwned: true,
           },
-          defaultChain(),
+          chain,
         ),
       );
     } catch (e) {

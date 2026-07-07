@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "wouter";
+import { useMemo, useState } from "react";
+import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,9 +24,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/format";
-import { Plus, MapPin, Calendar, ChevronRight } from "lucide-react";
+import {
+  Plus,
+  MapPin,
+  Calendar,
+  ChevronRight,
+  Search,
+  LayoutGrid,
+  List,
+} from "lucide-react";
+
+const VIEW_KEY = "qnc-projects-view";
 
 export default function Projects() {
   const { user } = useAuth();
@@ -35,6 +53,34 @@ export default function Projects() {
     query: { queryKey: getListProjectsQueryKey() },
   });
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState<"grid" | "list">(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
+    } catch {
+      return "grid";
+    }
+  });
+  const setViewPersist = (v: "grid" | "list") => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const filtered = useMemo(() => {
+    if (!projects) return [];
+    const q = search.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.location ?? "").toLowerCase().includes(q) ||
+        ((p as any).code ?? "").toLowerCase().includes(q),
+    );
+  }, [projects, search]);
 
   return (
     <AppLayout>
@@ -53,46 +99,101 @@ export default function Projects() {
           )
         }
       />
-      <div className="px-8 py-6">
+      <div className="px-8 py-6 space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, location or code…"
+              className="pl-8"
+              data-testid="input-project-search"
+            />
+          </div>
+          <div className="flex items-center rounded-md border border-border p-0.5">
+            <Button
+              variant={view === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 px-2.5"
+              onClick={() => setViewPersist("grid")}
+              title="Card view"
+              data-testid="button-view-grid"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={view === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 px-2.5"
+              onClick={() => setViewPersist("list")}
+              title="List view"
+              data-testid="button-view-list"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
+          {projects && projects.length > 0 && (
+            <div
+              className="text-xs text-muted-foreground"
+              data-testid="text-project-count"
+            >
+              {filtered.length} of {projects.length} projects
+            </div>
+          )}
+        </div>
+
         {isLoading ? (
           <div className="text-sm text-muted-foreground">Loading…</div>
         ) : projects && projects.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((p) => (
-              <Link key={p.id} href={`/projects/${p.id}`}>
-                <a className="block group" data-testid={`project-${p.id}`}>
-                  <Card
-                    className={`hover:border-accent/60 hover:shadow-md transition-all cursor-pointer h-full ${
-                      (p as any).disabled ? "opacity-60" : ""
-                    }`}
-                  >
-                    <CardContent className="pt-5 pb-5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 font-semibold tracking-tight">
-                          {p.name}
-                          {(p as any).disabled && (
-                            <Badge variant="secondary" data-testid={`badge-disabled-${p.id}`}>
-                              Disabled
-                            </Badge>
-                          )}
+          filtered.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <div className="text-sm text-muted-foreground" data-testid="text-no-match">
+                  No projects match “{search}”.
+                </div>
+              </CardContent>
+            </Card>
+          ) : view === "grid" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((p) => (
+                <Link key={p.id} href={`/projects/${p.id}`}>
+                  <a className="block group" data-testid={`project-${p.id}`}>
+                    <Card
+                      className={`hover:border-accent/60 hover:shadow-md transition-all cursor-pointer h-full ${
+                        (p as any).disabled ? "opacity-60" : ""
+                      }`}
+                    >
+                      <CardContent className="pt-5 pb-5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 font-semibold tracking-tight">
+                            {p.name}
+                            {(p as any).disabled && (
+                              <Badge variant="secondary" data-testid={`badge-disabled-${p.id}`}>
+                                Disabled
+                              </Badge>
+                            )}
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
                         </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
-                      </div>
-                      <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <MapPin className="h-3 w-3" /> {p.location}
-                      </div>
-                      <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" /> {formatDate(p.contractStart)} → {formatDate(p.contractEnd)}
-                      </div>
-                      {p.notes && (
-                        <p className="mt-3 text-xs text-muted-foreground line-clamp-2">{p.notes}</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </a>
-              </Link>
-            ))}
-          </div>
+                        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3" /> {p.location}
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" /> {formatDate(p.contractStart)} → {formatDate(p.contractEnd)}
+                        </div>
+                        {p.notes && (
+                          <p className="mt-3 text-xs text-muted-foreground line-clamp-2">{p.notes}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </a>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <ProjectListTable projects={filtered} />
+          )
         ) : (
           <Card>
             <CardContent className="py-12 text-center">
@@ -107,6 +208,66 @@ export default function Projects() {
       </div>
       {isAdmin && <NewProjectDialog open={open} onOpenChange={setOpen} />}
     </AppLayout>
+  );
+}
+
+function ProjectListTable({ projects }: { projects: any[] }) {
+  const [, navigate] = useLocation();
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Code</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Contract</TableHead>
+              <TableHead className="w-8" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {projects.map((p) => (
+              <TableRow
+                key={p.id}
+                className={`cursor-pointer transition-colors hover:bg-accent/5 ${
+                  p.disabled ? "opacity-60" : ""
+                }`}
+                onClick={() => navigate(`/projects/${p.id}`)}
+                data-testid={`project-row-${p.id}`}
+              >
+                <TableCell>
+                  <span className="inline-flex items-center gap-2 font-medium">
+                    {p.name}
+                    {p.disabled && (
+                      <Badge variant="secondary" data-testid={`badge-disabled-${p.id}`}>
+                        Disabled
+                      </Badge>
+                    )}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  {p.code ? (
+                    <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider">
+                      {p.code}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-muted-foreground">{p.location}</TableCell>
+                <TableCell className="text-muted-foreground text-xs">
+                  {formatDate(p.contractStart)} → {formatDate(p.contractEnd)}
+                </TableCell>
+                <TableCell>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }
 

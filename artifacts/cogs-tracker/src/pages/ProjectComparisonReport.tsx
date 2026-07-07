@@ -39,6 +39,11 @@ import { readSearch, useSyncUrlParams } from "@/lib/return-to";
 import { Download, SlidersHorizontal } from "lucide-react";
 import { ColorDot } from "@/components/ColorDot";
 import { tintBgStyle, resolveServiceColor } from "@/lib/serviceColor";
+import {
+  SortableHead,
+  sortRows,
+  useSortState,
+} from "@/components/SortableHead";
 
 type Metric = "cost" | "mandays" | "avg";
 
@@ -129,7 +134,11 @@ export default function ProjectComparisonReport() {
     ...statusesParam,
   };
 
-  const { data: agg, isLoading, isError } = useGetAggregateReport(filterParams, {
+  const {
+    data: agg,
+    isLoading,
+    isError,
+  } = useGetAggregateReport(filterParams, {
     query: { queryKey: getGetAggregateReportQueryKey(filterParams) },
   });
 
@@ -193,8 +202,8 @@ export default function ProjectComparisonReport() {
         );
       }
     }
-    return Array.from(seen.values()).sort((a, b) =>
-      a.label.localeCompare(b.label) || a.kind.localeCompare(b.kind),
+    return Array.from(seen.values()).sort(
+      (a, b) => a.label.localeCompare(b.label) || a.kind.localeCompare(b.kind),
     );
   }, [agg]);
 
@@ -221,8 +230,32 @@ export default function ProjectComparisonReport() {
 
   const projectRows = useMemo(() => agg?.projectBreakdown ?? [], [agg]);
 
+  // Sort keys: "project", "location", "total", or "svc|<serviceKey>|<metric>".
+  const sorter = useSortState<string>();
+  const sortedProjectRows = useMemo(
+    () =>
+      sortRows(projectRows, sorter.sort, (proj, key) => {
+        if (key === "project") return proj.projectName;
+        if (key === "location") return proj.location;
+        if (key === "total") return proj.totalCost;
+        if (key.startsWith("svc|")) {
+          const sep = key.lastIndexOf("|");
+          const serviceKey = key.slice(4, sep);
+          const metric = key.slice(sep + 1) as Metric;
+          const cell = pivot.get(proj.projectId)?.get(serviceKey);
+          if (!cell) return null;
+          if (metric === "cost") return cell.totalCost;
+          if (metric === "mandays") return cell.totalMandays;
+          return safeAvg(cell.totalCost, cell.totalMandays);
+        }
+        return null;
+      }),
+    [projectRows, sorter.sort, pivot],
+  );
+
   const visibleMetrics: Metric[] = useMemo(
-    () => (["cost", "mandays", "avg"] as Metric[]).filter((m) => metrics.has(m)),
+    () =>
+      (["cost", "mandays", "avg"] as Metric[]).filter((m) => metrics.has(m)),
     [metrics],
   );
 
@@ -270,8 +303,7 @@ export default function ProjectComparisonReport() {
     wb.created = new Date();
     const ws = wb.addWorksheet("Project comparison");
 
-    const totalCols =
-      2 + serviceColumns.length * visibleMetrics.length + 1;
+    const totalCols = 2 + serviceColumns.length * visibleMetrics.length + 1;
 
     // Title block
     ws.mergeCells(1, 1, 1, totalCols);
@@ -280,7 +312,8 @@ export default function ProjectComparisonReport() {
     titleCell.font = { size: 14, bold: true };
 
     ws.mergeCells(2, 1, 2, totalCols);
-    ws.getCell(2, 1).value = `Date range: ${formatDate(agg.range.from)} — ${formatDate(agg.range.to)}`;
+    ws.getCell(2, 1).value =
+      `Date range: ${formatDate(agg.range.from)} — ${formatDate(agg.range.to)}`;
 
     ws.mergeCells(3, 1, 3, totalCols);
     ws.getCell(3, 1).value = `Generated: ${new Date().toLocaleString()}`;
@@ -502,10 +535,7 @@ export default function ProjectComparisonReport() {
               <div className="flex gap-2">
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      data-testid="cmp-metrics"
-                    >
+                    <Button variant="outline" data-testid="cmp-metrics">
                       <SlidersHorizontal className="h-4 w-4 mr-2" />
                       Metrics
                     </Button>
@@ -571,8 +601,8 @@ export default function ProjectComparisonReport() {
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
                 {projectRows.length} project
-                {projectRows.length === 1 ? "" : "s"} ·{" "}
-                {serviceColumns.length} service
+                {projectRows.length === 1 ? "" : "s"} · {serviceColumns.length}{" "}
+                service
                 {serviceColumns.length === 1 ? "" : "s"}
               </p>
             </CardHeader>
@@ -590,20 +620,28 @@ export default function ProjectComparisonReport() {
                 <Table className="min-w-max">
                   <TableHeader>
                     <TableRow>
-                      <TableHead
+                      <SortableHead
+                        sortKey="project"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        firstDir="asc"
                         rowSpan={2}
                         className="align-bottom whitespace-nowrap sticky left-0 bg-background z-20"
                         style={{ minWidth: 200, width: 200 }}
                       >
                         Project
-                      </TableHead>
-                      <TableHead
+                      </SortableHead>
+                      <SortableHead
+                        sortKey="location"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        firstDir="asc"
                         rowSpan={2}
                         className="align-bottom whitespace-nowrap sticky bg-background z-20 border-r border-border shadow-[inset_-1px_0_0_0_var(--border)]"
                         style={{ left: 200, minWidth: 160, width: 160 }}
                       >
                         Location
-                      </TableHead>
+                      </SortableHead>
                       {serviceColumns.map((col) => (
                         <TableHead
                           key={col.key}
@@ -620,31 +658,39 @@ export default function ProjectComparisonReport() {
                           </div>
                         </TableHead>
                       ))}
-                      <TableHead
+                      <SortableHead
+                        sortKey="total"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        align="right"
                         rowSpan={2}
                         className="align-bottom text-right whitespace-nowrap border-l-2 border-border bg-muted/30"
                       >
                         Project total
-                      </TableHead>
+                      </SortableHead>
                     </TableRow>
                     <TableRow>
                       {serviceColumns.map((col) =>
                         visibleMetrics.map((m, idx) => (
-                          <TableHead
+                          <SortableHead
                             key={`${col.key}-${m}`}
+                            sortKey={`svc|${col.key}|${m}`}
+                            sort={sorter.sort}
+                            onSort={sorter.toggleSort}
+                            align="right"
                             className={
                               "text-right text-[11px] whitespace-nowrap " +
                               (idx === 0 ? "border-l border-border" : "")
                             }
                           >
                             {METRIC_LABEL[m]}
-                          </TableHead>
+                          </SortableHead>
                         )),
                       )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {projectRows.map((proj) => (
+                    {sortedProjectRows.map((proj) => (
                       <TableRow
                         key={proj.projectId}
                         data-testid={`cmp-row-${proj.projectId}`}

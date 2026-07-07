@@ -147,18 +147,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <Link key={item.href} href={item.href}>
                 <a
                   className={cn(
-                    "flex items-center rounded-md text-sm font-medium transition-colors",
+                    "group flex items-center rounded-md text-sm font-medium transition-all duration-200",
                     collapsed ? "h-10 w-full justify-center" : "gap-3 px-3 py-2",
                     active
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground",
+                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground hover:translate-x-0.5",
                   )}
                   data-testid={`nav-${item.label.toLowerCase()}`}
                   title={collapsed ? item.label : undefined}
                 >
                   <Icon
                     className={cn(
-                      "h-4 w-4 shrink-0",
+                      "h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110",
                       active ? "text-sidebar-accent-foreground" : item.iconColor,
                     )}
                   />

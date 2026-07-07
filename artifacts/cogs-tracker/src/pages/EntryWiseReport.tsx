@@ -48,6 +48,7 @@ import { buildUrl, readSearch, useSyncUrlParams } from "@/lib/return-to";
 import { Download, SlidersHorizontal, Lock } from "lucide-react";
 import { ColorDot } from "@/components/ColorDot";
 import { tintBgStyle } from "@/lib/serviceColor";
+import { SortableHead, sortRows, useSortState } from "@/components/SortableHead";
 
 type Metric = "cost" | "mandays" | "avg";
 
@@ -114,6 +115,30 @@ export default function EntryWiseReport() {
   const grandTotalCost = useMemo(
     () => (matrix?.entries ?? []).reduce((sum, e) => sum + e.totalCost, 0),
     [matrix],
+  );
+
+  // Sort keys: "seq", "date", "location", "total", or "svc|<serviceId>|<metric>".
+  const sorter = useSortState<string>();
+  const sortedEntries = useMemo(
+    () =>
+      sortRows(matrix?.entries ?? [], sorter.sort, (e, key) => {
+        if (key === "seq") return e.sequenceCode ?? e.entryId;
+        if (key === "date") return e.entryDate;
+        if (key === "location") return e.location;
+        if (key === "total") return e.totalCost;
+        if (key.startsWith("svc|")) {
+          const sep = key.lastIndexOf("|");
+          const serviceId = key.slice(4, sep);
+          const metric = key.slice(sep + 1) as Metric;
+          const c = e.costs.find((x) => x.serviceId === serviceId);
+          if (!c) return null;
+          if (metric === "cost") return c.cost;
+          if (metric === "mandays") return c.mandayContribution;
+          return c.mandayContribution > 0 ? c.costPerManday : null;
+        }
+        return null;
+      }),
+    [matrix, sorter.sort],
   );
 
   function toggleService(id: string) {
@@ -516,27 +541,39 @@ export default function EntryWiseReport() {
                 <Table className="min-w-max">
                   <TableHeader>
                     <TableRow>
-                      <TableHead
+                      <SortableHead
+                        sortKey="seq"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        firstDir="asc"
                         rowSpan={2}
                         className="align-bottom whitespace-nowrap sticky left-0 bg-background z-20"
                         style={{ minWidth: 110, width: 110 }}
                       >
                         #
-                      </TableHead>
-                      <TableHead
+                      </SortableHead>
+                      <SortableHead
+                        sortKey="date"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        firstDir="asc"
                         rowSpan={2}
                         className="align-bottom whitespace-nowrap sticky bg-background z-20"
                         style={{ left: 110, minWidth: 110, width: 110 }}
                       >
                         Date
-                      </TableHead>
-                      <TableHead
+                      </SortableHead>
+                      <SortableHead
+                        sortKey="location"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        firstDir="asc"
                         rowSpan={2}
                         className="align-bottom whitespace-nowrap sticky bg-background z-20 border-r border-border shadow-[inset_-1px_0_0_0_var(--border)]"
                         style={{ left: 220, minWidth: 200, width: 200 }}
                       >
                         Location
-                      </TableHead>
+                      </SortableHead>
                       {visibleServices.map((s) => (
                         <TableHead
                           key={s.id}
@@ -553,31 +590,39 @@ export default function EntryWiseReport() {
                           </div>
                         </TableHead>
                       ))}
-                      <TableHead
+                      <SortableHead
+                        sortKey="total"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        align="right"
                         rowSpan={2}
                         className="align-bottom text-right whitespace-nowrap border-l-2 border-border bg-muted/30"
                       >
                         Entry total
-                      </TableHead>
+                      </SortableHead>
                     </TableRow>
                     <TableRow>
                       {visibleServices.map((s) =>
                         visibleMetrics.map((m, idx) => (
-                          <TableHead
+                          <SortableHead
                             key={`${s.id}-${m}`}
+                            sortKey={`svc|${s.id}|${m}`}
+                            sort={sorter.sort}
+                            onSort={sorter.toggleSort}
+                            align="right"
                             className={
                               "text-right text-[11px] whitespace-nowrap " +
                               (idx === 0 ? "border-l border-border" : "")
                             }
                           >
                             {METRIC_LABEL[m]}
-                          </TableHead>
+                          </SortableHead>
                         )),
                       )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {matrix.entries.map((e) => (
+                    {sortedEntries.map((e) => (
                       <TableRow
                         key={e.entryId}
                         data-testid={`ew-row-${e.entryId}`}

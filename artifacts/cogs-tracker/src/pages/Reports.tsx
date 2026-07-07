@@ -42,6 +42,11 @@ import { formatCurrency, formatNumber, daysAgoISO, todayISO } from "@/lib/format
 import { buildUrl, readSearch, useSyncUrlParams } from "@/lib/return-to";
 import { Download } from "lucide-react";
 import { ServiceBreakdownRows } from "@/components/ServiceBreakdownRows";
+import {
+  SortableHead,
+  sortRows,
+  useSortState,
+} from "@/components/SortableHead";
 import { useLocation } from "wouter";
 
 export default function Reports() {
@@ -171,6 +176,44 @@ export default function Reports() {
       ]),
     );
   }
+
+  const svcSorter = useSortState<"project" | "service" | "cost" | "mandays" | "avg">();
+  const sortedServiceBreakdown = useMemo(
+    () =>
+      sortRows(agg?.serviceBreakdown ?? [], svcSorter.sort, (s, key) => {
+        switch (key) {
+          case "project":
+            return s.projectName;
+          case "service":
+            return s.serviceName;
+          case "cost":
+            return s.totalCost;
+          case "mandays":
+            return s.totalMandayContribution;
+          case "avg":
+            return s.totalMandayContribution > 0 ? s.costPerManday : null;
+        }
+      }),
+    [agg, svcSorter.sort],
+  );
+
+  const projSorter = useSortState<"project" | "mandays" | "cost" | "avg">();
+  const sortedProjectBreakdown = useMemo(
+    () =>
+      sortRows(agg?.projectBreakdown ?? [], projSorter.sort, (p, key) => {
+        switch (key) {
+          case "project":
+            return p.projectName;
+          case "mandays":
+            return p.totalMandays;
+          case "cost":
+            return p.totalCost;
+          case "avg":
+            return p.totalMandays ? p.costPerManday : null;
+        }
+      }),
+    [agg, projSorter.sort],
+  );
 
   const serviceTotals = (agg?.serviceBreakdown ?? []).reduce(
     (acc, s) => ({
@@ -419,15 +462,25 @@ export default function Reports() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Service</TableHead>
-                    <TableHead className="text-right">Cost (SAR)</TableHead>
-                    <TableHead className="text-right">Mandays</TableHead>
-                    <TableHead className="text-right">SAR / manday</TableHead>
+                    <SortableHead sortKey="project" sort={svcSorter.sort} onSort={svcSorter.toggleSort} firstDir="asc">
+                      Project
+                    </SortableHead>
+                    <SortableHead sortKey="service" sort={svcSorter.sort} onSort={svcSorter.toggleSort} firstDir="asc">
+                      Service
+                    </SortableHead>
+                    <SortableHead sortKey="cost" sort={svcSorter.sort} onSort={svcSorter.toggleSort} align="right" className="text-right">
+                      Cost (SAR)
+                    </SortableHead>
+                    <SortableHead sortKey="mandays" sort={svcSorter.sort} onSort={svcSorter.toggleSort} align="right" className="text-right">
+                      Mandays
+                    </SortableHead>
+                    <SortableHead sortKey="avg" sort={svcSorter.sort} onSort={svcSorter.toggleSort} align="right" className="text-right">
+                      SAR / manday
+                    </SortableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {agg.serviceBreakdown.map((s) => (
+                  {sortedServiceBreakdown.map((s) => (
                     <ServiceBreakdownRows
                       key={`${s.projectId}-${s.serviceId}`}
                       row={s}
@@ -494,14 +547,22 @@ export default function Reports() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Project</TableHead>
-                      <TableHead className="text-right">Mandays</TableHead>
-                      <TableHead className="text-right">Total cost</TableHead>
-                      <TableHead className="text-right">$ / manday</TableHead>
+                      <SortableHead sortKey="project" sort={projSorter.sort} onSort={projSorter.toggleSort} firstDir="asc">
+                        Project
+                      </SortableHead>
+                      <SortableHead sortKey="mandays" sort={projSorter.sort} onSort={projSorter.toggleSort} align="right" className="text-right">
+                        Mandays
+                      </SortableHead>
+                      <SortableHead sortKey="cost" sort={projSorter.sort} onSort={projSorter.toggleSort} align="right" className="text-right">
+                        Total cost
+                      </SortableHead>
+                      <SortableHead sortKey="avg" sort={projSorter.sort} onSort={projSorter.toggleSort} align="right" className="text-right">
+                        $ / manday
+                      </SortableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {agg.projectBreakdown.map((p) => (
+                    {sortedProjectBreakdown.map((p) => (
                       <TableRow
                         key={p.projectId}
                         className="cursor-pointer hover:bg-muted/50"

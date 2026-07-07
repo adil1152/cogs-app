@@ -22,6 +22,7 @@ import { useProjectSwitcher } from "@/lib/useProjectSwitcher";
 import { ProjectSwitcherButtons } from "@/components/ProjectSwitcher";
 import { ArrowLeft, ArrowRight, Download, Lock } from "lucide-react";
 import { ServiceBreakdownRows } from "@/components/ServiceBreakdownRows";
+import { SortableHead, sortRows, useSortState } from "@/components/SortableHead";
 
 export default function ProjectSummary() {
   const [, params] = useRoute("/projects/:id/summary");
@@ -88,6 +89,44 @@ export default function ProjectSummary() {
         hint: s.kind === "food" ? "Food (meal-weighted)" : "Standard",
       })),
     [services],
+  );
+
+  const svcSorter = useSortState<"service" | "cost" | "mandays" | "avg">();
+  const sortedServiceBreakdown = useMemo(
+    () =>
+      sortRows(summary?.serviceBreakdown ?? [], svcSorter.sort, (s, key) => {
+        switch (key) {
+          case "service":
+            return s.serviceName;
+          case "cost":
+            return s.totalCost;
+          case "mandays":
+            return s.totalMandayContribution;
+          case "avg":
+            return s.totalMandayContribution > 0 ? s.costPerManday : null;
+        }
+      }),
+    [summary, svcSorter.sort],
+  );
+
+  const entrySorter = useSortState<"date" | "location" | "mandays" | "cost" | "avg">();
+  const sortedDailyEntries = useMemo(
+    () =>
+      sortRows(summary?.dailyEntries ?? [], entrySorter.sort, (e, key) => {
+        switch (key) {
+          case "date":
+            return e.entryDate;
+          case "location":
+            return e.location;
+          case "mandays":
+            return e.totalMandays;
+          case "cost":
+            return e.totalCost;
+          case "avg":
+            return e.totalMandays ? e.costPerManday : null;
+        }
+      }),
+    [summary, entrySorter.sort],
   );
 
   function handleExport() {
@@ -217,14 +256,22 @@ export default function ProjectSummary() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Project</TableHead>
-                        <TableHead>Service</TableHead>
-                        <TableHead className="text-right">Cost (SAR)</TableHead>
-                        <TableHead className="text-right">Mandays</TableHead>
-                        <TableHead className="text-right">SAR / manday</TableHead>
+                        <SortableHead sortKey="service" sort={svcSorter.sort} onSort={svcSorter.toggleSort} firstDir="asc">
+                          Service
+                        </SortableHead>
+                        <SortableHead sortKey="cost" sort={svcSorter.sort} onSort={svcSorter.toggleSort} align="right" className="text-right">
+                          Cost (SAR)
+                        </SortableHead>
+                        <SortableHead sortKey="mandays" sort={svcSorter.sort} onSort={svcSorter.toggleSort} align="right" className="text-right">
+                          Mandays
+                        </SortableHead>
+                        <SortableHead sortKey="avg" sort={svcSorter.sort} onSort={svcSorter.toggleSort} align="right" className="text-right">
+                          SAR / manday
+                        </SortableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {summary.serviceBreakdown.map((s) => (
+                      {sortedServiceBreakdown.map((s) => (
                         <ServiceBreakdownRows
                           key={`${s.projectId}-${s.serviceId}`}
                           row={s}
@@ -292,16 +339,26 @@ export default function ProjectSummary() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead className="text-right">Mandays</TableHead>
-                        <TableHead className="text-right">Total cost</TableHead>
-                        <TableHead className="text-right">$ / manday</TableHead>
+                        <SortableHead sortKey="date" sort={entrySorter.sort} onSort={entrySorter.toggleSort} firstDir="asc">
+                          Date
+                        </SortableHead>
+                        <SortableHead sortKey="location" sort={entrySorter.sort} onSort={entrySorter.toggleSort} firstDir="asc">
+                          Location
+                        </SortableHead>
+                        <SortableHead sortKey="mandays" sort={entrySorter.sort} onSort={entrySorter.toggleSort} align="right" className="text-right">
+                          Mandays
+                        </SortableHead>
+                        <SortableHead sortKey="cost" sort={entrySorter.sort} onSort={entrySorter.toggleSort} align="right" className="text-right">
+                          Total cost
+                        </SortableHead>
+                        <SortableHead sortKey="avg" sort={entrySorter.sort} onSort={entrySorter.toggleSort} align="right" className="text-right">
+                          $ / manday
+                        </SortableHead>
                         <TableHead className="w-10" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {summary.dailyEntries.map((e) => (
+                      {sortedDailyEntries.map((e) => (
                         <TableRow
                           key={e.id}
                           className="cursor-pointer hover:bg-muted/50"

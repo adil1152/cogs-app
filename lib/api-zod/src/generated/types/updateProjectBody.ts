@@ -20,4 +20,5 @@ export interface UpdateProjectBody {
   contractEnd?: Date;
   notes?: string;
   pdfRequired?: boolean;
+  disabled?: boolean;
 }

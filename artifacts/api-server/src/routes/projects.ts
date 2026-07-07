@@ -173,6 +173,8 @@ router.patch(
     if (parsed.data.notes !== undefined) data.notes = parsed.data.notes;
     if (parsed.data.pdfRequired !== undefined)
       data.pdfRequired = parsed.data.pdfRequired;
+    if (parsed.data.disabled !== undefined)
+      data.disabled = parsed.data.disabled;
     data.updatedAt = new Date();
 
     let updated;

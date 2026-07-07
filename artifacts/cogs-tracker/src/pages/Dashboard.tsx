@@ -59,6 +59,24 @@ export default function Dashboard() {
   });
 
   const mtd = dashboard?.monthToDate;
+  const today = dashboard?.today;
+  const wtd = dashboard?.weekToDate;
+
+  const topCostProject = useMemo(() => {
+    const rows = dashboard?.projectBreakdown ?? [];
+    if (rows.length === 0) return null;
+    return rows.reduce((best, r) => (r.totalCost > best.totalCost ? r : best));
+  }, [dashboard]);
+
+  const topCpmProject = useMemo(() => {
+    const rows = (dashboard?.projectBreakdown ?? []).filter(
+      (r) => r.totalMandays > 0,
+    );
+    if (rows.length === 0) return null;
+    return rows.reduce((best, r) =>
+      r.costPerManday > best.costPerManday ? r : best,
+    );
+  }, [dashboard]);
 
   return (
     <AppLayout>
@@ -74,9 +92,23 @@ export default function Dashboard() {
         }
       />
       <div className="px-8 py-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           <KpiCard
-            label="Total cost"
+            label="Today's cost"
+            value={formatCurrency(today?.totalCost ?? 0)}
+            sub={`${formatNumber(today?.totalMandays ?? 0, 1)} mandays`}
+            loading={isLoading}
+            testid="kpi-today-cost"
+          />
+          <KpiCard
+            label="Week to date"
+            value={formatCurrency(wtd?.totalCost ?? 0)}
+            sub={`${formatNumber(wtd?.entryCount ?? 0, 0)} entries`}
+            loading={isLoading}
+            testid="kpi-wtd-cost"
+          />
+          <KpiCard
+            label="Month-to-date cost"
             value={formatCurrency(mtd?.totalCost ?? 0)}
             loading={isLoading}
             accent
@@ -103,6 +135,28 @@ export default function Dashboard() {
             value={formatNumber(mtd?.entryCount ?? 0, 0)}
             loading={isLoading}
             testid="kpi-mtd-entries"
+          />
+          <KpiCard
+            label="Highest cost project"
+            value={topCostProject ? topCostProject.projectName : "—"}
+            sub={
+              topCostProject
+                ? `${formatCurrency(topCostProject.totalCost)} this month`
+                : undefined
+            }
+            loading={isLoading}
+            testid="kpi-top-cost-project"
+          />
+          <KpiCard
+            label="Highest SAR/manday project"
+            value={topCpmProject ? topCpmProject.projectName : "—"}
+            sub={
+              topCpmProject
+                ? `${formatCurrency(topCpmProject.costPerManday)} / manday`
+                : undefined
+            }
+            loading={isLoading}
+            testid="kpi-top-cpm-project"
           />
         </div>
 
@@ -256,28 +310,39 @@ export default function Dashboard() {
 function KpiCard({
   label,
   value,
+  sub,
   loading,
   accent,
   testid,
 }: {
   label: string;
   value: string;
+  sub?: string;
   loading?: boolean;
   accent?: boolean;
   testid?: string;
 }) {
   return (
-    <Card className={accent ? "border-accent/40 bg-accent/5" : ""}>
+    <Card
+      className={`group transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-accent/50 ${
+        accent ? "border-accent/40 bg-accent/5" : ""
+      }`}
+    >
       <CardContent className="pt-5">
-        <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+        <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium transition-colors group-hover:text-accent">
           {label}
         </div>
         <div
-          className="mt-1 text-2xl font-semibold tabular-nums"
+          className="mt-1 text-2xl font-semibold tabular-nums truncate"
           data-testid={testid}
         >
           {loading ? "—" : value}
         </div>
+        {sub ? (
+          <div className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+            {loading ? "" : sub}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

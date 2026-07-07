@@ -68,7 +68,7 @@ export default function ProjectDetail() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
-  const { data: project, isLoading } = useGetProject(id, {
+  const { data: project, isLoading, error } = useGetProject(id, {
     query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) },
   });
   const { data: services } = useListProjectServices(id, {
@@ -81,6 +81,24 @@ export default function ProjectDetail() {
 
   if (!id) return null;
 
+  if (!isLoading && (error || !project)) {
+    return (
+      <AppLayout>
+        <div className="px-8 py-16 text-center" data-testid="project-not-found">
+          <div className="text-lg font-semibold">Project not found</div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            This project doesn't exist or you don't have access to it.
+          </p>
+          <Link href="/projects">
+            <Button variant="outline" className="mt-4" data-testid="button-back-to-projects">
+              Back to projects
+            </Button>
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <PageHeader
@@ -89,6 +107,11 @@ export default function ProjectDetail() {
             <span className="inline-flex items-center gap-2">
               <ProjectSwitcherButtons switcher={switcher} />
               <span>{isLoading ? "Loading…" : project?.name ?? "Project"}</span>
+              {(project as any)?.disabled && (
+                <Badge variant="secondary" data-testid="badge-project-disabled">
+                  Disabled
+                </Badge>
+              )}
             </span>
           ) as any
         }
@@ -167,6 +190,28 @@ export default function ProjectDetail() {
 }
 
 function EntriesPanel({ projectId, entries }: { projectId: string; entries: Array<any> }) {
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const hasFilters = search.trim() !== "" || status !== "all" || from !== "" || to !== "";
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return entries.filter((e) => {
+      if (term) {
+        const hay = `${e.sequenceCode ?? ""} ${e.location ?? ""}`.toLowerCase();
+        if (!hay.includes(term)) return false;
+      }
+      if (status !== "all" && e.status !== status) return false;
+      const day = (e.entryDate ?? "").slice(0, 10);
+      if (from && day < from) return false;
+      if (to && day > to) return false;
+      return true;
+    });
+  }, [entries, search, status, from, to]);
+
   if (entries.length === 0) {
     return (
       <Card>
@@ -176,9 +221,82 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
       </Card>
     );
   }
+
   return (
     <Card>
       <CardContent className="p-0">
+        <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto_auto] lg:items-end">
+          <div className="space-y-1">
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Search
+            </Label>
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Sequence or location"
+              data-testid="entries-filter-search"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Status
+            </Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="lg:w-40" data-testid="entries-filter-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              From
+            </Label>
+            <Input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              data-testid="entries-filter-from"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              To
+            </Label>
+            <Input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              data-testid="entries-filter-to"
+            />
+          </div>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setSearch("");
+              setStatus("all");
+              setFrom("");
+              setTo("");
+            }}
+            disabled={!hasFilters}
+            data-testid="entries-filter-clear"
+          >
+            Clear
+          </Button>
+        </div>
+        <div className="px-4 pt-3 text-xs text-muted-foreground tabular-nums" data-testid="entries-filter-count">
+          {filtered.length} of {entries.length} entries
+        </div>
+        {filtered.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            No entries match your filters.
+          </div>
+        ) : (
         <Table>
           <TableHeader>
             <TableRow>
@@ -193,7 +311,7 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries.map((e) => (
+            {filtered.map((e) => (
               <TableRow key={e.id} data-testid={`entry-row-${e.id}`}>
                 <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
                   {e.sequenceCode ?? "—"}
@@ -223,6 +341,7 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
             ))}
           </TableBody>
         </Table>
+        )}
       </CardContent>
     </Card>
   );
@@ -1236,7 +1355,7 @@ function ApproversPanel({
     );
   }, [users, access]);
 
- // Local edit state, seeded from server.
+  // Local edit state, seeded from server.
   // - chainDraft: ordered array of { id, name }. `id` is the stable persisted
   //   level id (null for brand-new rows and for the synthetic default chain).
   //   Every row is freely renamable, reorderable and removable; the backend
@@ -1313,7 +1432,7 @@ function ApproversPanel({
           description: message,
           variant: "destructive",
         });
-     },
+      },
     },
   });
 
@@ -1403,7 +1522,7 @@ function ApproversPanel({
     setChain.mutate({
       id: projectId,
       data: {
-          chain: chainDraft.map((row, i) => ({
+        chain: chainDraft.map((row, i) => ({
           id: row.id,
           position: i + 1,
           levelName: trimmed[i],
@@ -1466,7 +1585,7 @@ function ApproversPanel({
                   <Badge variant="secondary" className="tabular-nums">
                     {i + 1}
                   </Badge>
-                    <Input
+                  <Input
                     value={row.name}
                     onChange={(e) => renameLevel(i, e.target.value)}
                     placeholder="Level name"
@@ -1529,7 +1648,7 @@ function ApproversPanel({
                       id: c.id ?? null,
                       name: c.levelName,
                     })),
-                   );
+                  );
                   setChainError(null);
                 }}
                 disabled={!chainDirty || setChain.isPending}
@@ -1667,6 +1786,9 @@ function SettingsPanel({ project }: { project: any }) {
     },
   });
   const [pdfRequired, setPdfRequired] = useState<boolean>(!!project.pdfRequired);
+  const [projectDisabled, setProjectDisabled] = useState<boolean>(
+    !!(project as any).disabled,
+  );
   const update = useUpdateProject({
     mutation: {
       onSuccess: () => {
@@ -1694,7 +1816,10 @@ function SettingsPanel({ project }: { project: any }) {
         <CardContent>
           <form
             onSubmit={handleSubmit((data) =>
-              update.mutate({ id: project.id, data: { ...data, pdfRequired } }),
+              update.mutate({
+                id: project.id,
+                data: { ...data, pdfRequired, disabled: projectDisabled },
+              }),
             )}
             className="space-y-3"
           >
@@ -1725,6 +1850,21 @@ function SettingsPanel({ project }: { project: any }) {
                 checked={pdfRequired}
                 onCheckedChange={setPdfRequired}
                 data-testid="switch-pdf-required"
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-muted/30 px-3 py-2">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Disable project</Label>
+                <p className="text-xs text-muted-foreground">
+                  When on, this project is hidden from all non-admin users —
+                  even those with explicit access. Only admins can see it or
+                  work with its data. Nothing is deleted.
+                </p>
+              </div>
+              <Switch
+                checked={projectDisabled}
+                onCheckedChange={setProjectDisabled}
+                data-testid="switch-project-disabled"
               />
             </div>
             <Button type="submit" disabled={update.isPending} data-testid="button-save-project">Save changes</Button>

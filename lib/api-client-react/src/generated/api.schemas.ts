@@ -213,7 +213,7 @@ export interface UpdateUserRoleBody {
 }
 
 export interface ApprovalChainEntry {
-    /** Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders. */
+  /** Stable persisted id of the approval level. Null for the synthetic default chain (before any chain is saved). When sending a set-chain request, include the id of each surviving level so assignments follow the level across renames and reorders. */
   id?: string | null;
   /** @minimum 1 */
   position: number;
@@ -236,6 +236,8 @@ export interface Project {
   notes?: string | null;
   /** When true, an entry on this project requires at least one attached PDF before it can be submitted for approval. */
   pdfRequired: boolean;
+  /** When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it. */
+  disabled: boolean;
   createdAt: string;
   isAdminOwned: boolean;
   currentUserCanViewSummary: boolean;
@@ -317,6 +319,7 @@ export interface UpdateProjectBody {
   contractEnd?: string;
   notes?: string;
   pdfRequired?: boolean;
+  disabled?: boolean;
 }
 
 export interface SubItemInput {

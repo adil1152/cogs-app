@@ -55,7 +55,12 @@ export async function listVisibleProjects(
   const projects = await db
     .select()
     .from(projectsTable)
-    .where(inArray(projectsTable.id, projectIds));
+    .where(
+      and(
+        inArray(projectsTable.id, projectIds),
+        eq(projectsTable.disabled, false),
+      ),
+    );
 
   const accessById = new Map(accessRows.map((r) => [r.access.projectId, r]));
   return projects.map((p) => {
@@ -111,6 +116,17 @@ export async function getProjectVisibility(
     };
   }
 
+  // Disabled projects are invisible to non-admins, even with an access grant.
+  if (project.disabled) {
+    return {
+      project: null,
+      canViewSummary: false,
+      canEditEntries: false,
+      canResetApproval: false,
+      isAdminOwned: false,
+    };
+  }
+
   const [row] = await db
     .select({
       access: projectAccessTable,
@@ -156,6 +172,7 @@ export function serializeProject(
     contractEnd: p.contractEnd,
     notes: p.notes,
     pdfRequired: !!(p as { pdfRequired?: boolean }).pdfRequired,
+    disabled: !!(p as { disabled?: boolean }).disabled,
     createdAt: p.createdAt.toISOString(),
     isAdminOwned: v.isAdminOwned,
     currentUserCanViewSummary: v.canViewSummary,

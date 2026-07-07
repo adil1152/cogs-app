@@ -19,6 +19,8 @@ export interface Project {
   notes?: string | null;
   /** When true, an entry on this project requires at least one attached PDF before it can be submitted for approval. */
   pdfRequired: boolean;
+  /** When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it. */
+  disabled: boolean;
   createdAt: Date;
   isAdminOwned: boolean;
   currentUserCanViewSummary: boolean;

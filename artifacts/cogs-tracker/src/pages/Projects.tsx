@@ -11,6 +11,7 @@ import {
 import { useAuth } from "@workspace/replit-auth-web";
 import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -60,10 +61,21 @@ export default function Projects() {
             {projects.map((p) => (
               <Link key={p.id} href={`/projects/${p.id}`}>
                 <a className="block group" data-testid={`project-${p.id}`}>
-                  <Card className="hover:border-accent/60 hover:shadow-md transition-all cursor-pointer h-full">
+                  <Card
+                    className={`hover:border-accent/60 hover:shadow-md transition-all cursor-pointer h-full ${
+                      (p as any).disabled ? "opacity-60" : ""
+                    }`}
+                  >
                     <CardContent className="pt-5 pb-5">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="font-semibold tracking-tight">{p.name}</div>
+                        <div className="flex items-center gap-2 font-semibold tracking-tight">
+                          {p.name}
+                          {(p as any).disabled && (
+                            <Badge variant="secondary" data-testid={`badge-disabled-${p.id}`}>
+                              Disabled
+                            </Badge>
+                          )}
+                        </div>
                         <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
                       </div>
                       <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">

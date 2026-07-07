@@ -333,6 +333,11 @@ export const ListProjectsResponseItem = zod.object({
     .describe(
       "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
     ),
+  disabled: zod
+    .boolean()
+    .describe(
+      "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+    ),
   createdAt: zod.coerce.date(),
   isAdminOwned: zod.boolean(),
   currentUserCanViewSummary: zod.boolean(),
@@ -404,6 +409,11 @@ export const GetProjectResponse = zod
       .describe(
         "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
       ),
+    disabled: zod
+      .boolean()
+      .describe(
+        "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+      ),
     createdAt: zod.coerce.date(),
     isAdminOwned: zod.boolean(),
     currentUserCanViewSummary: zod.boolean(),
@@ -412,7 +422,7 @@ export const GetProjectResponse = zod
     approvalChain: zod
       .array(
         zod.object({
-            id: zod
+          id: zod
             .string()
             .nullish()
             .describe(
@@ -488,6 +498,7 @@ export const UpdateProjectBody = zod.object({
   contractEnd: zod.coerce.date().optional(),
   notes: zod.string().optional(),
   pdfRequired: zod.boolean().optional(),
+  disabled: zod.boolean().optional(),
 });
 
 export const updateProjectResponseApprovalChainItemLevelNameMax = 32;
@@ -505,6 +516,11 @@ export const UpdateProjectResponse = zod.object({
     .describe(
       "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
     ),
+  disabled: zod
+    .boolean()
+    .describe(
+      "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+    ),
   createdAt: zod.coerce.date(),
   isAdminOwned: zod.boolean(),
   currentUserCanViewSummary: zod.boolean(),
@@ -513,7 +529,7 @@ export const UpdateProjectResponse = zod.object({
   approvalChain: zod
     .array(
       zod.object({
-              id: zod
+        id: zod
           .string()
           .nullish()
           .describe(
@@ -2167,6 +2183,11 @@ export const GetProjectEntryMatrixResponse = zod
         .describe(
           "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
         ),
+      disabled: zod
+        .boolean()
+        .describe(
+          "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+        ),
       createdAt: zod.coerce.date(),
       isAdminOwned: zod.boolean(),
       currentUserCanViewSummary: zod.boolean(),
@@ -2175,7 +2196,7 @@ export const GetProjectEntryMatrixResponse = zod
       approvalChain: zod
         .array(
           zod.object({
-                id: zod
+            id: zod
               .string()
               .nullish()
               .describe(
@@ -2384,6 +2405,11 @@ export const GetProjectSummaryResponse = zod.object({
       .describe(
         "When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.",
       ),
+    disabled: zod
+      .boolean()
+      .describe(
+        "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+      ),
     createdAt: zod.coerce.date(),
     isAdminOwned: zod.boolean(),
     currentUserCanViewSummary: zod.boolean(),
@@ -2392,7 +2418,7 @@ export const GetProjectSummaryResponse = zod.object({
     approvalChain: zod
       .array(
         zod.object({
-            id: zod
+          id: zod
             .string()
             .nullish()
             .describe(
@@ -2688,7 +2714,7 @@ export const GetProjectApprovalChainParams = zod.object({
 export const getProjectApprovalChainResponseLevelNameMax = 32;
 
 export const GetProjectApprovalChainResponseItem = zod.object({
-     id: zod
+  id: zod
     .string()
     .nullish()
     .describe(
@@ -2717,7 +2743,7 @@ export const SetProjectApprovalChainBody = zod.object({
   chain: zod
     .array(
       zod.object({
-            id: zod
+        id: zod
           .string()
           .nullish()
           .describe(
@@ -2736,7 +2762,7 @@ export const SetProjectApprovalChainBody = zod.object({
 export const setProjectApprovalChainResponseLevelNameMax = 32;
 
 export const SetProjectApprovalChainResponseItem = zod.object({
-     id: zod
+  id: zod
     .string()
     .nullish()
     .describe(

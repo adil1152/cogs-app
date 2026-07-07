@@ -24,6 +24,7 @@ export const projectsTable = pgTable(
     contractEnd: date("contract_end").notNull(),
     notes: text("notes"),
     pdfRequired: boolean("pdf_required").notNull().default(false),
+    disabled: boolean("disabled").notNull().default(false),
     createdById: varchar("created_by_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),

@@ -1516,7 +1516,7 @@ components:
 
     Project:
       type: object
-      required: [id, name, location, contractStart, contractEnd, createdAt, isAdminOwned, currentUserCanViewSummary, currentUserCanEditEntries, currentUserCanResetApproval, approvalChain, pdfRequired]
+      required: [id, name, location, contractStart, contractEnd, createdAt, isAdminOwned, currentUserCanViewSummary, currentUserCanEditEntries, currentUserCanResetApproval, approvalChain, pdfRequired, disabled]
       properties:
         id: { type: string }
         name: { type: string }
@@ -1530,6 +1530,9 @@ components:
         pdfRequired:
           type: boolean
           description: When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.
+        disabled:
+          type: boolean
+          description: When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.
         createdAt: { type: string, format: date-time }
         isAdminOwned: { type: boolean }
         currentUserCanViewSummary: { type: boolean }
@@ -1576,6 +1579,7 @@ components:
         contractEnd: { type: string, format: date }
         notes: { type: string }
         pdfRequired: { type: boolean }
+        disabled: { type: boolean }
 
     ServiceSubItem:
       type: object

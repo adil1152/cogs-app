@@ -1,13 +1,16 @@
 import { useMemo } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   useGetDashboard,
   useGetRecentActivity,
   useGetTrendsReport,
+  useListProjects,
   getGetDashboardQueryKey,
   getGetRecentActivityQueryKey,
   getGetTrendsReportQueryKey,
+  getListProjectsQueryKey,
 } from "@workspace/api-client-react";
+import { useAuth } from "@workspace/replit-auth-web";
 import {
   ResponsiveContainer,
   BarChart,
@@ -23,8 +26,16 @@ import {
 import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatCurrency, formatNumber, formatDate, todayISO } from "@/lib/format";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronDown, Plus } from "lucide-react";
 import { resolveServiceColor } from "@/lib/serviceColor";
 
 const CHART_COLORS = ["hsl(var(--accent))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))", "hsl(var(--primary))"];
@@ -44,9 +55,23 @@ function monthLabel(): string {
 }
 
 export default function Dashboard() {
+  const [, navigate] = useLocation();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { data: dashboard, isLoading } = useGetDashboard({
     query: { queryKey: getGetDashboardQueryKey() },
   });
+  const { data: projects } = useListProjects({
+    query: { queryKey: getListProjectsQueryKey() },
+  });
+
+  const editableProjects = useMemo(
+    () =>
+      (projects ?? [])
+        .filter((p) => isAdmin || p.currentUserCanEditEntries)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [projects, isAdmin],
+  );
   const { data: activity } = useGetRecentActivity({
     query: { queryKey: getGetRecentActivityQueryKey() },
   });
@@ -84,11 +109,50 @@ export default function Dashboard() {
         title="Dashboard"
         subtitle={`Live spend across every project you can see — ${monthLabel()}.`}
         actions={
-          <Link href="/reports">
-            <Button variant="outline" data-testid="button-reports">
-              Open reports <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/reports">
+              <Button variant="outline" data-testid="button-reports">
+                Open reports <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+            {editableProjects.length === 1 ? (
+              <Button
+                data-testid="button-new-entry"
+                onClick={() =>
+                  navigate(`/projects/${editableProjects[0].id}/entries/new`)
+                }
+              >
+                <Plus className="mr-2 h-4 w-4" /> New entry
+              </Button>
+            ) : editableProjects.length > 1 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button data-testid="button-new-entry">
+                    <Plus className="mr-2 h-4 w-4" /> New entry
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
+                  <DropdownMenuLabel>Pick a project</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {editableProjects.map((p) => (
+                    <DropdownMenuItem
+                      key={p.id}
+                      data-testid={`new-entry-project-${p.id}`}
+                      onSelect={() => navigate(`/projects/${p.id}/entries/new`)}
+                    >
+                      <span className="truncate">{p.name}</span>
+                      {p.location ? (
+                        <span className="ml-auto pl-4 text-xs text-muted-foreground truncate">
+                          {p.location}
+                        </span>
+                      ) : null}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </div>
         }
       />
       <div className="px-8 py-6 space-y-6">

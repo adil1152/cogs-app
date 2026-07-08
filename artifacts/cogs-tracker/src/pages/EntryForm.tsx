@@ -369,10 +369,21 @@ export default function EntryForm() {
 
   const create = useCreateDailyEntry({
     mutation: {
-      onSuccess: () => {
-        toast({ title: "Entry saved" });
+      onSuccess: (created: any) => {
+        toast({
+          title: "Entry saved",
+          description: "Review it below, then submit it for approval when ready.",
+        });
         invalidateAll();
-        navigate(exitUrl);
+        // Stay on the entry (switch to its edit screen) so the user can
+        // double-check what was saved and submit it for approval.
+        if (created?.id) {
+          navigate(`/projects/${projectId}/entries/${created.id}`, {
+            replace: true,
+          });
+        } else {
+          navigate(exitUrl);
+        }
       },
       onError: (err: any) => toast({ title: "Could not save", description: err.message, variant: "destructive" }),
     },
@@ -380,9 +391,12 @@ export default function EntryForm() {
   const update = useUpdateDailyEntry({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Entry updated" });
+        toast({
+          title: "Entry updated",
+          description: "Your changes are saved.",
+        });
         invalidateAll();
-        navigate(exitUrl);
+        // Stay on this screen so the user can review and submit.
       },
       onError: (err: any) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
     },

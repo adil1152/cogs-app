@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useRoute } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -190,6 +190,7 @@ export default function ProjectDetail() {
 }
 
 function EntriesPanel({ projectId, entries }: { projectId: string; entries: Array<any> }) {
+  const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [from, setFrom] = useState("");
@@ -312,7 +313,12 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
           </TableHeader>
           <TableBody>
             {filtered.map((e) => (
-              <TableRow key={e.id} data-testid={`entry-row-${e.id}`}>
+              <TableRow
+                key={e.id}
+                data-testid={`entry-row-${e.id}`}
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => navigate(`/projects/${projectId}/entries/${e.id}`)}
+              >
                 <TableCell className="font-mono text-xs text-muted-foreground tabular-nums">
                   {e.sequenceCode ?? "—"}
                 </TableCell>
@@ -332,7 +338,7 @@ function EntriesPanel({ projectId, entries }: { projectId: string; entries: Arra
                     <Badge variant="outline">Draft</Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right" onClick={(ev) => ev.stopPropagation()}>
                   <Link href={`/projects/${projectId}/entries/${e.id}`}>
                     <Button variant="ghost" size="sm">{e.isLocked ? "View" : "Edit"}</Button>
                   </Link>

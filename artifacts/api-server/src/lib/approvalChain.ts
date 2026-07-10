@@ -1,5 +1,5 @@
-import { db, dailyEntriesTable, projectApprovalChainTable } from "@workspace/db";
-import { and, asc, eq, gt, inArray, type SQL } from "drizzle-orm";
+import { db, projectApprovalChainTable } from "@workspace/db";
+import { asc, eq, inArray } from "drizzle-orm";
 
 /**
  * Default per-project approval chain used when a project has no explicit
@@ -108,24 +108,4 @@ export async function getProjectChainsMap(
 
 export function levelNameAt(chain: ChainEntry[], position: number): string {
   return chain[position - 1]?.levelName ?? `L${position}`;
-}
-
-/**
- * Condition matching daily entries that are actively mid-approval for a project
- * — i.e. submitted (`pending`) and already partway through the chain
- * (`currentApprovalLevel > 0`, at least one approval recorded but not yet fully
- * approved).
- *
- * These are the only entries that a chain rename/reorder/delete can corrupt,
- * because approvals route by numeric position. Draft entries haven't entered the
- * chain; fully-approved entries are locked and keep their own snapshot of each
- * step's name, so neither is affected by an edit. This predicate is the single
- * source of truth for "blocks an approval-order change".
- */
-export function midApprovalCondition(projectId: string): SQL | undefined {
-  return and(
-    eq(dailyEntriesTable.projectId, projectId),
-    eq(dailyEntriesTable.status, "pending"),
-    gt(dailyEntriesTable.currentApprovalLevel, 0),
-  );
 }

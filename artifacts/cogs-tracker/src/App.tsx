@@ -18,6 +18,9 @@ import EntryWiseReport from "@/pages/EntryWiseReport";
 import ProjectComparisonReport from "@/pages/ProjectComparisonReport";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminSecurityGroups from "@/pages/AdminSecurityGroups";
+import AdminSettings from "@/pages/AdminSettings";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,10 +39,17 @@ function Gate() {
   // When the user logs out and lands on a private page, bounce them to /login.
   useEffect(() => {
     if (isLoading) return;
-    const isPublic = location === "/login" || location === "/register";
+    const isPublic =
+      location === "/login" ||
+      location === "/register" ||
+      location === "/forgot-password" ||
+      location === "/reset-password";
+    // Forgot/reset pages stay reachable even when signed in (e.g. opening an
+    // emailed reset link while a session is active).
+    const isAuthOnlyPublic = location === "/login" || location === "/register";
     if (!isAuthenticated && !isPublic) {
       setLocation("/login");
-    } else if (isAuthenticated && isPublic) {
+    } else if (isAuthenticated && isAuthOnlyPublic) {
       setLocation("/");
     }
   }, [isAuthenticated, isLoading, location, setLocation]);
@@ -55,6 +65,8 @@ function Gate() {
     return (
       <Switch>
         <Route path="/register" component={Register} />
+        <Route path="/forgot-password" component={ForgotPassword} />
+        <Route path="/reset-password" component={ResetPassword} />
         <Route component={Login} />
       </Switch>
     );
@@ -62,6 +74,8 @@ function Gate() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/account" component={Account} />
       <Route path="/projects" component={Projects} />
       <Route path="/projects/:id/entries/new" component={EntryForm} />
@@ -73,6 +87,7 @@ function Gate() {
       <Route path="/reports" component={Reports} />
       <Route path="/admin/users" component={AdminUsers} />
       <Route path="/admin/security-groups" component={AdminSecurityGroups} />
+      <Route path="/admin/settings" component={AdminSettings} />
       <Route component={NotFound} />
     </Switch>
   );

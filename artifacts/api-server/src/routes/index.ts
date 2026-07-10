@@ -13,6 +13,7 @@ import approvalChainRouter from "./approvalChain";
 import reportsRouter from "./reports";
 import storageRouter from "./storage";
 import attachmentsRouter from "./attachments";
+import settingsRouter from "./settings";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(approvalChainRouter);
 router.use(reportsRouter);
 router.use(storageRouter);
 router.use(attachmentsRouter);
+router.use(settingsRouter);
 
 export default router;

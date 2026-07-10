@@ -30,6 +30,14 @@ export default function Account() {
     setMobile(user?.mobile ?? "");
   }, [user]);
 
+  useEffect(() => {
+    if (window.location.hash === "#password") {
+      document
+        .getElementById("password")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     setSavingProfile(true);
@@ -113,9 +121,9 @@ export default function Account() {
         subtitle="Update your profile and password."
       />
       <div className="px-8 py-6 grid gap-6 max-w-2xl">
-        <Card>
+        <Card className="hover:shadow-md transition-all duration-300 border-border/50">
           <CardHeader>
-            <CardTitle className="text-base">Profile</CardTitle>
+            <CardTitle className="text-base font-bold tracking-tight">Profile</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={saveProfile} className="space-y-4" data-testid="form-profile">
@@ -179,9 +187,9 @@ export default function Account() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="password" className="hover:shadow-md transition-all duration-300 border-border/50 scroll-mt-6">
           <CardHeader>
-            <CardTitle className="text-base">Change password</CardTitle>
+            <CardTitle className="text-base font-bold tracking-tight">Change password</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={changePassword} className="space-y-4" data-testid="form-password">

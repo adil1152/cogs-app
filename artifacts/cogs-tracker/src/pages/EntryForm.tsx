@@ -57,6 +57,7 @@ import {
   Upload,
   FileText,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 const DEFAULT_APPROVAL_LEVELS = [
   "OP",
@@ -709,35 +710,37 @@ export default function EntryForm() {
 
       <form onSubmit={onSubmit} className="px-8 py-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <fieldset disabled={isLocked} className="contents">
-          <div className="lg:col-span-2 space-y-4">
-            <Card>
-              <CardHeader><CardTitle className="text-base">Day</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="lg:col-span-2 space-y-6">
+            <Card className="shadow-sm border-border/60 hover:shadow-md transition-all duration-300">
+              <CardHeader className="pb-4 border-b border-border/40">
+                <CardTitle className="text-base font-bold tracking-tight">Day Information</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Date</Label>
-                  <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required data-testid="input-entry-date" />
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Date</Label>
+                  <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required data-testid="input-entry-date" className="font-mono text-sm" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Location</Label>
-                  <Input value={location} onChange={(e) => setLocation(e.target.value)} required data-testid="input-entry-location" />
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Location</Label>
+                  <Input value={location} onChange={(e) => setLocation(e.target.value)} required data-testid="input-entry-location" className="font-medium" />
                 </div>
-                <div className="md:col-span-2 space-y-1.5">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Notes</Label>
-                  <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} data-testid="input-entry-notes" />
+                <div className="md:col-span-2 space-y-1.5 mt-2">
+                  <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Notes</Label>
+                  <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} data-testid="input-entry-notes" className="resize-none leading-relaxed" />
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Service costs</CardTitle>
-                <p className="text-xs text-muted-foreground mt-1">
+            <Card className="shadow-sm border-border/60 hover:shadow-md transition-all duration-300">
+              <CardHeader className="pb-4 border-b border-border/40">
+                <CardTitle className="text-base font-bold tracking-tight">Service Costs</CardTitle>
+                <p className="text-sm text-muted-foreground/80 mt-1.5 leading-relaxed">
                   Standard services: enter cost + mandays. Food services: enter
                   meal counts and mandays auto-calculate using Breakfast 20%,
                   Lunch / Dinner / Midnight / Meal Box 40% each.
                 </p>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-4 pt-5 bg-muted/20">
                 {lines.length === 0 && (
                   <div className="text-sm text-muted-foreground">
                     No services configured for this project yet — add some on the project page first.
@@ -1049,23 +1052,25 @@ export default function EntryForm() {
           </div>
 
           <div className="space-y-4">
-            <Card className="border-accent/40 bg-accent/5 sticky top-6">
-              <CardHeader><CardTitle className="text-base">Live totals</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
+            <Card className="border-accent/30 bg-accent/[0.03] shadow-sm shadow-accent/10 sticky top-6 hover:shadow-md transition-all duration-300">
+              <CardHeader className="pb-4 border-b border-accent/20">
+                <CardTitle className="text-base font-bold tracking-tight text-accent">Live Totals</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-5">
                 <Row label="Total cost" value={formatCurrency(totals.totalCost)} accent />
-                <div className="space-y-1">
+                <div className="space-y-2 bg-background/50 rounded-lg p-3 border border-border/40">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Service mandays</span>
-                    <span className="tabular-nums">
+                    <span className="text-muted-foreground font-medium text-[11px] uppercase tracking-[0.06em]">Service mandays</span>
+                    <span className="tabular-nums font-mono font-medium">
                       {formatNumber(totals.summedMandays, 2)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between gap-3 text-sm">
+                  <div className="flex items-center justify-between gap-3 text-sm pt-2 border-t border-border/40">
                     <Label
                       htmlFor="input-manual-mandays"
-                      className="text-muted-foreground"
+                      className="text-muted-foreground font-medium text-[11px] uppercase tracking-[0.06em]"
                     >
-                      + Manual mandays
+                      + Manual
                     </Label>
                     <Input
                       id="input-manual-mandays"
@@ -1076,14 +1081,14 @@ export default function EntryForm() {
                       onChange={(e) => setManualMandays(e.target.value)}
                       placeholder="0"
                       disabled={totalMandaysOverride}
-                      className="w-28 text-right tabular-nums"
+                      className="w-24 h-7 text-right tabular-nums font-mono text-sm"
                       data-testid="input-manual-mandays"
                     />
                   </div>
                 </div>
-                <div className="flex items-baseline justify-between gap-3 border-t border-border pt-2">
+                <div className="flex items-baseline justify-between gap-3 border-t border-accent/20 pt-4">
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    <Label className="text-[11px] font-bold uppercase tracking-[0.06em] text-foreground">
                       Override total
                     </Label>
                     <Switch
@@ -1097,12 +1102,12 @@ export default function EntryForm() {
                       type="number" step="0.01" min="0"
                       value={totalMandaysManual}
                       onChange={(e) => setTotalMandaysManual(e.target.value)}
-                      className="w-28 text-right tabular-nums"
+                      className="w-28 text-right tabular-nums font-mono font-bold"
                       data-testid="input-total-mandays"
                     />
                   ) : (
                     <span
-                      className="tabular-nums font-semibold text-base"
+                      className="tabular-nums font-mono font-bold text-lg text-accent"
                       data-testid="text-total-mandays"
                     >
                       {formatNumber(totals.totalMandays, 2)}
@@ -1110,38 +1115,41 @@ export default function EntryForm() {
                   )}
                 </div>
                 <Row label="Cost / manday" value={totals.costPerManday != null ? `${formatCurrency(totals.costPerManday)}` : "—"} />
-                <Button type="submit" className="w-full" disabled={create.isPending || update.isPending || isLocked} data-testid="button-save-entry">
-                  {isEdit ? "Save changes" : "Save as draft"}
-                </Button>
-                {isEdit && isDraft && !isLocked && (
-                  <>
-                    <Button
-                      type="button"
-                      className="w-full"
-                      variant="default"
-                      disabled={submit.isPending || submitBlockedByPdf}
-                      onClick={() => submit.mutate({ id: entryId! })}
-                      data-testid="button-submit-for-approval"
-                    >
-                      <Send className="mr-2 h-4 w-4" /> Submit for approval
-                    </Button>
-                    {submitBlockedByPdf && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        This project requires at least one PDF attachment before
-                        submission.
-                      </p>
-                    )}
-                  </>
-                )}
-                {isEdit && !isLocked && (
-                  <Button
-                    type="button" variant="outline" className="w-full text-destructive hover:text-destructive"
-                    onClick={() => del.mutate({ id: entryId! })}
-                    data-testid="button-delete-entry"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" /> Delete entry
+                
+                <div className="pt-2 space-y-2">
+                  <Button type="submit" className="w-full font-bold shadow-sm" size="lg" disabled={create.isPending || update.isPending || isLocked} data-testid="button-save-entry">
+                    {isEdit ? "Save changes" : "Save as draft"}
                   </Button>
-                )}
+                  {isEdit && isDraft && !isLocked && (
+                    <>
+                      <Button
+                        type="button"
+                        className="w-full font-bold shadow-sm"
+                        variant="default"
+                        size="lg"
+                        disabled={submit.isPending || submitBlockedByPdf}
+                        onClick={() => submit.mutate({ id: entryId! })}
+                        data-testid="button-submit-for-approval"
+                      >
+                        <Send className="mr-2 h-4 w-4" /> Submit for approval
+                      </Button>
+                      {submitBlockedByPdf && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium bg-amber-500/10 p-2 rounded border border-amber-500/20 text-center leading-relaxed">
+                          PDF attachment required before submission.
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {isEdit && !isLocked && (
+                    <Button
+                      type="button" variant="ghost" className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => del.mutate({ id: entryId! })}
+                      data-testid="button-delete-entry"
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete entry
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -1162,23 +1170,23 @@ function StatusPill({ status }: { status: "draft" | "pending" | "approved" }) {
     draft: {
       label: "Draft",
       className:
-        "bg-muted text-muted-foreground border-border",
+        "bg-muted/50 text-muted-foreground border-border/60 shadow-sm",
     },
     pending: {
       label: "Pending approval",
       className:
-        "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+        "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 shadow-sm",
     },
     approved: {
       label: "Approved",
       className:
-        "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+        "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 shadow-sm",
     },
   } as const;
   const s = map[status];
   return (
     <span
-      className={`inline-flex items-center text-xs font-semibold uppercase tracking-wider rounded border px-2 py-0.5 ${s.className}`}
+      className={`inline-flex items-center text-[10px] font-bold uppercase tracking-[0.1em] rounded-md border px-2.5 py-1 ${s.className}`}
       data-testid={`status-pill-${status}`}
     >
       {s.label}
@@ -1214,17 +1222,17 @@ function ApprovalStrip({
   const nextLevelName = levelNames[currentLevel];
   const byLevel = new Map(approvals.map((a) => [a.level, a]));
   return (
-    <Card className={isLocked ? "border-accent/60 bg-accent/10" : ""}>
-      <CardContent className="p-4">
-        <div className="flex flex-wrap items-center gap-3 justify-between">
-          <div className="flex items-center gap-3 flex-wrap">
+    <Card className={`border-border/50 shadow-sm ${isLocked ? "bg-accent/5 border-accent/20" : ""}`}>
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between">
+          <div className="flex items-center gap-4 flex-wrap">
             {isLocked ? (
-              <span className="inline-flex items-center gap-2 text-sm font-semibold text-accent">
+              <span className="inline-flex items-center gap-2 text-sm font-bold text-accent">
                 <Lock className="h-4 w-4" /> Locked — fully approved
               </span>
             ) : (
-              <span className="text-sm font-medium text-muted-foreground">
-                Approval progress: {currentLevel} of {levelNames.length}
+              <span className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                Approval progress: <span className="text-foreground">{currentLevel} of {levelNames.length}</span>
               </span>
             )}
             <div className="flex items-center gap-1.5">
@@ -1235,28 +1243,29 @@ function ApprovalStrip({
                 return (
                   <div
                     key={name}
-                    className={`px-2 py-1 rounded text-xs font-medium border ${
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold tracking-tight border shadow-sm transition-all duration-300 ${
                       done
-                        ? "bg-accent/20 border-accent/50 text-accent-foreground"
-                        : "bg-muted/40 border-border text-muted-foreground"
+                        ? "bg-accent text-accent-foreground border-accent scale-105"
+                        : "bg-background border-border/60 text-muted-foreground/60"
                     }`}
                     title={a ? `${a.approverName ?? "Approver"} • ${new Date(a.approvedAt).toLocaleString()}` : "Pending"}
                     data-testid={`approval-step-${name}`}
                   >
-                    {done && <CheckCircle2 className="inline h-3 w-3 mr-1" />}
+                    {done && <CheckCircle2 className="inline h-3.5 w-3.5 mr-1" />}
                     {name}
                   </div>
                 );
               })}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             {canApprove && (
               <Button
                 type="button"
                 size="sm"
                 onClick={onApprove}
                 disabled={pending}
+                className="font-bold shadow-sm"
                 data-testid="button-approve"
               >
                 <CheckCircle2 className="mr-1.5 h-4 w-4" />
@@ -1270,10 +1279,11 @@ function ApprovalStrip({
                 variant="outline"
                 onClick={onReject}
                 disabled={pending}
+                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 shadow-sm"
                 data-testid="button-reject"
               >
                 <XCircle className="mr-1.5 h-4 w-4" />
-                Reject to draft
+                Reject
               </Button>
             )}
             {canReset && (
@@ -1283,11 +1293,12 @@ function ApprovalStrip({
                 variant="outline"
                 onClick={onReset}
                 disabled={pending}
+                className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 shadow-sm"
                 data-testid="button-reset"
                 title="Clears all approvals and unlocks the entry. Audited."
               >
                 <RotateCcw className="mr-1.5 h-4 w-4" />
-                Reset to draft
+                Reset
               </Button>
             )}
           </div>
@@ -1322,73 +1333,77 @@ const AUDIT_ACTION_STYLES: Record<string, string> = {
 
 function AuditPanel({ events }: { events: Array<any> }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center gap-2 space-y-0">
-        <History className="h-4 w-4 text-muted-foreground" />
-        <CardTitle className="text-base">History</CardTitle>
-        <span className="text-xs text-muted-foreground ml-1">
-          ({events.length} event{events.length === 1 ? "" : "s"})
-        </span>
+    <Card className="shadow-sm border-border/50">
+      <CardHeader className="flex flex-row items-center gap-2.5 space-y-0 pb-4 border-b border-border/40">
+        <div className="bg-muted p-1.5 rounded-md">
+          <History className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <CardTitle className="text-base font-bold tracking-tight">History</CardTitle>
+        <Badge variant="secondary" className="font-mono ml-auto">
+          {events.length} event{events.length === 1 ? "" : "s"}
+        </Badge>
       </CardHeader>
       <CardContent className="p-0">
         {events.length === 0 ? (
-          <div className="px-6 py-8 text-sm text-muted-foreground text-center">
+          <div className="px-6 py-10 text-sm text-muted-foreground font-medium text-center bg-muted/10">
             No history yet.
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/50 bg-background/50">
             {events.map((e) => {
               const style =
                 AUDIT_ACTION_STYLES[e.action] ??
-                "bg-muted text-muted-foreground border-border";
+                "bg-muted/50 text-muted-foreground border-border/60";
               return (
                 <div
                   key={e.id}
-                  className="px-6 py-3 flex flex-col md:flex-row md:items-center gap-2 md:gap-4"
+                  className="px-6 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-5 hover:bg-muted/20 transition-colors duration-200"
                   data-testid={`audit-row-${e.id}`}
                 >
                   <div
-                    className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded border px-1.5 py-0.5 w-20 justify-center ${style}`}
+                    className={`inline-flex items-center text-[10px] font-bold uppercase tracking-[0.1em] rounded-md border px-2 py-1 w-[88px] justify-center shadow-sm ${style}`}
                   >
                     {e.action}
                   </div>
-                  <div className="flex-1 text-sm">
+                  <div className="flex-1 text-sm font-medium text-foreground/90">
                     {e.action === "APPROVE" || e.action === "REJECT" ? (
                       <span>
                         Level{" "}
-                        <span className="font-medium">
+                        <span className="font-bold text-foreground">
                           {e.levelName ?? e.level ?? "?"}
                         </span>
                       </span>
                     ) : e.action === "RESET" ? (
                       <span>
                         Reset from level{" "}
-                        <span className="font-medium">{e.oldValue}</span> back
+                        <span className="font-bold text-foreground">{e.oldValue}</span> back
                         to draft
                       </span>
                     ) : e.action === "CREATE" || e.action === "DELETE" ? (
                       <span>
                         {e.action === "CREATE" ? "Created entry " : "Deleted entry "}
-                        <span className="font-mono">
+                        <span className="font-mono font-semibold text-foreground bg-muted px-1.5 py-0.5 rounded text-xs">
                           {e.newValue ?? e.oldValue}
                         </span>
                       </span>
                     ) : (
-                      <span className="space-x-2">
-                        <span className="font-medium">
+                      <span className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-foreground bg-muted/50 px-1.5 py-0.5 rounded text-[11px] uppercase tracking-wider">
                           {formatAuditField(e.field)}
                         </span>
-                        <span className="text-muted-foreground line-through">
+                        <span className="text-muted-foreground line-through decoration-muted-foreground/50">
                           {formatAuditValue(e.oldValue)}
                         </span>
-                        <span className="text-muted-foreground">→</span>
-                        <span>{formatAuditValue(e.newValue)}</span>
+                        <ArrowLeft className="h-3 w-3 text-muted-foreground/40 rotate-180" />
+                        <span className="font-medium">{formatAuditValue(e.newValue)}</span>
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {e.actorName ?? "System"} ·{" "}
-                    {new Date(e.occurredAt).toLocaleString()}
+                  <div className="text-xs text-muted-foreground whitespace-nowrap font-medium flex items-center gap-2">
+                    <span className="bg-muted px-2 py-1 rounded-md">{e.actorName ?? "System"}</span>
+                    <span className="tabular-nums font-mono text-[11px] opacity-70">{new Date(e.occurredAt).toLocaleString(undefined, {
+                      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                    })}</span>
                   </div>
                 </div>
               );
@@ -1444,9 +1459,9 @@ function MealQty({
 
 function Row({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between">
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
-      <span className={`tabular-nums font-semibold ${accent ? "text-xl" : "text-base"}`}>{value}</span>
+    <div className="flex items-baseline justify-between p-2 rounded-md hover:bg-background/40 transition-colors">
+      <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">{label}</span>
+      <span className={`tabular-nums font-mono font-bold ${accent ? "text-2xl text-accent" : "text-lg text-foreground"}`}>{value}</span>
     </div>
   );
 }

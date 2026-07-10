@@ -54,15 +54,15 @@ export default function Register() {
       </div>
       <div className="w-full max-w-md">
         <div className="flex items-center gap-3 mb-8">
-          <div className="h-11 w-11 rounded-md bg-white grid place-items-center shrink-0 p-1.5">
-            <QncLogo className="h-full w-full" />
+          <div className="h-11 w-11 rounded-md bg-primary text-primary-foreground grid place-items-center shrink-0 shadow-sm">
+            <QncLogo className="h-6 w-6 text-white" />
           </div>
           <div className="leading-tight">
-            <div className="font-semibold tracking-tight text-base">
-              Qudrat National Company
+            <div className="font-bold tracking-tight text-base">
+              Qudrat National
             </div>
-            <div className="text-[11px] uppercase tracking-[0.2em] text-sidebar-foreground/60">
-              Full facility management
+            <div className="text-[11px] uppercase tracking-[0.1em] text-sidebar-foreground/60 font-medium">
+              COGS Tracker
             </div>
           </div>
         </div>

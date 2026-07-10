@@ -28,6 +28,8 @@ tags:
     description: PDF (and other) file attachments on daily entries.
   - name: Storage
     description: Object storage upload and serving endpoints.
+  - name: Settings
+    description: Application-wide settings (SMTP email configuration).
 paths:
   /healthz:
     get:
@@ -176,6 +178,114 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           description: Current password did not match
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Request a password reset email (public, never reveals whether the email exists)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordBody'
+      responses:
+        '200':
+          description: Accepted (sent if the account exists and email is configured)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForgotPasswordResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Set a new password using an emailed reset token (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordBody'
+      responses:
+        '200':
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid or expired token / validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /settings/smtp:
+    get:
+      tags: [Settings]
+      operationId: getSmtpSettings
+      summary: Get the configured SMTP settings (admin only, password never returned)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmtpSettings'
+    put:
+      tags: [Settings]
+      operationId: updateSmtpSettings
+      summary: Create or update the SMTP settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSmtpSettingsBody'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmtpSettings'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /settings/smtp/test:
+    post:
+      tags: [Settings]
+      operationId: testSmtpSettings
+      summary: Send a test email using the saved SMTP settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestSmtpBody'
+      responses:
+        '200':
+          description: Test email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: SMTP not configured or send failed
           content:
             application/json:
               schema:
@@ -1455,6 +1565,62 @@ components:
       properties:
         currentPassword: { type: string, minLength: 1, maxLength: 200 }
         newPassword: { type: string, minLength: 8, maxLength: 200 }
+    ForgotPasswordBody:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, minLength: 3, maxLength: 255 }
+    ForgotPasswordResponse:
+      type: object
+      required: [success, emailConfigured]
+      properties:
+        success:
+          type: boolean
+          const: true
+        emailConfigured:
+          type: boolean
+          description: False when no SMTP settings are saved, so the UI can tell the user to contact an admin instead.
+    ResetPasswordBody:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string, minLength: 20, maxLength: 200 }
+        newPassword: { type: string, minLength: 8, maxLength: 200 }
+    SmtpSettings:
+      type: object
+      required: [configured, host, port, secure, username, fromEmail, fromName, hasPassword]
+      properties:
+        configured: { type: boolean }
+        host: { type: [string, 'null'] }
+        port: { type: [number, 'null'] }
+        secure: { type: [boolean, 'null'] }
+        username: { type: [string, 'null'] }
+        fromEmail: { type: [string, 'null'] }
+        fromName: { type: [string, 'null'] }
+        hasPassword: { type: boolean }
+    UpdateSmtpSettingsBody:
+      type: object
+      required: [host, port, secure, fromEmail]
+      properties:
+        host: { type: string, minLength: 1, maxLength: 255 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        secure: { type: boolean }
+        username:
+          type: [string, 'null']
+          maxLength: 255
+        password:
+          type: [string, 'null']
+          maxLength: 255
+          description: Omit or null to keep the existing password.
+        fromEmail: { type: string, format: email, minLength: 3, maxLength: 255 }
+        fromName:
+          type: [string, 'null']
+          maxLength: 120
+    TestSmtpBody:
+      type: object
+      required: [to]
+      properties:
+        to: { type: string, format: email, minLength: 3, maxLength: 255 }
     ErrorEnvelope:
       type: object
       required: [error]

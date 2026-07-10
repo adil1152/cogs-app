@@ -37,6 +37,8 @@ import type {
   EntryAttachment,
   EntryMatrixReport,
   ErrorEnvelope,
+  ForgotPasswordBody,
+  ForgotPasswordResponse,
   GetAggregateReportParams,
   GetProjectEntryMatrixParams,
   GetProjectSummaryParams,
@@ -56,12 +58,15 @@ import type {
   RecentActivityItem,
   RegisterBody,
   ReorderProjectServicesBody,
+  ResetPasswordBody,
   SecurityGroup,
   ServiceCatalogItem,
   ServiceEntryRow,
   SetApprovalChainBody,
   SetProjectApproversBody,
+  SmtpSettings,
   SuccessResponse,
+  TestSmtpBody,
   TrendsReport,
   UpdateAccessBody,
   UpdateDailyEntryBody,
@@ -69,6 +74,7 @@ import type {
   UpdateProjectBody,
   UpdateProjectServiceBody,
   UpdateSecurityGroupBody,
+  UpdateSmtpSettingsBody,
   UpdateUserBody,
   UpdateUserRoleBody,
   UploadUrlRequest,
@@ -657,6 +663,425 @@ export const useChangeMyPassword = <
   TContext
 > => {
   return useMutation(getChangeMyPasswordMutationOptions(options));
+};
+
+/**
+ * @summary Request a password reset email (public, never reveals whether the email exists)
+ */
+export const getForgotPasswordUrl = () => {
+  return `/api/auth/forgot-password`;
+};
+
+export const forgotPassword = async (
+  forgotPasswordBody: ForgotPasswordBody,
+  options?: RequestInit,
+): Promise<ForgotPasswordResponse> => {
+  return customFetch<ForgotPasswordResponse>(getForgotPasswordUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(forgotPasswordBody),
+  });
+};
+
+export const getForgotPasswordMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof forgotPassword>>,
+    TError,
+    { data: BodyType<ForgotPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof forgotPassword>>,
+  TError,
+  { data: BodyType<ForgotPasswordBody> },
+  TContext
+> => {
+  const mutationKey = ["forgotPassword"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof forgotPassword>>,
+    { data: BodyType<ForgotPasswordBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return forgotPassword(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ForgotPasswordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof forgotPassword>>
+>;
+export type ForgotPasswordMutationBody = BodyType<ForgotPasswordBody>;
+export type ForgotPasswordMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Request a password reset email (public, never reveals whether the email exists)
+ */
+export const useForgotPassword = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof forgotPassword>>,
+    TError,
+    { data: BodyType<ForgotPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof forgotPassword>>,
+  TError,
+  { data: BodyType<ForgotPasswordBody> },
+  TContext
+> => {
+  return useMutation(getForgotPasswordMutationOptions(options));
+};
+
+/**
+ * @summary Set a new password using an emailed reset token (public)
+ */
+export const getResetPasswordUrl = () => {
+  return `/api/auth/reset-password`;
+};
+
+export const resetPassword = async (
+  resetPasswordBody: ResetPasswordBody,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getResetPasswordUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(resetPasswordBody),
+  });
+};
+
+export const getResetPasswordMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPassword>>,
+    TError,
+    { data: BodyType<ResetPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetPassword>>,
+  TError,
+  { data: BodyType<ResetPasswordBody> },
+  TContext
+> => {
+  const mutationKey = ["resetPassword"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetPassword>>,
+    { data: BodyType<ResetPasswordBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return resetPassword(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetPasswordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetPassword>>
+>;
+export type ResetPasswordMutationBody = BodyType<ResetPasswordBody>;
+export type ResetPasswordMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Set a new password using an emailed reset token (public)
+ */
+export const useResetPassword = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPassword>>,
+    TError,
+    { data: BodyType<ResetPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetPassword>>,
+  TError,
+  { data: BodyType<ResetPasswordBody> },
+  TContext
+> => {
+  return useMutation(getResetPasswordMutationOptions(options));
+};
+
+/**
+ * @summary Get the configured SMTP settings (admin only, password never returned)
+ */
+export const getGetSmtpSettingsUrl = () => {
+  return `/api/settings/smtp`;
+};
+
+export const getSmtpSettings = async (
+  options?: RequestInit,
+): Promise<SmtpSettings> => {
+  return customFetch<SmtpSettings>(getGetSmtpSettingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSmtpSettingsQueryKey = () => {
+  return [`/api/settings/smtp`] as const;
+};
+
+export const getGetSmtpSettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSmtpSettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSmtpSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSmtpSettingsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSmtpSettings>>> = ({
+    signal,
+  }) => getSmtpSettings({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSmtpSettings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSmtpSettingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSmtpSettings>>
+>;
+export type GetSmtpSettingsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the configured SMTP settings (admin only, password never returned)
+ */
+
+export function useGetSmtpSettings<
+  TData = Awaited<ReturnType<typeof getSmtpSettings>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSmtpSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSmtpSettingsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create or update the SMTP settings (admin only)
+ */
+export const getUpdateSmtpSettingsUrl = () => {
+  return `/api/settings/smtp`;
+};
+
+export const updateSmtpSettings = async (
+  updateSmtpSettingsBody: UpdateSmtpSettingsBody,
+  options?: RequestInit,
+): Promise<SmtpSettings> => {
+  return customFetch<SmtpSettings>(getUpdateSmtpSettingsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateSmtpSettingsBody),
+  });
+};
+
+export const getUpdateSmtpSettingsMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSmtpSettings>>,
+    TError,
+    { data: BodyType<UpdateSmtpSettingsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateSmtpSettings>>,
+  TError,
+  { data: BodyType<UpdateSmtpSettingsBody> },
+  TContext
+> => {
+  const mutationKey = ["updateSmtpSettings"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateSmtpSettings>>,
+    { data: BodyType<UpdateSmtpSettingsBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateSmtpSettings(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateSmtpSettingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateSmtpSettings>>
+>;
+export type UpdateSmtpSettingsMutationBody = BodyType<UpdateSmtpSettingsBody>;
+export type UpdateSmtpSettingsMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Create or update the SMTP settings (admin only)
+ */
+export const useUpdateSmtpSettings = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateSmtpSettings>>,
+    TError,
+    { data: BodyType<UpdateSmtpSettingsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateSmtpSettings>>,
+  TError,
+  { data: BodyType<UpdateSmtpSettingsBody> },
+  TContext
+> => {
+  return useMutation(getUpdateSmtpSettingsMutationOptions(options));
+};
+
+/**
+ * @summary Send a test email using the saved SMTP settings (admin only)
+ */
+export const getTestSmtpSettingsUrl = () => {
+  return `/api/settings/smtp/test`;
+};
+
+export const testSmtpSettings = async (
+  testSmtpBody: TestSmtpBody,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getTestSmtpSettingsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(testSmtpBody),
+  });
+};
+
+export const getTestSmtpSettingsMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testSmtpSettings>>,
+    TError,
+    { data: BodyType<TestSmtpBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof testSmtpSettings>>,
+  TError,
+  { data: BodyType<TestSmtpBody> },
+  TContext
+> => {
+  const mutationKey = ["testSmtpSettings"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof testSmtpSettings>>,
+    { data: BodyType<TestSmtpBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return testSmtpSettings(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TestSmtpSettingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof testSmtpSettings>>
+>;
+export type TestSmtpSettingsMutationBody = BodyType<TestSmtpBody>;
+export type TestSmtpSettingsMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Send a test email using the saved SMTP settings (admin only)
+ */
+export const useTestSmtpSettings = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof testSmtpSettings>>,
+    TError,
+    { data: BodyType<TestSmtpBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof testSmtpSettings>>,
+  TError,
+  { data: BodyType<TestSmtpBody> },
+  TContext
+> => {
+  return useMutation(getTestSmtpSettingsMutationOptions(options));
 };
 
 /**

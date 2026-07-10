@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
 
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const sessionsTable = pgTable(
@@ -31,3 +31,40 @@ export const usersTable = pgTable("users", {
 
 export type UpsertUser = typeof usersTable.$inferInsert;
 export type User = typeof usersTable.$inferSelect;
+
+// Single-row table holding the admin-configured SMTP settings used for
+// outbound mail (password reset links). The password is stored as-is (it is
+// needed in plaintext to authenticate against the SMTP server) and is never
+// returned by the API.
+export const smtpSettingsTable = pgTable("smtp_settings", {
+  id: varchar("id", { length: 16 }).primaryKey().default("default"),
+  host: varchar("host", { length: 255 }).notNull(),
+  port: integer("port").notNull().default(587),
+  secure: boolean("secure").notNull().default(false),
+  username: varchar("username", { length: 255 }),
+  password: varchar("password", { length: 255 }),
+  fromEmail: varchar("from_email", { length: 255 }).notNull(),
+  fromName: varchar("from_name", { length: 120 }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export type SmtpSettingsRow = typeof smtpSettingsTable.$inferSelect;
+
+// One-time password reset tokens. We store only the SHA-256 hash of the token;
+// the raw token goes into the emailed link. Tokens are single-use and expire.
+export const passwordResetTokensTable = pgTable(
+  "password_reset_tokens",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("IDX_reset_tokens_user").on(table.userId)],
+);
+
+export type PasswordResetToken = typeof passwordResetTokensTable.$inferSelect;

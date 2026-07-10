@@ -191,6 +191,130 @@ export const ChangeMyPasswordResponse = zod.object({
 });
 
 /**
+ * @summary Request a password reset email (public, never reveals whether the email exists)
+ */
+export const forgotPasswordBodyEmailMin = 3;
+export const forgotPasswordBodyEmailMax = 255;
+
+export const ForgotPasswordBody = zod.object({
+  email: zod
+    .string()
+    .email()
+    .min(forgotPasswordBodyEmailMin)
+    .max(forgotPasswordBodyEmailMax),
+});
+
+export const ForgotPasswordResponse = zod.object({
+  success: zod.boolean(),
+  emailConfigured: zod
+    .boolean()
+    .describe(
+      "False when no SMTP settings are saved, so the UI can tell the user to contact an admin instead.",
+    ),
+});
+
+/**
+ * @summary Set a new password using an emailed reset token (public)
+ */
+export const resetPasswordBodyTokenMin = 20;
+export const resetPasswordBodyTokenMax = 200;
+
+export const resetPasswordBodyNewPasswordMin = 8;
+export const resetPasswordBodyNewPasswordMax = 200;
+
+export const ResetPasswordBody = zod.object({
+  token: zod
+    .string()
+    .min(resetPasswordBodyTokenMin)
+    .max(resetPasswordBodyTokenMax),
+  newPassword: zod
+    .string()
+    .min(resetPasswordBodyNewPasswordMin)
+    .max(resetPasswordBodyNewPasswordMax),
+});
+
+export const ResetPasswordResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Get the configured SMTP settings (admin only, password never returned)
+ */
+export const GetSmtpSettingsResponse = zod.object({
+  configured: zod.boolean(),
+  host: zod.string().nullable(),
+  port: zod.number().nullable(),
+  secure: zod.boolean().nullable(),
+  username: zod.string().nullable(),
+  fromEmail: zod.string().nullable(),
+  fromName: zod.string().nullable(),
+  hasPassword: zod.boolean(),
+});
+
+/**
+ * @summary Create or update the SMTP settings (admin only)
+ */
+export const updateSmtpSettingsBodyHostMax = 255;
+
+export const updateSmtpSettingsBodyPortMax = 65535;
+
+export const updateSmtpSettingsBodyUsernameMax = 255;
+
+export const updateSmtpSettingsBodyPasswordMax = 255;
+
+export const updateSmtpSettingsBodyFromEmailMin = 3;
+export const updateSmtpSettingsBodyFromEmailMax = 255;
+
+export const updateSmtpSettingsBodyFromNameMax = 120;
+
+export const UpdateSmtpSettingsBody = zod.object({
+  host: zod.string().min(1).max(updateSmtpSettingsBodyHostMax),
+  port: zod.number().min(1).max(updateSmtpSettingsBodyPortMax),
+  secure: zod.boolean(),
+  username: zod.string().max(updateSmtpSettingsBodyUsernameMax).nullish(),
+  password: zod
+    .string()
+    .max(updateSmtpSettingsBodyPasswordMax)
+    .nullish()
+    .describe("Omit or null to keep the existing password."),
+  fromEmail: zod
+    .string()
+    .email()
+    .min(updateSmtpSettingsBodyFromEmailMin)
+    .max(updateSmtpSettingsBodyFromEmailMax),
+  fromName: zod.string().max(updateSmtpSettingsBodyFromNameMax).nullish(),
+});
+
+export const UpdateSmtpSettingsResponse = zod.object({
+  configured: zod.boolean(),
+  host: zod.string().nullable(),
+  port: zod.number().nullable(),
+  secure: zod.boolean().nullable(),
+  username: zod.string().nullable(),
+  fromEmail: zod.string().nullable(),
+  fromName: zod.string().nullable(),
+  hasPassword: zod.boolean(),
+});
+
+/**
+ * @summary Send a test email using the saved SMTP settings (admin only)
+ */
+export const testSmtpSettingsBodyToMin = 3;
+export const testSmtpSettingsBodyToMax = 255;
+
+export const TestSmtpSettingsBody = zod.object({
+  to: zod
+    .string()
+    .email()
+    .min(testSmtpSettingsBodyToMin)
+    .max(testSmtpSettingsBodyToMax),
+});
+
+export const TestSmtpSettingsResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary List all users (for admin role and access management)
  */
 export const ListUsersResponseItem = zod.object({

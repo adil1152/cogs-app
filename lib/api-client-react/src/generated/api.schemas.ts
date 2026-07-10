@@ -120,6 +120,93 @@ export interface ChangePasswordBody {
   newPassword: string;
 }
 
+export interface ForgotPasswordBody {
+  /**
+   * @minLength 3
+   * @maxLength 255
+   */
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  success: true;
+  /** False when no SMTP settings are saved, so the UI can tell the user to contact an admin instead. */
+  emailConfigured: boolean;
+}
+
+export interface ResetPasswordBody {
+  /**
+   * @minLength 20
+   * @maxLength 200
+   */
+  token: string;
+  /**
+   * @minLength 8
+   * @maxLength 200
+   */
+  newPassword: string;
+}
+
+export interface SmtpSettings {
+  configured: boolean;
+  /** @nullable */
+  host: string | null;
+  /** @nullable */
+  port: number | null;
+  /** @nullable */
+  secure: boolean | null;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  fromEmail: string | null;
+  /** @nullable */
+  fromName: string | null;
+  hasPassword: boolean;
+}
+
+export interface UpdateSmtpSettingsBody {
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
+  host: string;
+  /**
+   * @minimum 1
+   * @maximum 65535
+   */
+  port: number;
+  secure: boolean;
+  /**
+   * @maxLength 255
+   * @nullable
+   */
+  username?: string | null;
+  /**
+   * Omit or null to keep the existing password.
+   * @maxLength 255
+   * @nullable
+   */
+  password?: string | null;
+  /**
+   * @minLength 3
+   * @maxLength 255
+   */
+  fromEmail: string;
+  /**
+   * @maxLength 120
+   * @nullable
+   */
+  fromName?: string | null;
+}
+
+export interface TestSmtpBody {
+  /**
+   * @minLength 3
+   * @maxLength 255
+   */
+  to: string;
+}
+
 export interface ErrorEnvelope {
   error: string;
 }

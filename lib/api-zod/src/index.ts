@@ -18,6 +18,8 @@ export type {
   EntryMatrixRow,
   EntryMatrixServiceTotal,
   ErrorEnvelope,
+  ForgotPasswordResponse,
+  SmtpSettings,
   GrantAccessBody,
   HealthStatus,
   Project,

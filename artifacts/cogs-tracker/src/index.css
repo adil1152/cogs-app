@@ -238,6 +238,13 @@
   box-shadow: var(--shadow-sm);
 }
 
+@utility glass-overlay {
+  background-color: hsl(var(--popover) / 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-color: hsl(var(--popover-border) / 0.7);
+}
+
 @utility glass-sidebar {
   background-color: hsl(var(--sidebar) / 0.7);
   backdrop-filter: blur(16px);

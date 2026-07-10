@@ -160,30 +160,30 @@ export default function Projects() {
                 <Link key={p.id} href={`/projects/${p.id}`}>
                   <a className="block group" data-testid={`project-${p.id}`}>
                     <Card
-                      className={`hover:border-accent/60 hover:shadow-md transition-all cursor-pointer h-full ${
-                        (p as any).disabled ? "opacity-60" : ""
+                      className={`hover:-translate-y-1 hover:border-accent/40 hover:shadow-md hover:bg-card/80 transition-all duration-300 cursor-pointer h-full ${
+                        (p as any).disabled ? "opacity-60 grayscale-[0.5]" : ""
                       }`}
                     >
-                      <CardContent className="pt-5 pb-5">
+                      <CardContent className="pt-6 pb-6">
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 font-semibold tracking-tight">
+                          <div className="flex items-center gap-2 font-bold tracking-tight text-lg">
                             {p.name}
                             {(p as any).disabled && (
-                              <Badge variant="secondary" data-testid={`badge-disabled-${p.id}`}>
+                              <Badge variant="secondary" className="font-mono uppercase tracking-wider text-[10px]" data-testid={`badge-disabled-${p.id}`}>
                                 Disabled
                               </Badge>
                             )}
                           </div>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-accent group-hover:translate-x-0.5 transition-all" />
+                          <ChevronRight className="h-5 w-5 text-muted-foreground/50 group-hover:text-accent group-hover:translate-x-1 transition-all duration-300" />
                         </div>
-                        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <MapPin className="h-3 w-3" /> {p.location}
+                        <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground font-medium">
+                          <MapPin className="h-4 w-4 text-accent/70" /> {p.location}
                         </div>
-                        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3" /> {formatDate(p.contractStart)} → {formatDate(p.contractEnd)}
+                        <div className="mt-1.5 flex items-center gap-2 text-sm text-muted-foreground font-medium">
+                          <Calendar className="h-4 w-4 text-accent/70" /> {formatDate(p.contractStart)} → {formatDate(p.contractEnd)}
                         </div>
                         {p.notes && (
-                          <p className="mt-3 text-xs text-muted-foreground line-clamp-2">{p.notes}</p>
+                          <p className="mt-4 text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed">{p.notes}</p>
                         )}
                       </CardContent>
                     </Card>

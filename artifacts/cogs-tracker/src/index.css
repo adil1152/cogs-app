@@ -83,66 +83,66 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 220 38% 97%;
-  --foreground: 215 28% 17%;
+  --background: 210 20% 98%;
+  --foreground: 222 47% 11%;
 
-  --border: 215 24% 90%;
+  --border: 214 32% 91%;
 
   --card: 0 0% 100%;
-  --card-foreground: 215 28% 17%;
-  --card-border: 215 24% 90%;
+  --card-foreground: 222 47% 11%;
+  --card-border: 214 32% 91%;
 
-  /* Sidebar — clean white panel, brand-blue active item, dark navy text. */
+  /* Sidebar (theme-aware: light frosted surface in light mode) */
   --sidebar: 0 0% 100%;
-  --sidebar-foreground: 215 28% 22%;
-  --sidebar-border: 215 22% 92%;
-  --sidebar-primary: 202 64% 47%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-border: 214 32% 88%;
+  --sidebar-primary: 215 89% 45%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 202 80% 95%;          /* very pale blue tint for active row */
-  --sidebar-accent-foreground: 202 70% 35%;
-  --sidebar-ring: 202 64% 47%;
+  --sidebar-accent: 215 85% 93%;
+  --sidebar-accent-foreground: 215 89% 32%;
+  --sidebar-ring: 215 89% 45%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 215 28% 17%;
-  --popover-border: 215 24% 90%;
+  --popover-foreground: 222 47% 11%;
+  --popover-border: 214 32% 91%;
 
-  --primary: 202 64% 47%;
+  --primary: 215 89% 45%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 215 25% 95%;
-  --secondary-foreground: 215 28% 17%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
 
-  --muted: 220 25% 95%;
+  --muted: 210 40% 96%;
   --muted-foreground: 215 16% 47%;
 
-  --accent: 202 64% 47%;
+  --accent: 215 89% 45%;
   --accent-foreground: 0 0% 100%;
 
-  --destructive: 0 75% 52%;
+  --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 215 24% 90%;
-  --ring: 202 64% 47%;
+  --input: 214 32% 91%;
+  --ring: 215 89% 45%;
 
-  --chart-1: 202 64% 47%;
-  --chart-2: 110 41% 47%;
-  --chart-3: 285 28% 50%;
-  --chart-4: 175 60% 40%;
-  --chart-5: 38 92% 50%;
+  --chart-1: 215 89% 45%;
+  --chart-2: 32 95% 55%;
+  --chart-3: 160 84% 39%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 340 75% 55%;
 
-  --app-font-sans: 'Inter', sans-serif;
+  --app-font-sans: 'Plus Jakarta Sans', sans-serif;
   --app-font-serif: Georgia, serif;
-  --app-font-mono: Menlo, monospace;
+  --app-font-mono: 'Spline Sans Mono', monospace;
   --radius: 0.5rem;
-  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0, 0.05);
-  --shadow-xs: 0px 1px 3px 0px rgba(0,0,0, 0.08);
-  --shadow-sm: 0px 2px 4px 0px rgba(0,0,0, 0.05);
-  --shadow: 0px 4px 6px -1px rgba(0,0,0, 0.08);
-  --shadow-md: 0px 6px 8px -2px rgba(0,0,0, 0.08);
-  --shadow-lg: 0px 10px 15px -3px rgba(0,0,0, 0.08);
-  --shadow-xl: 0px 20px 25px -5px rgba(0,0,0, 0.1);
-  --shadow-2xl: 0px 25px 50px -12px rgba(0,0,0, 0.2);
-  --tracking-normal: 0em;
+  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0, 0.03);
+  --shadow-xs: 0px 1px 3px 0px rgba(0,0,0, 0.05);
+  --shadow-sm: 0px 2px 4px 0px rgba(0,0,0, 0.03);
+  --shadow: 0px 4px 6px -1px rgba(0,0,0, 0.05);
+  --shadow-md: 0px 6px 8px -2px rgba(0,0,0, 0.05);
+  --shadow-lg: 0px 10px 15px -3px rgba(0,0,0, 0.05);
+  --shadow-xl: 0px 20px 25px -5px rgba(0,0,0, 0.08);
+  --shadow-2xl: 0px 25px 50px -12px rgba(0,0,0, 0.15);
+  --tracking-normal: -0.01em;
   --spacing: 0.25rem;
 
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -153,12 +153,12 @@
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
-  /* Soft pastel app background gradient */
-  --app-bg-gradient: linear-gradient(
-    180deg,
-    hsl(220 38% 98%) 0%,
-    hsl(220 50% 96%) 100%
-  );
+  /* Soft pastel app background gradient with faint brand tints so
+     frosted-glass surfaces have something to blur */
+  --app-bg-gradient:
+    radial-gradient(1100px 520px at 88% -10%, hsl(215 89% 45% / 0.08), transparent 60%),
+    radial-gradient(900px 520px at -12% 108%, hsl(285 28% 50% / 0.07), transparent 60%),
+    linear-gradient(180deg, hsl(210 20% 98%) 0%, hsl(210 25% 95%) 100%);
 }
 
 .dark {
@@ -213,11 +213,10 @@
   --chart-4: 175 60% 50%;
   --chart-5: 38 92% 60%;
 
-  --app-bg-gradient: linear-gradient(
-    180deg,
-    hsl(215 45% 9%) 0%,
-    hsl(215 50% 7%) 100%
-  );
+  --app-bg-gradient:
+    radial-gradient(1100px 520px at 88% -10%, hsl(202 70% 56% / 0.1), transparent 60%),
+    radial-gradient(900px 520px at -12% 108%, hsl(285 45% 60% / 0.08), transparent 60%),
+    linear-gradient(180deg, hsl(215 45% 9%) 0%, hsl(215 50% 7%) 100%);
 }
 
 @layer base {
@@ -229,4 +228,19 @@
     background: var(--app-bg-gradient);
     background-attachment: fixed;
   }
+}
+
+@utility glass {
+  background-color: hsl(var(--card) / 0.65);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: hsl(var(--border) / 0.7);
+  box-shadow: var(--shadow-sm);
+}
+
+@utility glass-sidebar {
+  background-color: hsl(var(--sidebar) / 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-color: hsl(var(--sidebar-border) / 0.7);
 }

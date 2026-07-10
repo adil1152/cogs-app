@@ -388,23 +388,27 @@ function KpiCard({
 }) {
   return (
     <Card
-      className={`group transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:border-accent/50 ${
-        accent ? "border-accent/40 bg-accent/5" : ""
+      className={`group transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-accent/40 ${
+        accent ? "border-accent/30 bg-accent/[0.03] shadow-sm shadow-accent/10" : ""
       }`}
     >
-      <CardContent className="pt-5">
-        <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium transition-colors group-hover:text-accent">
+      <CardContent className="pt-5 pb-5">
+        <div className="text-[11px] uppercase tracking-[0.06em] text-muted-foreground font-medium transition-colors group-hover:text-foreground">
           {label}
         </div>
         <div
-          className="mt-1 text-2xl font-semibold tabular-nums truncate"
+          className={`mt-2 text-2xl font-bold tabular-nums truncate tracking-tight ${accent ? "text-accent" : ""}`}
           data-testid={testid}
         >
-          {loading ? "—" : value}
+          {loading ? (
+            <div className="h-8 w-24 bg-muted animate-pulse rounded" />
+          ) : (
+            value
+          )}
         </div>
         {sub ? (
-          <div className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-            {loading ? "" : sub}
+          <div className="mt-1 text-xs text-muted-foreground tabular-nums font-medium">
+            {loading ? <div className="h-4 w-16 bg-muted animate-pulse rounded mt-1" /> : sub}
           </div>
         ) : null}
       </CardContent>

@@ -111,7 +111,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen text-foreground flex">
       <aside
         className={cn(
-          "shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col transition-[width] duration-200",
+          "shrink-0 glass-sidebar text-sidebar-foreground border-r flex flex-col transition-[width] duration-200 shadow-sm",
           "sticky top-0 self-start h-screen z-30",
           collapsed ? "w-16" : "w-60",
         )}
@@ -124,16 +124,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
             collapsed ? "px-2 justify-center" : "px-5 gap-3",
           )}
         >
-          <div className="h-10 w-10 rounded-md bg-white grid place-items-center shrink-0 p-1 ring-1 ring-sidebar-border">
-            <QncLogo className="h-full w-full" />
+          <div className="h-10 w-10 rounded-md bg-primary text-primary-foreground grid place-items-center shrink-0 shadow-sm">
+            <QncLogo className="h-6 w-6 text-white" />
           </div>
           {!collapsed && (
-            <div className="leading-tight min-w-0 flex-1">
+            <div className="leading-tight min-w-0 flex-1 animate-in fade-in slide-in-from-left-2 duration-300">
               <div className="font-semibold tracking-tight text-[15px] truncate">
-                Qudrat National Co.
+                Qudrat National
               </div>
-              <div className="text-[10.5px] uppercase tracking-wider text-sidebar-foreground/60 truncate">
-                Full facility management
+              <div className="text-[10.5px] uppercase tracking-wider text-sidebar-foreground/60 truncate font-medium">
+                COGS Tracker
               </div>
             </div>
           )}
@@ -253,7 +253,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="border-b border-border bg-card/60 backdrop-blur">
+    <div className="border-b glass">
       <div className="px-8 py-6 flex items-end justify-between gap-4">
         <div>
           <h1

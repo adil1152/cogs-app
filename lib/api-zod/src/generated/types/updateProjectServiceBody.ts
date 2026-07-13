@@ -5,6 +5,7 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { FoodMealItemInput } from "./foodMealItemInput";
 import type { SubItemInput } from "./subItemInput";
 import type { UpdateProjectServiceBodyKind } from "./updateProjectServiceBodyKind";
 
@@ -20,4 +21,11 @@ sub-items not present are deleted. Add/remove is rejected with
 409 once any cost entry references the parent service.
  */
   subItems?: SubItemInput[];
+  /** Full replacement set of meal types for a kind=food service. Items
+with `id` are updated (rename / re-weight / reorder); items
+without `id` are inserted; existing items not present are
+deleted. Always allowed — historical entries keep the snapshot
+they were saved with.
+ */
+  mealItems?: FoodMealItemInput[];
 }

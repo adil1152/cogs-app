@@ -23,7 +23,7 @@ import {
   type SessionData,
 } from "../lib/auth";
 import { requireAuth } from "../middlewares/requireAuth";
-import { getSmtpSettingsRow, sendMail } from "../lib/mailer";
+import { getSmtpSettingsRow, isEmailConfigured, sendMail } from "../lib/mailer";
 
 const router: IRouter = Router();
 
@@ -250,7 +250,7 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
   }
 
   const smtp = await getSmtpSettingsRow();
-  if (!smtp) {
+  if (!isEmailConfigured(smtp)) {
     // Tell the UI email isn't set up — that isn't an account-enumeration
     // signal, it's global app state.
     res.json({ success: true, emailConfigured: false });

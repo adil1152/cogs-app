@@ -5,6 +5,7 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { MealQuantityBreakdown } from "./mealQuantityBreakdown";
 import type { ServiceCostBreakdownKind } from "./serviceCostBreakdownKind";
 import type { SubServiceCostBreakdown } from "./subServiceCostBreakdown";
 
@@ -20,16 +21,12 @@ export interface ServiceCostBreakdown {
   manualMandays?: number;
   mandayContribution: number;
   costPerManday: number;
-  /** @nullable */
-  breakfastQty?: number | null;
-  /** @nullable */
-  lunchQty?: number | null;
-  /** @nullable */
-  dinnerQty?: number | null;
-  /** @nullable */
-  midnightQty?: number | null;
-  /** @nullable */
-  mealBoxQty?: number | null;
+  /** Per meal-type rows for kind=food; empty for other kinds. Name and
+weight are the snapshot taken when the entry was saved, so they
+stay correct even after the service's meal items are edited or
+removed (mealItemId becomes null on removal).
+ */
+  mealQuantities?: MealQuantityBreakdown[];
   /** Per sub-item rows for kind=group; empty for other kinds. */
   subCosts?: SubServiceCostBreakdown[];
 }

@@ -25,6 +25,10 @@ export const projectsTable = pgTable(
     notes: text("notes"),
     pdfRequired: boolean("pdf_required").notNull().default(false),
     disabled: boolean("disabled").notNull().default(false),
+    // Entry-date window for non-admin users. NULL = no limit on that side.
+    // 0 = that direction fully blocked (e.g. futureDays 0 → no future entries).
+    backdatedDays: integer("backdated_days"),
+    futureDays: integer("future_days"),
     createdById: varchar("created_by_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
@@ -83,6 +87,34 @@ export const serviceSubItemsTable = pgTable(
 
 export type ServiceSubItem = typeof serviceSubItemsTable.$inferSelect;
 export type InsertServiceSubItem = typeof serviceSubItemsTable.$inferInsert;
+
+/**
+ * Meal types for a "food" service. Admin defines the list (name + manday
+ * weight, e.g. Breakfast 0.2) per food service. Fully editable at any time:
+ * add / remove / rename / re-weight. Historical entries are unaffected by
+ * edits because every daily entry snapshots the name + weight it was saved
+ * with (see mealCostEntriesTable).
+ */
+export const foodMealItemsTable = pgTable(
+  "food_meal_items",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    projectServiceId: varchar("project_service_id")
+      .notNull()
+      .references(() => projectServicesTable.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    /** Manday weight as a fraction (0.2 = 20%). */
+    weight: numeric("weight", { precision: 6, scale: 3 }).notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("IDX_meal_items_service").on(t.projectServiceId)],
+);
+
+export type FoodMealItem = typeof foodMealItemsTable.$inferSelect;
+export type InsertFoodMealItem = typeof foodMealItemsTable.$inferInsert;
 
 export const securityGroupsTable = pgTable(
   "security_groups",
@@ -207,14 +239,40 @@ export const serviceCostEntriesTable = pgTable(
     manualMandays: numeric("manual_mandays", { precision: 10, scale: 2 })
       .notNull()
       .default("0"),
-    breakfastQty: integer("breakfast_qty"),
-    lunchQty: integer("lunch_qty"),
-    dinnerQty: integer("dinner_qty"),
-    midnightQty: integer("midnight_qty"),
-    mealBoxQty: integer("meal_box_qty"),
   },
   (t) => [index("IDX_service_costs_entry").on(t.dailyEntryId)],
 );
+
+/**
+ * Per-day, per-meal-type quantity rows for a "food" service. Each row pairs
+ * a service_cost_entries row with one of the food service's meal items and
+ * SNAPSHOTS the meal's name + weight at save time. That makes meal items
+ * fully editable (rename / re-weight / remove) without ever changing what a
+ * historical entry recorded: mealItemId is SET NULL on delete and the
+ * snapshot columns keep the row meaningful forever.
+ */
+export const mealCostEntriesTable = pgTable(
+  "meal_cost_entries",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    serviceCostEntryId: varchar("service_cost_entry_id")
+      .notNull()
+      .references(() => serviceCostEntriesTable.id, { onDelete: "cascade" }),
+    mealItemId: varchar("meal_item_id").references(() => foodMealItemsTable.id, {
+      onDelete: "set null",
+    }),
+    /** Snapshot of the meal item's name at save time. */
+    name: varchar("name", { length: 255 }).notNull(),
+    /** Snapshot of the meal item's weight (fraction) at save time. */
+    weight: numeric("weight", { precision: 6, scale: 3 }).notNull(),
+    qty: integer("qty").notNull().default(0),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("IDX_meal_costs_parent").on(t.serviceCostEntryId)],
+);
+
+export type MealCostEntry = typeof mealCostEntriesTable.$inferSelect;
+export type InsertMealCostEntry = typeof mealCostEntriesTable.$inferInsert;
 
 /**
  * Per-day, per-sub-item cost & manday rows for a "group" service. Each row

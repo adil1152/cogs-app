@@ -147,8 +147,17 @@ export interface ResetPasswordBody {
   newPassword: string;
 }
 
+export type SmtpSettingsProvider =
+  (typeof SmtpSettingsProvider)[keyof typeof SmtpSettingsProvider];
+
+export const SmtpSettingsProvider = {
+  smtp: "smtp",
+  graph: "graph",
+} as const;
+
 export interface SmtpSettings {
   configured: boolean;
+  provider: SmtpSettingsProvider;
   /** @nullable */
   host: string | null;
   /** @nullable */
@@ -162,20 +171,38 @@ export interface SmtpSettings {
   /** @nullable */
   fromName: string | null;
   hasPassword: boolean;
+  /** @nullable */
+  graphTenantId: string | null;
+  /** @nullable */
+  graphClientId: string | null;
+  hasGraphClientSecret: boolean;
+  /** @nullable */
+  graphSenderEmail: string | null;
 }
 
+export type UpdateSmtpSettingsBodyProvider =
+  (typeof UpdateSmtpSettingsBodyProvider)[keyof typeof UpdateSmtpSettingsBodyProvider];
+
+export const UpdateSmtpSettingsBodyProvider = {
+  smtp: "smtp",
+  graph: "graph",
+} as const;
+
 export interface UpdateSmtpSettingsBody {
+  provider: UpdateSmtpSettingsBodyProvider;
   /**
-   * @minLength 1
    * @maxLength 255
+   * @nullable
    */
-  host: string;
+  host?: string | null;
   /**
    * @minimum 1
    * @maximum 65535
+   * @nullable
    */
-  port: number;
-  secure: boolean;
+  port?: number | null;
+  /** @nullable */
+  secure?: boolean | null;
   /**
    * @maxLength 255
    * @nullable
@@ -190,13 +217,36 @@ export interface UpdateSmtpSettingsBody {
   /**
    * @minLength 3
    * @maxLength 255
+   * @nullable
    */
-  fromEmail: string;
+  fromEmail?: string | null;
   /**
    * @maxLength 120
    * @nullable
    */
   fromName?: string | null;
+  /**
+   * @maxLength 120
+   * @nullable
+   */
+  graphTenantId?: string | null;
+  /**
+   * @maxLength 120
+   * @nullable
+   */
+  graphClientId?: string | null;
+  /**
+   * Omit or null to keep the existing secret.
+   * @maxLength 255
+   * @nullable
+   */
+  graphClientSecret?: string | null;
+  /**
+   * @minLength 3
+   * @maxLength 255
+   * @nullable
+   */
+  graphSenderEmail?: string | null;
 }
 
 export interface TestSmtpBody {
@@ -325,6 +375,18 @@ export interface Project {
   pdfRequired: boolean;
   /** When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it. */
   disabled: boolean;
+  /**
+   * How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.
+   * @minimum 0
+   * @nullable
+   */
+  backdatedDays?: number | null;
+  /**
+   * How many days in the future a non-admin may date an entry. 0 blocks future entries entirely; null means no limit.
+   * @minimum 0
+   * @nullable
+   */
+  futureDays?: number | null;
   createdAt: string;
   isAdminOwned: boolean;
   currentUserCanViewSummary: boolean;
@@ -355,6 +417,17 @@ export interface ServiceSubItem {
   color?: string | null;
 }
 
+/**
+ * A meal type defined for a kind=food service.
+ */
+export interface FoodMealItem {
+  id: string;
+  name: string;
+  /** Manday weight as a fraction (0.2 = 20% of a manday). */
+  weight: number;
+  sortOrder: number;
+}
+
 export interface ProjectService {
   id: string;
   projectId: string;
@@ -365,6 +438,11 @@ export interface ProjectService {
   color?: string | null;
   /** Defined sub-services for kind=group; empty array otherwise. */
   subItems: ServiceSubItem[];
+  /** Defined meal types for kind=food; empty array otherwise. Fully
+editable at any time — daily entries snapshot the name + weight
+they were saved with, so edits never change historical numbers.
+ */
+  mealItems: FoodMealItem[];
   /** True if at least one daily-entry cost row references this service.
 Used by the UI to lock add/remove of sub-items on group services
 once historical entries exist (rename/reorder remain allowed).
@@ -390,6 +468,16 @@ export interface CreateProjectBody {
   contractEnd: string;
   notes?: string;
   pdfRequired?: boolean;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  backdatedDays?: number | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  futureDays?: number | null;
 }
 
 export interface UpdateProjectBody {
@@ -407,6 +495,16 @@ export interface UpdateProjectBody {
   notes?: string;
   pdfRequired?: boolean;
   disabled?: boolean;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  backdatedDays?: number | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  futureDays?: number | null;
 }
 
 export interface SubItemInput {
@@ -420,6 +518,23 @@ export interface SubItemInput {
   sortOrder?: number;
   /** Optional hex color (#RRGGBB). */
   color?: string | null;
+}
+
+export interface FoodMealItemInput {
+  /** When set, identifies an existing meal item to update. */
+  id?: string;
+  /**
+   * @minLength 1
+   * @maxLength 255
+   */
+  name: string;
+  /**
+   * Manday weight as a fraction (0.2 = 20% of a manday).
+   * @minimum 0
+   * @maximum 100
+   */
+  weight: number;
+  sortOrder?: number;
 }
 
 export type CreateProjectServiceBodyKind =
@@ -439,6 +554,11 @@ export interface CreateProjectServiceBody {
   color?: string | null;
   /** Initial sub-items (only meaningful when kind=group). */
   subItems?: SubItemInput[];
+  /** Initial meal types (only meaningful when kind=food). When omitted
+for a food service, the default five (Breakfast 20%, Lunch /
+Dinner / Midnight / Meal box 40%) are created.
+ */
+  mealItems?: FoodMealItemInput[];
 }
 
 export type UpdateProjectServiceBodyKind =
@@ -462,6 +582,13 @@ sub-items not present are deleted. Add/remove is rejected with
 409 once any cost entry references the parent service.
  */
   subItems?: SubItemInput[];
+  /** Full replacement set of meal types for a kind=food service. Items
+with `id` are updated (rename / re-weight / reorder); items
+without `id` are inserted; existing items not present are
+deleted. Always allowed — historical entries keep the snapshot
+they were saved with.
+ */
+  mealItems?: FoodMealItemInput[];
 }
 
 export interface ReorderProjectServiceItem {
@@ -623,6 +750,30 @@ export interface AuditLogEntry {
   occurredAt: string;
 }
 
+export interface MealQuantityInput {
+  /**
+   * The service meal item this quantity is for. Null only when
+editing an entry whose saved meal type has since been removed
+from the service — the row is then matched by `name`.
+
+   * @nullable
+   */
+  mealItemId?: string | null;
+  /** Required when mealItemId is null (snapshot row match). */
+  name?: string;
+  /** @minimum 0 */
+  qty: number;
+}
+
+export interface MealQuantityBreakdown {
+  /** @nullable */
+  mealItemId: string | null;
+  name: string;
+  /** Snapshot weight (fraction) taken when the entry was saved. */
+  weight: number;
+  qty: number;
+}
+
 export interface SubServiceCostInput {
   subItemId: string;
   /** @minimum 0 */
@@ -665,16 +816,15 @@ mandays not captured by the meal counts.
    * @minimum 0
    */
   manualMandays?: number;
-  /** @minimum 0 */
-  breakfastQty?: number;
-  /** @minimum 0 */
-  lunchQty?: number;
-  /** @minimum 0 */
-  dinnerQty?: number;
-  /** @minimum 0 */
-  midnightQty?: number;
-  /** @minimum 0 */
-  mealBoxQty?: number;
+  /** Per meal-type quantity rows for kind=food services. On create,
+`mealItemId` must reference one of the service's meal items and
+the server snapshots its current name + weight. On update, rows
+whose `mealItemId` matches a previously saved row keep that row's
+snapshot; rows for meal items deleted since the entry was saved
+are matched by `name`. Mandays for the food line are computed
+server-side as sum(qty x weight) + manualMandays.
+ */
+  mealQuantities?: MealQuantityInput[];
   /** Per sub-item cost+mandays rows for kind=group services. Cost and
 mandays for the parent service line are derived as the sum of
 these rows (plus manualMandays for mandays). Ignored for other kinds.
@@ -703,16 +853,12 @@ export interface ServiceCostBreakdown {
   manualMandays?: number;
   mandayContribution: number;
   costPerManday: number;
-  /** @nullable */
-  breakfastQty?: number | null;
-  /** @nullable */
-  lunchQty?: number | null;
-  /** @nullable */
-  dinnerQty?: number | null;
-  /** @nullable */
-  midnightQty?: number | null;
-  /** @nullable */
-  mealBoxQty?: number | null;
+  /** Per meal-type rows for kind=food; empty for other kinds. Name and
+weight are the snapshot taken when the entry was saved, so they
+stay correct even after the service's meal items are edited or
+removed (mealItemId becomes null on removal).
+ */
+  mealQuantities?: MealQuantityBreakdown[];
   /** Per sub-item rows for kind=group; empty for other kinds. */
   subCosts?: SubServiceCostBreakdown[];
 }

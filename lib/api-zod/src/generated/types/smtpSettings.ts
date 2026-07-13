@@ -5,9 +5,11 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { SmtpSettingsProvider } from "./smtpSettingsProvider";
 
 export interface SmtpSettings {
   configured: boolean;
+  provider: SmtpSettingsProvider;
   /** @nullable */
   host: string | null;
   /** @nullable */
@@ -21,4 +23,11 @@ export interface SmtpSettings {
   /** @nullable */
   fromName: string | null;
   hasPassword: boolean;
+  /** @nullable */
+  graphTenantId: string | null;
+  /** @nullable */
+  graphClientId: string | null;
+  hasGraphClientSecret: boolean;
+  /** @nullable */
+  graphSenderEmail: string | null;
 }

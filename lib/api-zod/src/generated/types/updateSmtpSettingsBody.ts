@@ -5,19 +5,23 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { UpdateSmtpSettingsBodyProvider } from "./updateSmtpSettingsBodyProvider";
 
 export interface UpdateSmtpSettingsBody {
+  provider: UpdateSmtpSettingsBodyProvider;
   /**
-   * @minLength 1
    * @maxLength 255
+   * @nullable
    */
-  host: string;
+  host?: string | null;
   /**
    * @minimum 1
    * @maximum 65535
+   * @nullable
    */
-  port: number;
-  secure: boolean;
+  port?: number | null;
+  /** @nullable */
+  secure?: boolean | null;
   /**
    * @maxLength 255
    * @nullable
@@ -32,11 +36,34 @@ export interface UpdateSmtpSettingsBody {
   /**
    * @minLength 3
    * @maxLength 255
+   * @nullable
    */
-  fromEmail: string;
+  fromEmail?: string | null;
   /**
    * @maxLength 120
    * @nullable
    */
   fromName?: string | null;
+  /**
+   * @maxLength 120
+   * @nullable
+   */
+  graphTenantId?: string | null;
+  /**
+   * @maxLength 120
+   * @nullable
+   */
+  graphClientId?: string | null;
+  /**
+   * Omit or null to keep the existing secret.
+   * @maxLength 255
+   * @nullable
+   */
+  graphClientSecret?: string | null;
+  /**
+   * @minLength 3
+   * @maxLength 255
+   * @nullable
+   */
+  graphSenderEmail?: string | null;
 }

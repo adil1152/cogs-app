@@ -15,6 +15,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Mail, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,6 +26,7 @@ export default function AdminSettings() {
 
   const { data: settings, isLoading } = useGetSmtpSettings();
 
+  const [provider, setProvider] = useState<"smtp" | "graph">("smtp");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("587");
   const [secure, setSecure] = useState(false);
@@ -32,16 +34,24 @@ export default function AdminSettings() {
   const [password, setPassword] = useState("");
   const [fromEmail, setFromEmail] = useState("");
   const [fromName, setFromName] = useState("");
+  const [graphTenantId, setGraphTenantId] = useState("");
+  const [graphClientId, setGraphClientId] = useState("");
+  const [graphClientSecret, setGraphClientSecret] = useState("");
+  const [graphSenderEmail, setGraphSenderEmail] = useState("");
   const [testTo, setTestTo] = useState("");
 
   useEffect(() => {
     if (!settings) return;
+    setProvider(settings.provider === "graph" ? "graph" : "smtp");
     setHost(settings.host ?? "");
     setPort(String(settings.port ?? 587));
     setSecure(Boolean(settings.secure));
     setUsername(settings.username ?? "");
     setFromEmail(settings.fromEmail ?? "");
     setFromName(settings.fromName ?? "");
+    setGraphTenantId(settings.graphTenantId ?? "");
+    setGraphClientId(settings.graphClientId ?? "");
+    setGraphSenderEmail(settings.graphSenderEmail ?? "");
   }, [settings]);
 
   useEffect(() => {
@@ -54,6 +64,7 @@ export default function AdminSettings() {
       onSuccess: () => {
         toast({ title: "Email settings saved" });
         setPassword("");
+        setGraphClientSecret("");
         queryClient.invalidateQueries({ queryKey: getGetSmtpSettingsQueryKey() });
       },
       onError: (err: any) =>
@@ -83,22 +94,35 @@ export default function AdminSettings() {
 
   function onSave(e: React.FormEvent) {
     e.preventDefault();
-    const portNum = Number(port);
-    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      toast({ title: "Invalid port", description: "Enter a port between 1 and 65535.", variant: "destructive" });
-      return;
+    if (provider === "smtp") {
+      const portNum = Number(port);
+      if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+        toast({ title: "Invalid port", description: "Enter a port between 1 and 65535.", variant: "destructive" });
+        return;
+      }
+      save.mutate({
+        data: {
+          provider: "smtp",
+          host: host.trim(),
+          port: portNum,
+          secure,
+          username: username.trim() || null,
+          password: password.length > 0 ? password : null,
+          fromEmail: fromEmail.trim(),
+          fromName: fromName.trim() || null,
+        },
+      });
+    } else {
+      save.mutate({
+        data: {
+          provider: "graph",
+          graphTenantId: graphTenantId.trim(),
+          graphClientId: graphClientId.trim(),
+          graphClientSecret: graphClientSecret.length > 0 ? graphClientSecret : null,
+          graphSenderEmail: graphSenderEmail.trim(),
+        },
+      });
     }
-    save.mutate({
-      data: {
-        host: host.trim(),
-        port: portNum,
-        secure,
-        username: username.trim() || null,
-        password: password.length > 0 ? password : null,
-        fromEmail: fromEmail.trim(),
-        fromName: fromName.trim() || null,
-      },
-    });
   }
 
   if (user?.role !== "admin") {
@@ -122,11 +146,11 @@ export default function AdminSettings() {
               <div>
                 <CardTitle className="text-base font-bold tracking-tight flex items-center gap-2">
                   <Mail className="h-4 w-4 text-primary" />
-                  Email (SMTP)
+                  Outgoing email
                 </CardTitle>
                 <CardDescription className="mt-1">
-                  Reset links are sent from this mailbox. Works with any SMTP
-                  provider — your company mail server, Gmail, Outlook, etc.
+                  Choose how emails are sent: a classic SMTP mail server, or the
+                  Microsoft 365 API (works with a work/school Microsoft account).
                 </CardDescription>
               </div>
               {!isLoading && (
@@ -143,104 +167,187 @@ export default function AdminSettings() {
               </div>
             ) : (
               <form onSubmit={onSave} className="space-y-4" data-testid="form-smtp">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1.5 col-span-2">
-                    <Label htmlFor="smtp-host">SMTP host</Label>
-                    <Input
-                      id="smtp-host"
-                      required
-                      value={host}
-                      onChange={(e) => setHost(e.target.value)}
-                      placeholder="smtp.example.com"
-                      data-testid="input-smtp-host"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="smtp-port">Port</Label>
-                    <Input
-                      id="smtp-port"
-                      required
-                      inputMode="numeric"
-                      value={port}
-                      onChange={(e) => setPort(e.target.value)}
-                      placeholder="587"
-                      data-testid="input-smtp-port"
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2.5">
-                  <div>
-                    <Label htmlFor="smtp-secure" className="cursor-pointer">
-                      Use SSL/TLS
-                    </Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      On for port 465. Off for port 587 (STARTTLS is used automatically).
+                <Tabs value={provider} onValueChange={(v) => setProvider(v as "smtp" | "graph")}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="smtp" data-testid="tab-provider-smtp">
+                      SMTP server
+                    </TabsTrigger>
+                    <TabsTrigger value="graph" data-testid="tab-provider-graph">
+                      Microsoft 365 API
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+
+                {provider === "smtp" ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1.5 col-span-2">
+                        <Label htmlFor="smtp-host">SMTP host</Label>
+                        <Input
+                          id="smtp-host"
+                          required
+                          value={host}
+                          onChange={(e) => setHost(e.target.value)}
+                          placeholder="smtp.example.com"
+                          data-testid="input-smtp-host"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="smtp-port">Port</Label>
+                        <Input
+                          id="smtp-port"
+                          required
+                          inputMode="numeric"
+                          value={port}
+                          onChange={(e) => setPort(e.target.value)}
+                          placeholder="587"
+                          data-testid="input-smtp-port"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2.5">
+                      <div>
+                        <Label htmlFor="smtp-secure" className="cursor-pointer">
+                          Use SSL/TLS
+                        </Label>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          On for port 465. Off for port 587 (STARTTLS is used automatically).
+                        </p>
+                      </div>
+                      <Switch
+                        id="smtp-secure"
+                        checked={secure}
+                        onCheckedChange={setSecure}
+                        data-testid="switch-smtp-secure"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="smtp-user">
+                          Username <span className="text-muted-foreground text-xs">(optional)</span>
+                        </Label>
+                        <Input
+                          id="smtp-user"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          placeholder="mailer@example.com"
+                          autoComplete="off"
+                          data-testid="input-smtp-username"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="smtp-pass">
+                          Password{" "}
+                          <span className="text-muted-foreground text-xs">
+                            {settings?.hasPassword ? "(saved — leave blank to keep)" : "(optional)"}
+                          </span>
+                        </Label>
+                        <PasswordInput
+                          id="smtp-pass"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder={settings?.hasPassword ? "••••••••" : ""}
+                          autoComplete="new-password"
+                          data-testid="input-smtp-password"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="smtp-from">Sender email</Label>
+                        <Input
+                          id="smtp-from"
+                          type="email"
+                          required
+                          value={fromEmail}
+                          onChange={(e) => setFromEmail(e.target.value)}
+                          placeholder="no-reply@example.com"
+                          data-testid="input-smtp-from-email"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="smtp-from-name">
+                          Sender name <span className="text-muted-foreground text-xs">(optional)</span>
+                        </Label>
+                        <Input
+                          id="smtp-from-name"
+                          value={fromName}
+                          onChange={(e) => setFromName(e.target.value)}
+                          placeholder="COGS Tracker"
+                          data-testid="input-smtp-from-name"
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Requires a Microsoft 365 work/school account. In the Microsoft
+                      Entra admin center, register an app, grant it the{" "}
+                      <span className="font-mono">Mail.Send</span> application
+                      permission (with admin consent), create a client secret, and
+                      paste the three values below.
                     </p>
-                  </div>
-                  <Switch
-                    id="smtp-secure"
-                    checked={secure}
-                    onCheckedChange={setSecure}
-                    data-testid="switch-smtp-secure"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="smtp-user">
-                      Username <span className="text-muted-foreground text-xs">(optional)</span>
-                    </Label>
-                    <Input
-                      id="smtp-user"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="mailer@example.com"
-                      autoComplete="off"
-                      data-testid="input-smtp-username"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="smtp-pass">
-                      Password{" "}
-                      <span className="text-muted-foreground text-xs">
-                        {settings?.hasPassword ? "(saved — leave blank to keep)" : "(optional)"}
-                      </span>
-                    </Label>
-                    <PasswordInput
-                      id="smtp-pass"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder={settings?.hasPassword ? "••••••••" : ""}
-                      autoComplete="new-password"
-                      data-testid="input-smtp-password"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="smtp-from">Sender email</Label>
-                    <Input
-                      id="smtp-from"
-                      type="email"
-                      required
-                      value={fromEmail}
-                      onChange={(e) => setFromEmail(e.target.value)}
-                      placeholder="no-reply@example.com"
-                      data-testid="input-smtp-from-email"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="smtp-from-name">
-                      Sender name <span className="text-muted-foreground text-xs">(optional)</span>
-                    </Label>
-                    <Input
-                      id="smtp-from-name"
-                      value={fromName}
-                      onChange={(e) => setFromName(e.target.value)}
-                      placeholder="COGS Tracker"
-                      data-testid="input-smtp-from-name"
-                    />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="graph-tenant">Tenant ID</Label>
+                        <Input
+                          id="graph-tenant"
+                          required
+                          value={graphTenantId}
+                          onChange={(e) => setGraphTenantId(e.target.value)}
+                          placeholder="00000000-0000-0000-0000-000000000000"
+                          autoComplete="off"
+                          data-testid="input-graph-tenant-id"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="graph-client">Client ID</Label>
+                        <Input
+                          id="graph-client"
+                          required
+                          value={graphClientId}
+                          onChange={(e) => setGraphClientId(e.target.value)}
+                          placeholder="00000000-0000-0000-0000-000000000000"
+                          autoComplete="off"
+                          data-testid="input-graph-client-id"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="graph-secret">
+                          Client secret{" "}
+                          <span className="text-muted-foreground text-xs">
+                            {settings?.hasGraphClientSecret ? "(saved — leave blank to keep)" : ""}
+                          </span>
+                        </Label>
+                        <PasswordInput
+                          id="graph-secret"
+                          required={!settings?.hasGraphClientSecret}
+                          value={graphClientSecret}
+                          onChange={(e) => setGraphClientSecret(e.target.value)}
+                          placeholder={settings?.hasGraphClientSecret ? "••••••••" : ""}
+                          autoComplete="new-password"
+                          data-testid="input-graph-client-secret"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="graph-sender">Sender mailbox</Label>
+                        <Input
+                          id="graph-sender"
+                          type="email"
+                          required
+                          value={graphSenderEmail}
+                          onChange={(e) => setGraphSenderEmail(e.target.value)}
+                          placeholder="no-reply@yourcompany.com"
+                          data-testid="input-graph-sender-email"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 <div className="flex justify-end">
                   <Button type="submit" disabled={save.isPending} data-testid="button-save-smtp">
                     {save.isPending ? (
@@ -297,7 +404,7 @@ export default function AdminSettings() {
             </form>
             {!settings?.configured && !isLoading && (
               <p className="text-xs text-muted-foreground mt-2">
-                Save your SMTP settings to enable the test button.
+                Save your email settings to enable the test button.
               </p>
             )}
           </CardContent>

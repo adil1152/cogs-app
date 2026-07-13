@@ -21,6 +21,18 @@ export interface Project {
   pdfRequired: boolean;
   /** When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it. */
   disabled: boolean;
+  /**
+   * How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.
+   * @minimum 0
+   * @nullable
+   */
+  backdatedDays?: number | null;
+  /**
+   * How many days in the future a non-admin may date an entry. 0 blocks future entries entirely; null means no limit.
+   * @minimum 0
+   * @nullable
+   */
+  futureDays?: number | null;
   createdAt: Date;
   isAdminOwned: boolean;
   currentUserCanViewSummary: boolean;

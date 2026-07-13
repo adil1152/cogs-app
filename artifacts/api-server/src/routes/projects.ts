@@ -38,8 +38,17 @@ router.post(
       res.status(400).json({ error: "Invalid body" });
       return;
     }
-    const { name, code, location, contractStart, contractEnd, notes, pdfRequired } =
-      parsed.data;
+    const {
+      name,
+      code,
+      location,
+      contractStart,
+      contractEnd,
+      notes,
+      pdfRequired,
+      backdatedDays,
+      futureDays,
+    } = parsed.data;
     try {
       const [created] = await db
         .insert(projectsTable)
@@ -57,6 +66,8 @@ router.post(
               : contractEnd,
           notes: notes ?? null,
           pdfRequired: pdfRequired ?? false,
+          backdatedDays: backdatedDays ?? null,
+          futureDays: futureDays ?? null,
           createdById: req.user!.id,
         })
         .returning();
@@ -175,6 +186,10 @@ router.patch(
       data.pdfRequired = parsed.data.pdfRequired;
     if (parsed.data.disabled !== undefined)
       data.disabled = parsed.data.disabled;
+    if (parsed.data.backdatedDays !== undefined)
+      data.backdatedDays = parsed.data.backdatedDays;
+    if (parsed.data.futureDays !== undefined)
+      data.futureDays = parsed.data.futureDays;
     data.updatedAt = new Date();
 
     let updated;

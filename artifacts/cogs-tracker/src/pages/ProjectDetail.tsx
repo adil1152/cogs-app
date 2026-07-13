@@ -56,6 +56,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate, formatNumber } from "@/lib/format";
+import { percentToWeight, weightToPercent } from "@/lib/cogs-formula";
 import { useProjectSwitcher } from "@/lib/useProjectSwitcher";
 import { ProjectSwitcherButtons } from "@/components/ProjectSwitcher";
 import { Lock, Plus, Trash2, MapPin, Calendar, Pencil, BarChart3, ArrowUp, ArrowDown, Check, X, GripVertical, ChevronDown, ChevronRight } from "lucide-react";
@@ -372,6 +373,16 @@ function ServicesPanel({
   const [newSubItems, setNewSubItems] = useState<Array<{ name: string; color: string | null }>>([
     { name: "", color: null },
   ]);
+  const defaultNewMeals = () => [
+    { name: "Breakfast", percent: "20" },
+    { name: "Lunch", percent: "40" },
+    { name: "Dinner", percent: "40" },
+    { name: "Midnight", percent: "40" },
+    { name: "Meal box", percent: "40" },
+  ];
+  const [newMealItems, setNewMealItems] = useState<Array<{ name: string; percent: string }>>(
+    defaultNewMeals,
+  );
   const sorted = useMemo(
     () => [...services].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)),
     [services],
@@ -388,6 +399,7 @@ function ServicesPanel({
         reset({ kind: "standard" as any });
         setNewColor(null);
         setNewSubItems([{ name: "", color: null }]);
+        setNewMealItems(defaultNewMeals());
       },
       onError: (err: any) => toast({ title: "Could not add service", description: err.message, variant: "destructive" }),
     },
@@ -475,6 +487,34 @@ function ServicesPanel({
                     return;
                   }
                   payload.subItems = items;
+                }
+                if (data.kind === ("food" as any)) {
+                  const items = newMealItems
+                    .map((m) => ({ name: m.name.trim(), percent: m.percent }))
+                    .filter((m) => m.name.length > 0);
+                  if (items.length === 0) {
+                    toast({
+                      title: "Add at least one meal type",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  for (const m of items) {
+                    const p = Number(m.percent);
+                    if (m.percent === "" || Number.isNaN(p) || p < 0) {
+                      toast({
+                        title: "Check meal weights",
+                        description: `"${m.name}" needs a valid percentage.`,
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                  }
+                  payload.mealItems = items.map((m, i) => ({
+                    name: m.name,
+                    weight: percentToWeight(m.percent),
+                    sortOrder: i,
+                  }));
                 }
                 createService.mutate({ id: projectId, data: payload });
               })}
@@ -574,6 +614,83 @@ function ServicesPanel({
                   </Button>
                 </div>
               )}
+              {kind === ("food" as any) && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Meal types
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Each meal counts as a percentage of a manday. You can
+                    rename, re-weight, add or remove meal types at any time —
+                    saved entries keep the numbers they were saved with.
+                  </p>
+                  <div className="space-y-1.5">
+                    {newMealItems.map((m, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <Input
+                          value={m.name}
+                          onChange={(e) =>
+                            setNewMealItems((prev) =>
+                              prev.map((p, idx) =>
+                                idx === i ? { ...p, name: e.target.value } : p,
+                              ),
+                            )
+                          }
+                          placeholder={`Meal type ${i + 1}`}
+                          data-testid={`input-new-meal-name-${i}`}
+                        />
+                        <div className="relative w-24 shrink-0">
+                          <Input
+                            type="number"
+                            step="1"
+                            min="0"
+                            value={m.percent}
+                            onChange={(e) =>
+                              setNewMealItems((prev) =>
+                                prev.map((p, idx) =>
+                                  idx === i ? { ...p, percent: e.target.value } : p,
+                                ),
+                              )
+                            }
+                            className="pr-6 text-right tabular-nums"
+                            data-testid={`input-new-meal-weight-${i}`}
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                            %
+                          </span>
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9 text-destructive hover:text-destructive"
+                          onClick={() =>
+                            setNewMealItems((prev) =>
+                              prev.length === 1
+                                ? [{ name: "", percent: "" }]
+                                : prev.filter((_, idx) => idx !== i),
+                            )
+                          }
+                          data-testid={`button-remove-new-meal-${i}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setNewMealItems((prev) => [...prev, { name: "", percent: "" }])
+                    }
+                    data-testid="button-add-new-meal"
+                  >
+                    + Add meal type
+                  </Button>
+                </div>
+              )}
               <Button type="submit" className="w-full" disabled={createService.isPending} data-testid="button-add-service">
                 Add service
               </Button>
@@ -608,8 +725,11 @@ function ServiceRow({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(service.name);
   const isGroup = service.kind === "group";
+  const isFood = service.kind === "food";
   const subItems: Array<{ id: string; name: string; sortOrder: number; color?: string | null }> =
     service.subItems ?? [];
+  const mealItems: Array<{ id: string; name: string; weight: number; sortOrder: number }> =
+    service.mealItems ?? [];
   const [expanded, setExpanded] = useState(false);
   const update = useUpdateProjectService({
     mutation: {
@@ -627,14 +747,22 @@ function ServiceRow({
       <TableRow data-testid={`service-row-${service.id}`}>
         <TableCell className="font-medium">
           <div className="flex items-center gap-1.5">
-            {isGroup && canEdit ? (
+            {(isGroup || isFood) && canEdit ? (
               <Button
                 size="icon"
                 variant="ghost"
                 className="h-6 w-6 -ml-1"
                 onClick={() => setExpanded((x) => !x)}
                 data-testid={`expand-service-${service.id}`}
-                title={expanded ? "Collapse sub-services" : "Expand sub-services"}
+                title={
+                  expanded
+                    ? isFood
+                      ? "Collapse meal types"
+                      : "Collapse sub-services"
+                    : isFood
+                    ? "Expand meal types"
+                    : "Expand sub-services"
+                }
               >
                 {expanded ? (
                   <ChevronDown className="h-3.5 w-3.5" />
@@ -694,6 +822,11 @@ function ServiceRow({
                       {subItems.length} sub-{subItems.length === 1 ? "service" : "services"}
                     </span>
                   )}
+                  {isFood && mealItems.length > 0 && (
+                    <span className="ml-2 text-[11px] text-muted-foreground">
+                      {mealItems.length} meal {mealItems.length === 1 ? "type" : "types"}
+                    </span>
+                  )}
                 </span>
               </span>
             )}
@@ -749,7 +882,239 @@ function ServiceRow({
           </TableCell>
         </TableRow>
       )}
+      {isFood && canEdit && expanded && (
+        <TableRow>
+          <TableCell colSpan={3} className="bg-muted/30">
+            <MealItemsEditor
+              serviceId={service.id}
+              initial={mealItems}
+              onSaved={onRenamed}
+            />
+          </TableCell>
+        </TableRow>
+      )}
     </>
+  );
+}
+
+function MealItemsEditor({
+  serviceId,
+  initial,
+  onSaved,
+}: {
+  serviceId: string;
+  initial: Array<{ id: string; name: string; weight: number; sortOrder: number }>;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  type Draft = {
+    id?: string;
+    name: string;
+    percent: string;
+    sortOrder: number;
+  };
+  const sortedInitial = useMemo(
+    () => [...initial].sort((a, b) => a.sortOrder - b.sortOrder),
+    [initial],
+  );
+  const toDraft = (rows: typeof sortedInitial): Draft[] =>
+    rows.map((m) => ({
+      id: m.id,
+      name: m.name,
+      percent: String(weightToPercent(m.weight)),
+      sortOrder: m.sortOrder,
+    }));
+  const [draft, setDraft] = useState<Draft[]>(() => toDraft(sortedInitial));
+  useEffect(() => {
+    setDraft(toDraft(sortedInitial));
+  }, [sortedInitial]);
+
+  const update = useUpdateProjectService({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Meal types saved" });
+        onSaved();
+      },
+      onError: (err: any) =>
+        toast({
+          title: "Save failed",
+          description: err.message,
+          variant: "destructive",
+        }),
+    },
+  });
+
+  function patch(idx: number, p: Partial<Draft>) {
+    setDraft((prev) => prev.map((d, i) => (i === idx ? { ...d, ...p } : d)));
+  }
+  function moveMeal(idx: number, dir: -1 | 1) {
+    const target = idx + dir;
+    if (target < 0 || target >= draft.length) return;
+    setDraft((prev) => {
+      const next = prev.slice();
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next.map((d, i) => ({ ...d, sortOrder: i }));
+    });
+  }
+  function save() {
+    const cleaned = draft
+      .map((d) => ({ ...d, name: d.name.trim() }))
+      .filter((d) => d.name.length > 0);
+    if (cleaned.length === 0) {
+      toast({
+        title: "Cannot save",
+        description: "At least one meal type is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    for (const d of cleaned) {
+      const p = Number(d.percent);
+      if (d.percent === "" || Number.isNaN(p) || p < 0) {
+        toast({
+          title: "Check meal weights",
+          description: `"${d.name}" needs a valid percentage.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    update.mutate({
+      id: serviceId,
+      data: {
+        mealItems: cleaned.map((d, i) => ({
+          ...(d.id ? { id: d.id } : {}),
+          name: d.name,
+          weight: percentToWeight(d.percent),
+          sortOrder: i,
+        })),
+      } as any,
+    });
+  }
+  function reset() {
+    setDraft(toDraft(sortedInitial));
+  }
+
+  const dirty =
+    draft.length !== sortedInitial.length ||
+    draft.some(
+      (d, i) =>
+        d.id !== sortedInitial[i]?.id ||
+        d.name !== sortedInitial[i]?.name ||
+        Number(d.percent) !== weightToPercent(sortedInitial[i]?.weight ?? 0),
+    );
+
+  return (
+    <div className="space-y-2 py-1">
+      <p className="text-[11px] text-muted-foreground">
+        Each meal counts as a percentage of a manday. Changes only affect new
+        or re-saved entries — existing entries keep the weights they were
+        saved with.
+      </p>
+      <div className="space-y-1.5">
+        {draft.map((d, i) => (
+          <div key={d.id ?? `new-${i}`} className="flex items-center gap-1.5">
+            <Badge variant="secondary" className="tabular-nums w-7 justify-center">
+              {i + 1}
+            </Badge>
+            <Input
+              value={d.name}
+              onChange={(e) => patch(i, { name: e.target.value })}
+              className="h-8 max-w-sm"
+              placeholder={`Meal type ${i + 1}`}
+              data-testid={`meal-item-name-${serviceId}-${i}`}
+            />
+            <div className="relative w-24 shrink-0">
+              <Input
+                type="number"
+                step="1"
+                min="0"
+                value={d.percent}
+                onChange={(e) => patch(i, { percent: e.target.value })}
+                className="h-8 pr-6 text-right tabular-nums"
+                data-testid={`meal-item-weight-${serviceId}-${i}`}
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                %
+              </span>
+            </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => moveMeal(i, -1)}
+              disabled={i === 0}
+              data-testid={`meal-item-up-${serviceId}-${i}`}
+              title="Move up"
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              onClick={() => moveMeal(i, 1)}
+              disabled={i === draft.length - 1}
+              data-testid={`meal-item-down-${serviceId}-${i}`}
+              title="Move down"
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 text-destructive hover:text-destructive"
+              onClick={() =>
+                setDraft((prev) =>
+                  prev.filter((_, idx) => idx !== i).map((d2, idx) => ({
+                    ...d2,
+                    sortOrder: idx,
+                  })),
+                )
+              }
+              title="Remove"
+              data-testid={`meal-item-remove-${serviceId}-${i}`}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            setDraft((prev) => [
+              ...prev,
+              { name: "", percent: "", sortOrder: prev.length },
+            ])
+          }
+          data-testid={`meal-item-add-${serviceId}`}
+        >
+          + Add meal type
+        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={reset}
+            disabled={!dirty || update.isPending}
+            data-testid={`meal-item-reset-${serviceId}`}
+          >
+            Reset
+          </Button>
+          <Button
+            size="sm"
+            onClick={save}
+            disabled={!dirty || update.isPending}
+            data-testid={`meal-item-save-${serviceId}`}
+          >
+            Save meal types
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1795,6 +2160,16 @@ function SettingsPanel({ project }: { project: any }) {
   const [projectDisabled, setProjectDisabled] = useState<boolean>(
     !!(project as any).disabled,
   );
+  const [backdatedDays, setBackdatedDays] = useState<string>(
+    (project as any).backdatedDays != null
+      ? String((project as any).backdatedDays)
+      : "",
+  );
+  const [futureDays, setFutureDays] = useState<string>(
+    (project as any).futureDays != null
+      ? String((project as any).futureDays)
+      : "",
+  );
   const update = useUpdateProject({
     mutation: {
       onSuccess: () => {
@@ -1824,7 +2199,19 @@ function SettingsPanel({ project }: { project: any }) {
             onSubmit={handleSubmit((data) =>
               update.mutate({
                 id: project.id,
-                data: { ...data, pdfRequired, disabled: projectDisabled },
+                data: {
+                  ...data,
+                  pdfRequired,
+                  disabled: projectDisabled,
+                  backdatedDays:
+                    backdatedDays.trim() === ""
+                      ? null
+                      : Math.max(0, Math.floor(Number(backdatedDays))),
+                  futureDays:
+                    futureDays.trim() === ""
+                      ? null
+                      : Math.max(0, Math.floor(Number(futureDays))),
+                },
               }),
             )}
             className="space-y-3"
@@ -1844,6 +2231,40 @@ function SettingsPanel({ project }: { project: any }) {
               <Field label="End"><Input type="date" {...register("contractEnd")} /></Field>
             </div>
             <Field label="Notes"><Textarea rows={3} {...register("notes")} /></Field>
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 space-y-2">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Entry date limits (non-admin users)</Label>
+                <p className="text-xs text-muted-foreground">
+                  How far in the past or future a user may date an entry.
+                  Leave blank for no limit; 0 blocks that direction entirely.
+                  Admins are never restricted.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Backdated days allowed">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="No limit"
+                    value={backdatedDays}
+                    onChange={(e) => setBackdatedDays(e.target.value)}
+                    data-testid="input-backdated-days"
+                  />
+                </Field>
+                <Field label="Future days allowed">
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="No limit"
+                    value={futureDays}
+                    onChange={(e) => setFutureDays(e.target.value)}
+                    data-testid="input-future-days"
+                  />
+                </Field>
+              </div>
+            </div>
             <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-muted/30 px-3 py-2">
               <div className="space-y-0.5">
                 <Label className="text-sm font-medium">Require PDF attachment</Label>

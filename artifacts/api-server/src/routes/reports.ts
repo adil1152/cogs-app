@@ -179,11 +179,6 @@ function rowMandayContribution(row: JoinedRow): number {
     mandays: row.cost.mandays,
     manualMandays: row.cost.manualMandays,
     kind: row.cost.kind,
-    breakfastQty: row.cost.breakfastQty,
-    lunchQty: row.cost.lunchQty,
-    dinnerQty: row.cost.dinnerQty,
-    midnightQty: row.cost.midnightQty,
-    mealBoxQty: row.cost.mealBoxQty,
   });
 }
 

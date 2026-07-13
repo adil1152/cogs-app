@@ -38,13 +38,20 @@ export type User = typeof usersTable.$inferSelect;
 // returned by the API.
 export const smtpSettingsTable = pgTable("smtp_settings", {
   id: varchar("id", { length: 16 }).primaryKey().default("default"),
-  host: varchar("host", { length: 255 }).notNull(),
+  // "smtp" (classic mail server) or "graph" (Microsoft 365 API).
+  provider: varchar("provider", { length: 16 }).notNull().default("smtp"),
+  host: varchar("host", { length: 255 }),
   port: integer("port").notNull().default(587),
   secure: boolean("secure").notNull().default(false),
   username: varchar("username", { length: 255 }),
   password: varchar("password", { length: 255 }),
-  fromEmail: varchar("from_email", { length: 255 }).notNull(),
+  fromEmail: varchar("from_email", { length: 255 }),
   fromName: varchar("from_name", { length: 120 }),
+  // Microsoft 365 (Graph API) credentials — app registration values.
+  graphTenantId: varchar("graph_tenant_id", { length: 120 }),
+  graphClientId: varchar("graph_client_id", { length: 120 }),
+  graphClientSecret: varchar("graph_client_secret", { length: 255 }),
+  graphSenderEmail: varchar("graph_sender_email", { length: 255 }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 

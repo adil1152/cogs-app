@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateProjectServiceBodyKind } from "./createProjectServiceBodyKind";
+import type { FoodMealItemInput } from "./foodMealItemInput";
 import type { SubItemInput } from "./subItemInput";
 
 export interface CreateProjectServiceBody {
@@ -16,4 +17,9 @@ export interface CreateProjectServiceBody {
   color?: string | null;
   /** Initial sub-items (only meaningful when kind=group). */
   subItems?: SubItemInput[];
+  /** Initial meal types (only meaningful when kind=food). When omitted
+for a food service, the default five (Breakfast 20%, Lunch /
+Dinner / Midnight / Meal box 40%) are created.
+ */
+  mealItems?: FoodMealItemInput[];
 }

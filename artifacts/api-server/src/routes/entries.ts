@@ -4,6 +4,8 @@ import {
   dailyEntriesTable,
   entryApprovalsTable,
   entryAttachmentsTable,
+  foodMealItemsTable,
+  mealCostEntriesTable,
   projectsTable,
   projectServicesTable,
   serviceCostEntriesTable,
@@ -30,6 +32,123 @@ import { diffSnapshots, listEntryAudit, recordAudit } from "../lib/audit";
 
 /** Thrown by `insertServiceCosts` when sub-item refs don't belong to the parent. */
 class SubItemIntegrityError extends Error {}
+
+/**
+ * A previously saved snapshot meal row, keyed for reuse during entry edits.
+ */
+interface PriorMealRow {
+  mealItemId: string | null;
+  name: string;
+  weight: number;
+  sortOrder: number;
+}
+
+/**
+ * Resolve each food line's `mealQuantities` into `resolvedMealRows` with a
+ * server-side snapshot of name + weight. Client-provided name/weight are
+ * never trusted for numbers:
+ *
+ * - A row with `mealItemId` reuses the entry's prior snapshot for that meal
+ *   item when one exists (edits keep the weights the entry was saved with);
+ *   otherwise it snapshots the service meal item's current name + weight.
+ * - A row with a null `mealItemId` is only valid while editing, for a meal
+ *   type that was deleted from the service after the entry was saved. It is
+ *   matched by `name` against the entry's prior snapshot rows.
+ *
+ * Also clears client-sent `mandays` on food lines so the computed value
+ * (sum of qty x weight + manualMandays) is authoritative.
+ */
+async function resolveMealRows(
+  serviceCosts: ServiceCostInputItem[],
+  priorByService?: Map<string, PriorMealRow[]>,
+): Promise<void> {
+  const foodLines = serviceCosts.filter((sc) => sc.kind === "food");
+  if (foodLines.length === 0) return;
+
+  const serviceIds = Array.from(
+    new Set(foodLines.map((sc) => sc.projectServiceId)),
+  );
+  const items = await db
+    .select()
+    .from(foodMealItemsTable)
+    .where(inArray(foodMealItemsTable.projectServiceId, serviceIds));
+  const itemsById = new Map(items.map((i) => [i.id, i]));
+
+  for (const sc of foodLines) {
+    const prior = priorByService?.get(sc.projectServiceId) ?? [];
+    const resolved: typeof sc.resolvedMealRows = [];
+    const seen = new Set<string>();
+    for (const mq of sc.mealQuantities ?? []) {
+      const qty = Number(mq.qty);
+      if (!Number.isFinite(qty) || qty < 0) {
+        throw new SubItemIntegrityError("Invalid meal quantity");
+      }
+      if (mq.mealItemId != null) {
+        const key = `id:${mq.mealItemId}`;
+        if (seen.has(key)) {
+          throw new SubItemIntegrityError(
+            "Duplicate meal type in a food service",
+          );
+        }
+        seen.add(key);
+        const priorRow = prior.find((p) => p.mealItemId === mq.mealItemId);
+        if (priorRow) {
+          resolved.push({
+            mealItemId: mq.mealItemId,
+            name: priorRow.name,
+            weight: priorRow.weight,
+            qty,
+            sortOrder: priorRow.sortOrder,
+          });
+          continue;
+        }
+        const item = itemsById.get(mq.mealItemId);
+        if (!item || item.projectServiceId !== sc.projectServiceId) {
+          throw new SubItemIntegrityError(
+            "One or more meal types do not belong to their food service",
+          );
+        }
+        resolved.push({
+          mealItemId: item.id,
+          name: item.name,
+          weight: Number(item.weight),
+          qty,
+          sortOrder: item.sortOrder,
+        });
+      } else {
+        // Snapshot-only row (meal type deleted from the service). Match by
+        // name against the entry's previously saved rows.
+        const name = (mq.name ?? "").trim();
+        const key = `name:${name.toLowerCase()}`;
+        if (!name || seen.has(key)) {
+          throw new SubItemIntegrityError(
+            "Invalid or duplicate snapshot meal row",
+          );
+        }
+        seen.add(key);
+        const priorRow = prior.find(
+          (p) => p.mealItemId === null && p.name === name,
+        );
+        if (!priorRow) {
+          throw new SubItemIntegrityError(
+            `Meal type "${name}" is not part of this entry's saved data`,
+          );
+        }
+        resolved.push({
+          mealItemId: null,
+          name: priorRow.name,
+          weight: priorRow.weight,
+          qty,
+          sortOrder: priorRow.sortOrder,
+        });
+      }
+    }
+    resolved.sort((a, b) => a.sortOrder - b.sortOrder);
+    sc.resolvedMealRows = resolved;
+    // The computed food mandays (rows + manual) is authoritative.
+    delete sc.mandays;
+  }
+}
 
 /** Insert parent service_cost_entries rows + their sub_service_cost_entries. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,11 +221,6 @@ async function insertServiceCosts(
           cost: String(cost),
           mandays: mandays != null ? String(mandays) : null,
           manualMandays: String(sc.manualMandays ?? 0),
-          breakfastQty: sc.breakfastQty ?? null,
-          lunchQty: sc.lunchQty ?? null,
-          dinnerQty: sc.dinnerQty ?? null,
-          midnightQty: sc.midnightQty ?? null,
-          mealBoxQty: sc.mealBoxQty ?? null,
         };
       }),
     )
@@ -140,6 +254,34 @@ async function insertServiceCosts(
   if (subValues.length > 0) {
     await tx.insert(subServiceCostEntriesTable).values(subValues);
   }
+
+  // Insert snapshot meal rows for food lines (resolved by `resolveMealRows`).
+  const mealValues: Array<{
+    serviceCostEntryId: string;
+    mealItemId: string | null;
+    name: string;
+    weight: string;
+    qty: number;
+    sortOrder: number;
+  }> = [];
+  for (let i = 0; i < serviceCosts.length; i++) {
+    const sc = serviceCosts[i];
+    if (sc.kind !== "food" || !sc.resolvedMealRows?.length) continue;
+    const parentId = inserted[i].id;
+    for (const row of sc.resolvedMealRows) {
+      mealValues.push({
+        serviceCostEntryId: parentId,
+        mealItemId: row.mealItemId,
+        name: row.name,
+        weight: String(row.weight),
+        qty: row.qty,
+        sortOrder: row.sortOrder,
+      });
+    }
+  }
+  if (mealValues.length > 0) {
+    await tx.insert(mealCostEntriesTable).values(mealValues);
+  }
 }
 
 const router: IRouter = Router();
@@ -150,6 +292,42 @@ function asDateString(d: Date | string): string {
 
 function pad4(n: number): string {
   return n.toString().padStart(4, "0");
+}
+
+/**
+ * Checks a non-admin's entry date against the project's backdated/future
+ * window. Returns an error message when out of range, or null when allowed.
+ * NULL limits mean "no restriction on that side"; 0 blocks that side fully.
+ */
+function entryDateWindowError(
+  project: { backdatedDays?: number | null; futureDays?: number | null },
+  entryDate: string,
+): string | null {
+  const backdatedDays = project.backdatedDays ?? null;
+  const futureDays = project.futureDays ?? null;
+  if (backdatedDays === null && futureDays === null) return null;
+
+  // "Today" anchored to the business timezone (Saudi Arabia) so the window
+  // matches what local users see on their calendar, not the UTC day.
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Riyadh",
+  }).format(new Date());
+  const diffDays = Math.round(
+    (Date.parse(entryDate) - Date.parse(today)) / 86400000,
+  );
+  if (Number.isNaN(diffDays)) return "Invalid entry date";
+
+  if (backdatedDays !== null && diffDays < -backdatedDays) {
+    return backdatedDays === 0
+      ? "Backdated entries are not allowed on this project"
+      : `Entries can only be backdated up to ${backdatedDays} day${backdatedDays === 1 ? "" : "s"} on this project`;
+  }
+  if (futureDays !== null && diffDays > futureDays) {
+    return futureDays === 0
+      ? "Future-dated entries are not allowed on this project"
+      : `Entries can only be dated up to ${futureDays} day${futureDays === 1 ? "" : "s"} ahead on this project`;
+  }
+  return null;
 }
 
 const VALID_STATUSES = new Set(["draft", "pending", "approved"]);
@@ -226,8 +404,28 @@ router.post(
       return;
     }
 
+    if (req.user!.role !== "admin") {
+      const windowError = entryDateWindowError(
+        v.project,
+        asDateString(parsed.data.entryDate),
+      );
+      if (windowError) {
+        res.status(403).json({ error: windowError });
+        return;
+      }
+    }
+
     const override = !!parsed.data.totalMandaysOverride;
     const serviceCosts = parsed.data.serviceCosts as ServiceCostInputItem[];
+    try {
+      await resolveMealRows(serviceCosts);
+    } catch (e) {
+      if (e instanceof SubItemIntegrityError) {
+        res.status(400).json({ error: e.message });
+        return;
+      }
+      throw e;
+    }
     const manualMandays = parsed.data.manualMandays ?? 0;
     const totalMandays = computeTotalMandays(
       serviceCosts,
@@ -370,12 +568,83 @@ router.patch(
       return;
     }
 
+    if (
+      req.user!.role !== "admin" &&
+      parsed.data.entryDate !== undefined &&
+      asDateString(parsed.data.entryDate) !== entry.entryDate &&
+      v.project
+    ) {
+      const windowError = entryDateWindowError(
+        v.project,
+        asDateString(parsed.data.entryDate),
+      );
+      if (windowError) {
+        res.status(403).json({ error: windowError });
+        return;
+      }
+    }
+
     // Snapshot of cost rows for audit diff (compared as JSON strings).
     const beforeCosts = await db
       .select()
       .from(serviceCostEntriesTable)
       .where(eq(serviceCostEntriesTable.dailyEntryId, id))
       .orderBy(serviceCostEntriesTable.projectServiceId);
+
+    // The entry's saved snapshot meal rows, keyed by projectServiceId, so
+    // edits can preserve the name + weight the entry was saved with even if
+    // the service's meal items changed (or were deleted) since.
+    const beforeCostIds = beforeCosts.map((c) => c.id);
+    const priorMealRowsRaw = beforeCostIds.length
+      ? await db
+          .select()
+          .from(mealCostEntriesTable)
+          .where(inArray(mealCostEntriesTable.serviceCostEntryId, beforeCostIds))
+      : [];
+    const costRowToService = new Map(
+      beforeCosts.map((c) => [c.id, c.projectServiceId]),
+    );
+    const priorByService = new Map<string, PriorMealRow[]>();
+    const mealsByCostRow = new Map<
+      string,
+      Array<{ mealItemId: string | null; name: string; weight: number; qty: number }>
+    >();
+    for (const m of priorMealRowsRaw) {
+      const serviceId = costRowToService.get(m.serviceCostEntryId);
+      if (serviceId) {
+        const list = priorByService.get(serviceId) ?? [];
+        list.push({
+          mealItemId: m.mealItemId,
+          name: m.name,
+          weight: Number(m.weight),
+          sortOrder: m.sortOrder,
+        });
+        priorByService.set(serviceId, list);
+      }
+      const rows = mealsByCostRow.get(m.serviceCostEntryId) ?? [];
+      rows.push({
+        mealItemId: m.mealItemId,
+        name: m.name,
+        weight: Number(m.weight),
+        qty: m.qty,
+      });
+      mealsByCostRow.set(m.serviceCostEntryId, rows);
+    }
+
+    if (parsed.data.serviceCosts !== undefined) {
+      try {
+        await resolveMealRows(
+          parsed.data.serviceCosts as ServiceCostInputItem[],
+          priorByService,
+        );
+      } catch (e) {
+        if (e instanceof SubItemIntegrityError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        throw e;
+      }
+    }
 
     try {
       await db.transaction(async (tx) => {
@@ -424,11 +693,6 @@ router.patch(
               cost: Number(c.cost ?? 0),
               mandays: c.mandays != null ? Number(c.mandays) : undefined,
               manualMandays: Number(c.manualMandays ?? 0),
-              breakfastQty: c.breakfastQty ?? undefined,
-              lunchQty: c.lunchQty ?? undefined,
-              dinnerQty: c.dinnerQty ?? undefined,
-              midnightQty: c.midnightQty ?? undefined,
-              mealBoxQty: c.mealBoxQty ?? undefined,
             })),
             false,
             undefined,
@@ -523,11 +787,11 @@ router.patch(
               cost: Number(c.cost ?? 0),
               mandays: c.mandays != null ? Number(c.mandays) : null,
               manualMandays: Number(c.manualMandays ?? 0),
-              breakfastQty: c.breakfastQty,
-              lunchQty: c.lunchQty,
-              dinnerQty: c.dinnerQty,
-              midnightQty: c.midnightQty,
-              mealBoxQty: c.mealBoxQty,
+              mealQuantities: (mealsByCostRow.get(c.id) ?? []).map((m) => ({
+                name: m.name,
+                weight: m.weight,
+                qty: m.qty,
+              })),
             })),
           );
           const afterJson = JSON.stringify(
@@ -536,18 +800,21 @@ router.patch(
               .sort((a, b) =>
                 a.projectServiceId.localeCompare(b.projectServiceId),
               )
-              .map((c) => ({
-                projectServiceId: c.projectServiceId,
-                kind: c.kind,
-                cost: Number(c.cost ?? 0),
-                mandays: c.mandays != null ? Number(c.mandays) : null,
-                manualMandays: Number(c.manualMandays ?? 0),
-                breakfastQty: c.breakfastQty ?? null,
-                lunchQty: c.lunchQty ?? null,
-                dinnerQty: c.dinnerQty ?? null,
-                midnightQty: c.midnightQty ?? null,
-                mealBoxQty: c.mealBoxQty ?? null,
-              })),
+              .map((c) => {
+                const { mandays } = deriveParentRow(c);
+                return {
+                  projectServiceId: c.projectServiceId,
+                  kind: c.kind,
+                  cost: Number(c.cost ?? 0),
+                  mandays,
+                  manualMandays: Number(c.manualMandays ?? 0),
+                  mealQuantities: (c.resolvedMealRows ?? []).map((m) => ({
+                    name: m.name,
+                    weight: m.weight,
+                    qty: m.qty,
+                  })),
+                };
+              }),
           );
           if (beforeJson !== afterJson) {
             events.push({

@@ -43,7 +43,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatNumber, todayISO } from "@/lib/format";
 import { readReturnTo } from "@/lib/return-to";
-import { MEAL_WEIGHTS, computeMealMandays } from "@/lib/cogs-formula";
+import { computeMealRowsMandays } from "@/lib/cogs-formula";
 import {
   ArrowLeft,
   Trash2,
@@ -76,6 +76,17 @@ interface SubLine {
   mandays: string;
 }
 
+interface MealLine {
+  // Null when this row comes from an entry snapshot whose meal type has
+  // since been removed from the service (matched by name on save).
+  mealItemId: string | null;
+  name: string;
+  // Manday weight as a fraction (0.2 = 20%). Snapshot weight on edits,
+  // live service weight for new rows. Display only — server recomputes.
+  weight: number;
+  qty: string;
+}
+
 interface ServiceLine {
   projectServiceId: string;
   name: string;
@@ -83,12 +94,8 @@ interface ServiceLine {
   kind: "food" | "standard" | "group";
   cost: string;
   mandays: string;
-  // Food-only meal counts; auto-derive mandays via MEAL_WEIGHTS.
-  breakfastQty: string;
-  lunchQty: string;
-  dinnerQty: string;
-  midnightQty: string;
-  mealBoxQty: string;
+  // Food-only: one row per meal type; mandays auto-derive from qty x weight.
+  meals: MealLine[];
   // Food-only manual mandays added on top of the meal-formula auto value.
   foodManualMandays: string;
   // Group-only: per-sub-item cost+mandays. Total cost/mandays are sums.
@@ -101,6 +108,7 @@ function emptyLine(svc: {
   kind: "food" | "standard" | "group";
   color?: string | null;
   subItems?: Array<{ id: string; name: string; sortOrder: number; color?: string | null }>;
+  mealItems?: Array<{ id: string; name: string; weight: number; sortOrder: number }>;
 }): ServiceLine {
   const subs: SubLine[] = svc.kind === "group"
     ? [...(svc.subItems ?? [])]
@@ -114,6 +122,16 @@ function emptyLine(svc: {
           mandays: "",
         }))
     : [];
+  const meals: MealLine[] = svc.kind === "food"
+    ? [...(svc.mealItems ?? [])]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((m) => ({
+          mealItemId: m.id,
+          name: m.name,
+          weight: Number(m.weight),
+          qty: "",
+        }))
+    : [];
   return {
     projectServiceId: svc.id,
     name: svc.name,
@@ -121,11 +139,7 @@ function emptyLine(svc: {
     kind: svc.kind,
     cost: "",
     mandays: "",
-    breakfastQty: "",
-    lunchQty: "",
-    dinnerQty: "",
-    midnightQty: "",
-    mealBoxQty: "",
+    meals,
     foodManualMandays: "",
     subItems: subs,
   };
@@ -142,15 +156,15 @@ function lineCost(l: ServiceLine): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
+function lineAutoMandays(l: ServiceLine): number {
+  return computeMealRowsMandays(
+    l.meals.map((m) => ({ weight: m.weight, qty: Number(m.qty) || 0 })),
+  );
+}
+
 function lineMandays(l: ServiceLine): number {
   if (l.kind === "food") {
-    const auto = computeMealMandays({
-      breakfastQty: Number(l.breakfastQty) || 0,
-      lunchQty: Number(l.lunchQty) || 0,
-      dinnerQty: Number(l.dinnerQty) || 0,
-      midnightQty: Number(l.midnightQty) || 0,
-      mealBoxQty: Number(l.mealBoxQty) || 0,
-    });
+    const auto = lineAutoMandays(l);
     const manual = Number(l.foodManualMandays);
     return auto + (Number.isNaN(manual) ? 0 : manual);
   }
@@ -238,6 +252,38 @@ export default function EntryForm() {
     );
 
   const [entryDate, setEntryDate] = useState(todayISO());
+
+  // Per-project entry-date window (admins are never restricted).
+  const backdatedLimit = (project as any)?.backdatedDays ?? null;
+  const futureLimit = (project as any)?.futureDays ?? null;
+  // Local-day math, consistent with todayISO() (the form's default date).
+  const shiftDays = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  const dateMin =
+    !isAdmin && backdatedLimit != null ? shiftDays(-backdatedLimit) : undefined;
+  const dateMax =
+    !isAdmin && futureLimit != null ? shiftDays(futureLimit) : undefined;
+  const dateLimitHint =
+    !isAdmin && (backdatedLimit != null || futureLimit != null)
+      ? [
+          backdatedLimit != null
+            ? backdatedLimit === 0
+              ? "no backdating"
+              : `up to ${backdatedLimit} day${backdatedLimit === 1 ? "" : "s"} back`
+            : null,
+          futureLimit != null
+            ? futureLimit === 0
+              ? "no future dates"
+              : `up to ${futureLimit} day${futureLimit === 1 ? "" : "s"} ahead`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : null;
   const [location, setLocation] = useState("");
   const [totalMandaysOverride, setTotalMandaysOverride] = useState(false);
   const [totalMandaysManual, setTotalMandaysManual] = useState("");
@@ -294,6 +340,52 @@ export default function EntryForm() {
                     };
                   })
               : [];
+          // Food meals for edit: start from the entry's saved snapshot rows
+          // (name + weight as saved, qty filled in), then append any meal
+          // types added to the service since the entry was saved (qty "").
+          const svcMeals = (((svc as any).mealItems ?? []) as Array<{
+            id: string;
+            name: string;
+            weight: number;
+            sortOrder: number;
+          }>).slice().sort((a, b) => a.sortOrder - b.sortOrder);
+          const snapshotRows = ((sc as any)?.mealQuantities ?? []) as Array<{
+            mealItemId: string | null;
+            name: string;
+            weight: number;
+            qty: number;
+          }>;
+          let meals: MealLine[] = [];
+          if (kind === "food") {
+            if (sc) {
+              const snapshotIds = new Set(
+                snapshotRows.map((m) => m.mealItemId).filter(Boolean),
+              );
+              meals = [
+                ...snapshotRows.map((m) => ({
+                  mealItemId: m.mealItemId,
+                  name: m.name,
+                  weight: Number(m.weight),
+                  qty: String(m.qty),
+                })),
+                ...svcMeals
+                  .filter((m) => !snapshotIds.has(m.id))
+                  .map((m) => ({
+                    mealItemId: m.id,
+                    name: m.name,
+                    weight: Number(m.weight),
+                    qty: "",
+                  })),
+              ];
+            } else {
+              meals = svcMeals.map((m) => ({
+                mealItemId: m.id,
+                name: m.name,
+                weight: Number(m.weight),
+                qty: "",
+              }));
+            }
+          }
           return {
             projectServiceId: svc.id,
             name: svc.name,
@@ -307,11 +399,7 @@ export default function EntryForm() {
                 : "",
             mandays:
               kind === "standard" && sc?.mandays != null ? String(sc.mandays) : "",
-            breakfastQty: sc?.breakfastQty != null ? String(sc.breakfastQty) : "",
-            lunchQty: sc?.lunchQty != null ? String(sc.lunchQty) : "",
-            dinnerQty: sc?.dinnerQty != null ? String(sc.dinnerQty) : "",
-            midnightQty: sc?.midnightQty != null ? String(sc.midnightQty) : "",
-            mealBoxQty: sc?.mealBoxQty != null ? String(sc.mealBoxQty) : "",
+            meals,
             foodManualMandays:
               kind === "food" && sc?.manualMandays != null && Number(sc.manualMandays) !== 0
                 ? String(sc.manualMandays)
@@ -329,6 +417,7 @@ export default function EntryForm() {
             kind: s.kind as any,
             color: (s as any).color ?? null,
             subItems: (s as any).subItems,
+            mealItems: (s as any).mealItems,
           }),
         ),
       );
@@ -483,12 +572,7 @@ export default function EntryForm() {
         if (l.cost !== "") return true;
         if (l.kind === "food") {
           return (
-            l.breakfastQty !== "" ||
-            l.lunchQty !== "" ||
-            l.dinnerQty !== "" ||
-            l.midnightQty !== "" ||
-            l.mealBoxQty !== "" ||
-            l.foodManualMandays !== ""
+            l.meals.some((m) => m.qty !== "") || l.foodManualMandays !== ""
           );
         }
         return l.mandays !== "";
@@ -524,14 +608,20 @@ export default function EntryForm() {
           cost: l.cost !== "" ? Number(l.cost) : 0,
         };
         if (l.kind === "food") {
-          // For food rows, persist the meal qtys; mandays is auto-derived from
-          // MEAL_WEIGHTS (B 20%, L/D/M/MB 40%) and sent so the backend stores
-          // and reuses the exact computed value.
-          if (l.breakfastQty !== "") base.breakfastQty = Number(l.breakfastQty);
-          if (l.lunchQty !== "") base.lunchQty = Number(l.lunchQty);
-          if (l.dinnerQty !== "") base.dinnerQty = Number(l.dinnerQty);
-          if (l.midnightQty !== "") base.midnightQty = Number(l.midnightQty);
-          if (l.mealBoxQty !== "") base.mealBoxQty = Number(l.mealBoxQty);
+          // For food rows, send per-meal-type quantities. The server snapshots
+          // each meal's current name + weight (or reuses the entry's saved
+          // snapshot on edit) and computes mandays as sum(qty x weight).
+          base.mealQuantities = l.meals
+            .filter((m) => m.qty !== "")
+            .map((m) => {
+              const qty = Number(m.qty);
+              if (Number.isNaN(qty) || qty < 0) {
+                throw new Error(`Invalid ${m.name} count for ${l.name}`);
+              }
+              return m.mealItemId
+                ? { mealItemId: m.mealItemId, qty }
+                : { mealItemId: null, name: m.name, qty };
+            });
           if (l.foodManualMandays !== "") {
             const fm = Number(l.foodManualMandays);
             if (Number.isNaN(fm) || fm < 0) {
@@ -539,7 +629,6 @@ export default function EntryForm() {
             }
             base.manualMandays = fm;
           }
-          base.mandays = lineMandays(l);
         } else if (l.mandays !== "") {
           base.mandays = Number(l.mandays);
         }
@@ -718,7 +807,10 @@ export default function EntryForm() {
               <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                 <div className="space-y-1.5">
                   <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Date</Label>
-                  <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required data-testid="input-entry-date" className="font-mono text-sm" />
+                  <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} min={dateMin} max={dateMax} required data-testid="input-entry-date" className="font-mono text-sm" />
+                  {dateLimitHint && (
+                    <p className="text-xs text-muted-foreground" data-testid="text-date-limit-hint">{dateLimitHint}</p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Location</Label>
@@ -736,8 +828,8 @@ export default function EntryForm() {
                 <CardTitle className="text-base font-bold tracking-tight">Service Costs</CardTitle>
                 <p className="text-sm text-muted-foreground/80 mt-1.5 leading-relaxed">
                   Standard services: enter cost + mandays. Food services: enter
-                  meal counts and mandays auto-calculate using Breakfast 20%,
-                  Lunch / Dinner / Midnight / Meal Box 40% each.
+                  meal counts and mandays auto-calculate from each meal type's
+                  weight (set on the project's Services tab).
                 </p>
               </CardHeader>
               <CardContent className="space-y-4 pt-5 bg-muted/20">
@@ -856,43 +948,32 @@ export default function EntryForm() {
                               data-testid={`input-cost-${i}`}
                             />
                           </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                            <MealQty
-                              label="Breakfast"
-                              weight={MEAL_WEIGHTS.breakfast}
-                              value={l.breakfastQty}
-                              onChange={(v) => setLine(i, { breakfastQty: v })}
-                              testId={`input-breakfast-${i}`}
-                            />
-                            <MealQty
-                              label="Lunch"
-                              weight={MEAL_WEIGHTS.lunch}
-                              value={l.lunchQty}
-                              onChange={(v) => setLine(i, { lunchQty: v })}
-                              testId={`input-lunch-${i}`}
-                            />
-                            <MealQty
-                              label="Dinner"
-                              weight={MEAL_WEIGHTS.dinner}
-                              value={l.dinnerQty}
-                              onChange={(v) => setLine(i, { dinnerQty: v })}
-                              testId={`input-dinner-${i}`}
-                            />
-                            <MealQty
-                              label="Midnight"
-                              weight={MEAL_WEIGHTS.midnight}
-                              value={l.midnightQty}
-                              onChange={(v) => setLine(i, { midnightQty: v })}
-                              testId={`input-midnight-${i}`}
-                            />
-                            <MealQty
-                              label="Meal Box"
-                              weight={MEAL_WEIGHTS.mealBox}
-                              value={l.mealBoxQty}
-                              onChange={(v) => setLine(i, { mealBoxQty: v })}
-                              testId={`input-mealbox-${i}`}
-                            />
-                          </div>
+                          {l.meals.length === 0 ? (
+                            <div className="text-xs text-muted-foreground italic">
+                              No meal types configured for this service. Add
+                              some on the project's Services tab.
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                              {l.meals.map((m, mi) => (
+                                <MealQty
+                                  key={m.mealItemId ?? `snapshot-${m.name}`}
+                                  label={m.name}
+                                  weight={m.weight}
+                                  removed={m.mealItemId === null}
+                                  value={m.qty}
+                                  onChange={(v) =>
+                                    setLine(i, {
+                                      meals: l.meals.map((x, xi) =>
+                                        xi === mi ? { ...x, qty: v } : x,
+                                      ),
+                                    })
+                                  }
+                                  testId={`input-meal-${i}-${mi}`}
+                                />
+                              ))}
+                            </div>
+                          )}
                           <div className="space-y-1.5">
                             <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                               Manual mandays
@@ -911,16 +992,7 @@ export default function EntryForm() {
                           <div className="text-xs text-muted-foreground tabular-nums">
                             Auto mandays:{" "}
                             <span className="font-semibold text-foreground">
-                              {formatNumber(
-                                computeMealMandays({
-                                  breakfastQty: Number(l.breakfastQty) || 0,
-                                  lunchQty: Number(l.lunchQty) || 0,
-                                  dinnerQty: Number(l.dinnerQty) || 0,
-                                  midnightQty: Number(l.midnightQty) || 0,
-                                  mealBoxQty: Number(l.mealBoxQty) || 0,
-                                }),
-                                2,
-                              )}
+                              {formatNumber(lineAutoMandays(l), 2)}
                             </span>
                             {l.foodManualMandays !== "" && !Number.isNaN(Number(l.foodManualMandays)) && (
                               <>
@@ -1428,20 +1500,30 @@ function MealQty({
   value,
   onChange,
   testId,
+  removed,
 }: {
   label: string;
   weight: number;
   value: string;
   onChange: (v: string) => void;
   testId: string;
+  removed?: boolean;
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}{" "}
         <span className="text-muted-foreground/70 normal-case">
-          ({Math.round(weight * 100)}%)
+          ({Math.round(weight * 100 * 100) / 100}%)
         </span>
+        {removed && (
+          <span
+            className="ml-1 normal-case tracking-normal text-[9px] text-amber-600 dark:text-amber-400"
+            title="This meal type was removed from the service; the entry keeps its saved name and weight."
+          >
+            (removed)
+          </span>
+        )}
       </Label>
       <Input
         type="number"

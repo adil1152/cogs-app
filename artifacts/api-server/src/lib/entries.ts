@@ -6,10 +6,11 @@ import {
   projectsTable,
   serviceSubItemsTable,
   subServiceCostEntriesTable,
+  mealCostEntriesTable,
   entryAttachmentsTable,
 } from "@workspace/db";
 import { eq, inArray, sql } from "drizzle-orm";
-import { calcFoodMandays, safeDivide } from "./cogsCalc";
+import { calcMealRowsMandays, safeDivide } from "./cogsCalc";
 
 export type ServiceKind = "food" | "standard" | "group";
 
@@ -19,17 +20,35 @@ export interface SubServiceCostInputItem {
   mandays?: number;
 }
 
+export interface MealQuantityInputItem {
+  mealItemId?: string | null;
+  name?: string;
+  qty: number;
+}
+
+/**
+ * A meal row after the writer resolved its snapshot name + weight. The
+ * resolution happens server-side (never trusting client name/weight):
+ * either from the service's current meal item, or — when editing — from the
+ * entry's previously saved snapshot so historical weights are preserved.
+ */
+export interface ResolvedMealRow {
+  mealItemId: string | null;
+  name: string;
+  weight: number;
+  qty: number;
+  sortOrder: number;
+}
+
 export interface ServiceCostInputItem {
   projectServiceId: string;
   kind: ServiceKind;
   cost?: number;
   mandays?: number;
   manualMandays?: number;
-  breakfastQty?: number;
-  lunchQty?: number;
-  dinnerQty?: number;
-  midnightQty?: number;
-  mealBoxQty?: number;
+  mealQuantities?: MealQuantityInputItem[];
+  /** Populated by the writer (routes) before totals are computed. */
+  resolvedMealRows?: ResolvedMealRow[];
   subCosts?: SubServiceCostInputItem[];
 }
 
@@ -58,67 +77,53 @@ export function computeGroupMandays(sc: ServiceCostInputItem): number {
 }
 
 /**
- * Per-service mandays: prefer explicit mandays input, otherwise fall back to
- * the legacy food formula for backward compatibility with rows that only have
- * meal quantities.
+ * Per-service mandays for read paths. Every writer persists the computed
+ * total (auto + manual) on the row, and the migration backfilled legacy
+ * rows, so the stored value is authoritative.
  */
 export function serviceMandays(sc: {
   mandays?: number | string | null;
   manualMandays?: number | string | null;
   kind?: string | null;
-  breakfastQty?: number | null;
-  lunchQty?: number | null;
-  dinnerQty?: number | null;
-  midnightQty?: number | null;
-  mealBoxQty?: number | null;
 }): number {
-  let manual = 0;
-  if (sc.manualMandays != null && sc.manualMandays !== "") {
-    const n = Number(sc.manualMandays);
-    if (!Number.isNaN(n)) manual = n;
-  }
   if (sc.mandays != null && sc.mandays !== "") {
     const n = Number(sc.mandays);
     // Stored `mandays` already reflects the manual addition for food/group rows
     // (computed and persisted by the writer), so do not double-add.
     if (!Number.isNaN(n)) return n;
   }
-  if (sc.kind === "food") {
-    return (
-      calcFoodMandays({
-        breakfastQty: sc.breakfastQty ?? null,
-        lunchQty: sc.lunchQty ?? null,
-        dinnerQty: sc.dinnerQty ?? null,
-        midnightQty: sc.midnightQty ?? null,
-        mealBoxQty: sc.mealBoxQty ?? null,
-      }) + manual
-    );
+  if (sc.manualMandays != null && sc.manualMandays !== "") {
+    const n = Number(sc.manualMandays);
+    if (!Number.isNaN(n)) return n;
   }
-  return manual;
+  return 0;
 }
 
 /**
  * Per-input mandays during write: use the kind-specific formula. For "group"
  * the writer has not yet persisted `mandays`, so we compute it from subCosts.
+ * For "food" the writer must have resolved meal rows first; the computed
+ * value (sum of qty x snapshot weight + manual) is authoritative and any
+ * client-provided mandays is ignored.
  */
 function inputMandays(sc: ServiceCostInputItem): number {
   if (sc.kind === "group") return computeGroupMandays(sc);
-  if (sc.mandays != null && !Number.isNaN(sc.mandays)) return Number(sc.mandays);
   const manual =
     sc.manualMandays != null && !Number.isNaN(sc.manualMandays)
       ? sc.manualMandays
       : 0;
   if (sc.kind === "food") {
-    return (
-      calcFoodMandays({
-        breakfastQty: sc.breakfastQty ?? null,
-        lunchQty: sc.lunchQty ?? null,
-        dinnerQty: sc.dinnerQty ?? null,
-        midnightQty: sc.midnightQty ?? null,
-        mealBoxQty: sc.mealBoxQty ?? null,
-      }) + manual
-    );
+    if (sc.resolvedMealRows) {
+      return calcMealRowsMandays(sc.resolvedMealRows) + manual;
+    }
+    // No resolution happened (e.g. recomputing from already-stored rows):
+    // the stored mandays already includes the manual addition.
+    if (sc.mandays != null && !Number.isNaN(sc.mandays)) {
+      return Number(sc.mandays);
+    }
+    return manual;
   }
+  if (sc.mandays != null && !Number.isNaN(sc.mandays)) return Number(sc.mandays);
   return manual;
 }
 
@@ -151,6 +156,10 @@ export function deriveParentRow(sc: ServiceCostInputItem): {
 } {
   if (sc.kind === "group") {
     return { cost: computeGroupCost(sc), mandays: computeGroupMandays(sc) };
+  }
+  if (sc.kind === "food") {
+    // Authoritative: computed from resolved snapshot meal rows + manual.
+    return { cost: Number(sc.cost ?? 0), mandays: inputMandays(sc) };
   }
   return {
     cost: Number(sc.cost ?? 0),
@@ -219,6 +228,35 @@ export async function buildEntryDetail(entryId: string) {
     subsByParent.set(row.serviceCostEntryId, list);
   }
 
+  // Fetch snapshot meal rows for any food cost entries on this entry.
+  const mealRows = costIds.length
+    ? await db
+        .select()
+        .from(mealCostEntriesTable)
+        .where(inArray(mealCostEntriesTable.serviceCostEntryId, costIds))
+    : [];
+  const mealsByParent = new Map<
+    string,
+    Array<{
+      mealItemId: string | null;
+      name: string;
+      weight: number;
+      qty: number;
+      sortOrder: number;
+    }>
+  >();
+  for (const m of mealRows) {
+    const list = mealsByParent.get(m.serviceCostEntryId) ?? [];
+    list.push({
+      mealItemId: m.mealItemId,
+      name: m.name,
+      weight: Number(m.weight),
+      qty: m.qty,
+      sortOrder: m.sortOrder,
+    });
+    mealsByParent.set(m.serviceCostEntryId, list);
+  }
+
   const attachmentRows = await db
     .select()
     .from(entryAttachmentsTable)
@@ -234,13 +272,11 @@ export async function buildEntryDetail(entryId: string) {
       mandays: c.mandays,
       manualMandays: c.manualMandays,
       kind: c.kind,
-      breakfastQty: c.breakfastQty,
-      lunchQty: c.lunchQty,
-      dinnerQty: c.dinnerQty,
-      midnightQty: c.midnightQty,
-      mealBoxQty: c.mealBoxQty,
     });
     const subs = (subsByParent.get(c.id) ?? [])
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map(({ sortOrder: _s, ...rest }) => rest);
+    const meals = (mealsByParent.get(c.id) ?? [])
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map(({ sortOrder: _s, ...rest }) => rest);
     return {
@@ -253,11 +289,7 @@ export async function buildEntryDetail(entryId: string) {
       manualMandays: Number(c.manualMandays ?? 0),
       mandayContribution,
       costPerManday: safeDivide(cVal, mandayContribution),
-      breakfastQty: c.breakfastQty,
-      lunchQty: c.lunchQty,
-      dinnerQty: c.dinnerQty,
-      midnightQty: c.midnightQty,
-      mealBoxQty: c.mealBoxQty,
+      mealQuantities: meals,
       subCosts: subs,
     };
   });

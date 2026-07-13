@@ -143,8 +143,8 @@ export default function Login() {
       </div>
       <div className="hidden lg:flex flex-col gap-6 p-14 bg-sidebar-accent/40 border-l border-sidebar-border">
         <Card title="Meal-weighted mandays" icon={Utensils}>
-          Breakfast counts as 0.2, lunch / dinner / midnight / meal box each as 0.4. Live math under
-          every entry — no spreadsheets, no second-guessing.
+          Define your own meal types and weights per food service — mandays auto-calculate with
+          live math under every entry. No spreadsheets, no second-guessing.
         </Card>
         <Card title="Security field per project" icon={Lock}>
           Admins grant individual users permission to view the project's summary report. Everyone

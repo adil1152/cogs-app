@@ -21,4 +21,14 @@ export interface UpdateProjectBody {
   notes?: string;
   pdfRequired?: boolean;
   disabled?: boolean;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  backdatedDays?: number | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  futureDays?: number | null;
 }

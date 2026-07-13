@@ -242,6 +242,7 @@ export const ResetPasswordResponse = zod.object({
  */
 export const GetSmtpSettingsResponse = zod.object({
   configured: zod.boolean(),
+  provider: zod.enum(["smtp", "graph"]),
   host: zod.string().nullable(),
   port: zod.number().nullable(),
   secure: zod.boolean().nullable(),
@@ -249,6 +250,10 @@ export const GetSmtpSettingsResponse = zod.object({
   fromEmail: zod.string().nullable(),
   fromName: zod.string().nullable(),
   hasPassword: zod.boolean(),
+  graphTenantId: zod.string().nullable(),
+  graphClientId: zod.string().nullable(),
+  hasGraphClientSecret: zod.boolean(),
+  graphSenderEmail: zod.string().nullable(),
 });
 
 /**
@@ -267,10 +272,20 @@ export const updateSmtpSettingsBodyFromEmailMax = 255;
 
 export const updateSmtpSettingsBodyFromNameMax = 120;
 
+export const updateSmtpSettingsBodyGraphTenantIdMax = 120;
+
+export const updateSmtpSettingsBodyGraphClientIdMax = 120;
+
+export const updateSmtpSettingsBodyGraphClientSecretMax = 255;
+
+export const updateSmtpSettingsBodyGraphSenderEmailMin = 3;
+export const updateSmtpSettingsBodyGraphSenderEmailMax = 255;
+
 export const UpdateSmtpSettingsBody = zod.object({
-  host: zod.string().min(1).max(updateSmtpSettingsBodyHostMax),
-  port: zod.number().min(1).max(updateSmtpSettingsBodyPortMax),
-  secure: zod.boolean(),
+  provider: zod.enum(["smtp", "graph"]),
+  host: zod.string().max(updateSmtpSettingsBodyHostMax).nullish(),
+  port: zod.number().min(1).max(updateSmtpSettingsBodyPortMax).nullish(),
+  secure: zod.boolean().nullish(),
   username: zod.string().max(updateSmtpSettingsBodyUsernameMax).nullish(),
   password: zod
     .string()
@@ -281,12 +296,33 @@ export const UpdateSmtpSettingsBody = zod.object({
     .string()
     .email()
     .min(updateSmtpSettingsBodyFromEmailMin)
-    .max(updateSmtpSettingsBodyFromEmailMax),
+    .max(updateSmtpSettingsBodyFromEmailMax)
+    .nullish(),
   fromName: zod.string().max(updateSmtpSettingsBodyFromNameMax).nullish(),
+  graphTenantId: zod
+    .string()
+    .max(updateSmtpSettingsBodyGraphTenantIdMax)
+    .nullish(),
+  graphClientId: zod
+    .string()
+    .max(updateSmtpSettingsBodyGraphClientIdMax)
+    .nullish(),
+  graphClientSecret: zod
+    .string()
+    .max(updateSmtpSettingsBodyGraphClientSecretMax)
+    .nullish()
+    .describe("Omit or null to keep the existing secret."),
+  graphSenderEmail: zod
+    .string()
+    .email()
+    .min(updateSmtpSettingsBodyGraphSenderEmailMin)
+    .max(updateSmtpSettingsBodyGraphSenderEmailMax)
+    .nullish(),
 });
 
 export const UpdateSmtpSettingsResponse = zod.object({
   configured: zod.boolean(),
+  provider: zod.enum(["smtp", "graph"]),
   host: zod.string().nullable(),
   port: zod.number().nullable(),
   secure: zod.boolean().nullable(),
@@ -294,6 +330,10 @@ export const UpdateSmtpSettingsResponse = zod.object({
   fromEmail: zod.string().nullable(),
   fromName: zod.string().nullable(),
   hasPassword: zod.boolean(),
+  graphTenantId: zod.string().nullable(),
+  graphClientId: zod.string().nullable(),
+  hasGraphClientSecret: zod.boolean(),
+  graphSenderEmail: zod.string().nullable(),
 });
 
 /**
@@ -441,6 +481,9 @@ export const UpdateUserRoleResponse = zod.object({
 /**
  * @summary List projects visible to the current user
  */
+export const listProjectsResponseBackdatedDaysMin = 0;
+
+export const listProjectsResponseFutureDaysMin = 0;
 
 export const listProjectsResponseApprovalChainItemLevelNameMax = 32;
 
@@ -461,6 +504,20 @@ export const ListProjectsResponseItem = zod.object({
     .boolean()
     .describe(
       "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+    ),
+  backdatedDays: zod
+    .number()
+    .min(listProjectsResponseBackdatedDaysMin)
+    .nullish()
+    .describe(
+      "How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.",
+    ),
+  futureDays: zod
+    .number()
+    .min(listProjectsResponseFutureDaysMin)
+    .nullish()
+    .describe(
+      "How many days in the future a non-admin may date an entry. 0 blocks future entries entirely; null means no limit.",
     ),
   createdAt: zod.coerce.date(),
   isAdminOwned: zod.boolean(),
@@ -495,6 +552,10 @@ export const ListProjectsResponse = zod.array(ListProjectsResponseItem);
 
 export const createProjectBodyCodeMax = 32;
 
+export const createProjectBodyBackdatedDaysMin = 0;
+
+export const createProjectBodyFutureDaysMin = 0;
+
 export const CreateProjectBody = zod.object({
   name: zod.string().min(1),
   code: zod
@@ -509,11 +570,17 @@ export const CreateProjectBody = zod.object({
   contractEnd: zod.coerce.date(),
   notes: zod.string().optional(),
   pdfRequired: zod.boolean().optional(),
+  backdatedDays: zod.number().min(createProjectBodyBackdatedDaysMin).nullish(),
+  futureDays: zod.number().min(createProjectBodyFutureDaysMin).nullish(),
 });
 
 export const GetProjectParams = zod.object({
   id: zod.coerce.string(),
 });
+
+export const getProjectResponseOneBackdatedDaysMin = 0;
+
+export const getProjectResponseOneFutureDaysMin = 0;
 
 export const getProjectResponseOneApprovalChainItemLevelNameMax = 32;
 
@@ -537,6 +604,20 @@ export const GetProjectResponse = zod
       .boolean()
       .describe(
         "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+      ),
+    backdatedDays: zod
+      .number()
+      .min(getProjectResponseOneBackdatedDaysMin)
+      .nullish()
+      .describe(
+        "How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.",
+      ),
+    futureDays: zod
+      .number()
+      .min(getProjectResponseOneFutureDaysMin)
+      .nullish()
+      .describe(
+        "How many days in the future a non-admin may date an entry. 0 blocks future entries entirely; null means no limit.",
       ),
     createdAt: zod.coerce.date(),
     isAdminOwned: zod.boolean(),
@@ -598,6 +679,24 @@ export const GetProjectResponse = zod
             .describe(
               "Defined sub-services for kind=group; empty array otherwise.",
             ),
+          mealItems: zod
+            .array(
+              zod
+                .object({
+                  id: zod.string(),
+                  name: zod.string(),
+                  weight: zod
+                    .number()
+                    .describe(
+                      "Manday weight as a fraction (0.2 = 20% of a manday).",
+                    ),
+                  sortOrder: zod.number(),
+                })
+                .describe("A meal type defined for a kind=food service."),
+            )
+            .describe(
+              "Defined meal types for kind=food; empty array otherwise. Fully\neditable at any time — daily entries snapshot the name + weight\nthey were saved with, so edits never change historical numbers.\n",
+            ),
           hasEntries: zod
             .boolean()
             .describe(
@@ -614,6 +713,10 @@ export const UpdateProjectParams = zod.object({
 
 export const updateProjectBodyCodeMax = 32;
 
+export const updateProjectBodyBackdatedDaysMin = 0;
+
+export const updateProjectBodyFutureDaysMin = 0;
+
 export const UpdateProjectBody = zod.object({
   name: zod.string().min(1).optional(),
   code: zod.string().max(updateProjectBodyCodeMax).nullish(),
@@ -623,7 +726,13 @@ export const UpdateProjectBody = zod.object({
   notes: zod.string().optional(),
   pdfRequired: zod.boolean().optional(),
   disabled: zod.boolean().optional(),
+  backdatedDays: zod.number().min(updateProjectBodyBackdatedDaysMin).nullish(),
+  futureDays: zod.number().min(updateProjectBodyFutureDaysMin).nullish(),
 });
+
+export const updateProjectResponseBackdatedDaysMin = 0;
+
+export const updateProjectResponseFutureDaysMin = 0;
 
 export const updateProjectResponseApprovalChainItemLevelNameMax = 32;
 
@@ -644,6 +753,20 @@ export const UpdateProjectResponse = zod.object({
     .boolean()
     .describe(
       "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+    ),
+  backdatedDays: zod
+    .number()
+    .min(updateProjectResponseBackdatedDaysMin)
+    .nullish()
+    .describe(
+      "How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.",
+    ),
+  futureDays: zod
+    .number()
+    .min(updateProjectResponseFutureDaysMin)
+    .nullish()
+    .describe(
+      "How many days in the future a non-admin may date an entry. 0 blocks future entries entirely; null means no limit.",
     ),
   createdAt: zod.coerce.date(),
   isAdminOwned: zod.boolean(),
@@ -709,6 +832,22 @@ export const ListProjectServicesResponseItem = zod.object({
       }),
     )
     .describe("Defined sub-services for kind=group; empty array otherwise."),
+  mealItems: zod
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          name: zod.string(),
+          weight: zod
+            .number()
+            .describe("Manday weight as a fraction (0.2 = 20% of a manday)."),
+          sortOrder: zod.number(),
+        })
+        .describe("A meal type defined for a kind=food service."),
+    )
+    .describe(
+      "Defined meal types for kind=food; empty array otherwise. Fully\neditable at any time — daily entries snapshot the name + weight\nthey were saved with, so edits never change historical numbers.\n",
+    ),
   hasEntries: zod
     .boolean()
     .describe(
@@ -724,6 +863,11 @@ export const CreateProjectServiceParams = zod.object({
 });
 
 export const createProjectServiceBodySubItemsItemNameMax = 255;
+
+export const createProjectServiceBodyMealItemsItemNameMax = 255;
+
+export const createProjectServiceBodyMealItemsItemWeightMin = 0;
+export const createProjectServiceBodyMealItemsItemWeightMax = 100;
 
 export const CreateProjectServiceBody = zod.object({
   name: zod.string().min(1),
@@ -749,6 +893,29 @@ export const CreateProjectServiceBody = zod.object({
     )
     .optional()
     .describe("Initial sub-items (only meaningful when kind=group)."),
+  mealItems: zod
+    .array(
+      zod.object({
+        id: zod
+          .string()
+          .optional()
+          .describe("When set, identifies an existing meal item to update."),
+        name: zod
+          .string()
+          .min(1)
+          .max(createProjectServiceBodyMealItemsItemNameMax),
+        weight: zod
+          .number()
+          .min(createProjectServiceBodyMealItemsItemWeightMin)
+          .max(createProjectServiceBodyMealItemsItemWeightMax)
+          .describe("Manday weight as a fraction (0.2 = 20% of a manday)."),
+        sortOrder: zod.number().optional(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Initial meal types (only meaningful when kind=food). When omitted\nfor a food service, the default five (Breakfast 20%, Lunch \/\nDinner \/ Midnight \/ Meal box 40%) are created.\n",
+    ),
 });
 
 /**
@@ -797,6 +964,22 @@ export const ReorderProjectServicesResponseItem = zod.object({
       }),
     )
     .describe("Defined sub-services for kind=group; empty array otherwise."),
+  mealItems: zod
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          name: zod.string(),
+          weight: zod
+            .number()
+            .describe("Manday weight as a fraction (0.2 = 20% of a manday)."),
+          sortOrder: zod.number(),
+        })
+        .describe("A meal type defined for a kind=food service."),
+    )
+    .describe(
+      "Defined meal types for kind=food; empty array otherwise. Fully\neditable at any time — daily entries snapshot the name + weight\nthey were saved with, so edits never change historical numbers.\n",
+    ),
   hasEntries: zod
     .boolean()
     .describe(
@@ -812,6 +995,11 @@ export const UpdateProjectServiceParams = zod.object({
 });
 
 export const updateProjectServiceBodySubItemsItemNameMax = 255;
+
+export const updateProjectServiceBodyMealItemsItemNameMax = 255;
+
+export const updateProjectServiceBodyMealItemsItemWeightMin = 0;
+export const updateProjectServiceBodyMealItemsItemWeightMax = 100;
 
 export const UpdateProjectServiceBody = zod.object({
   name: zod.string().min(1).optional(),
@@ -838,6 +1026,29 @@ export const UpdateProjectServiceBody = zod.object({
     .optional()
     .describe(
       "Full replacement set of sub-items. Items with `id` are kept\n(rename \/ reorder); items without `id` are inserted; existing\nsub-items not present are deleted. Add\/remove is rejected with\n409 once any cost entry references the parent service.\n",
+    ),
+  mealItems: zod
+    .array(
+      zod.object({
+        id: zod
+          .string()
+          .optional()
+          .describe("When set, identifies an existing meal item to update."),
+        name: zod
+          .string()
+          .min(1)
+          .max(updateProjectServiceBodyMealItemsItemNameMax),
+        weight: zod
+          .number()
+          .min(updateProjectServiceBodyMealItemsItemWeightMin)
+          .max(updateProjectServiceBodyMealItemsItemWeightMax)
+          .describe("Manday weight as a fraction (0.2 = 20% of a manday)."),
+        sortOrder: zod.number().optional(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Full replacement set of meal types for a kind=food service. Items\nwith `id` are updated (rename \/ re-weight \/ reorder); items\nwithout `id` are inserted; existing items not present are\ndeleted. Always allowed — historical entries keep the snapshot\nthey were saved with.\n",
     ),
 });
 
@@ -871,6 +1082,22 @@ export const UpdateProjectServiceResponse = zod.object({
       }),
     )
     .describe("Defined sub-services for kind=group; empty array otherwise."),
+  mealItems: zod
+    .array(
+      zod
+        .object({
+          id: zod.string(),
+          name: zod.string(),
+          weight: zod
+            .number()
+            .describe("Manday weight as a fraction (0.2 = 20% of a manday)."),
+          sortOrder: zod.number(),
+        })
+        .describe("A meal type defined for a kind=food service."),
+    )
+    .describe(
+      "Defined meal types for kind=food; empty array otherwise. Fully\neditable at any time — daily entries snapshot the name + weight\nthey were saved with, so edits never change historical numbers.\n",
+    ),
   hasEntries: zod
     .boolean()
     .describe(
@@ -1226,15 +1453,7 @@ export const createDailyEntryBodyServiceCostsItemMandaysMin = 0;
 
 export const createDailyEntryBodyServiceCostsItemManualMandaysMin = 0;
 
-export const createDailyEntryBodyServiceCostsItemBreakfastQtyMin = 0;
-
-export const createDailyEntryBodyServiceCostsItemLunchQtyMin = 0;
-
-export const createDailyEntryBodyServiceCostsItemDinnerQtyMin = 0;
-
-export const createDailyEntryBodyServiceCostsItemMidnightQtyMin = 0;
-
-export const createDailyEntryBodyServiceCostsItemMealBoxQtyMin = 0;
+export const createDailyEntryBodyServiceCostsItemMealQuantitiesItemQtyMin = 0;
 
 export const createDailyEntryBodyServiceCostsItemSubCostsItemCostDefault = 0;
 export const createDailyEntryBodyServiceCostsItemSubCostsItemCostMin = 0;
@@ -1283,26 +1502,32 @@ export const CreateDailyEntryBody = zod.object({
         .describe(
           "Per-service manual mandays added on top of the auto-computed\n(food formula) mandays. Used by food services to add ad-hoc\nmandays not captured by the meal counts.\n",
         ),
-      breakfastQty: zod
-        .number()
-        .min(createDailyEntryBodyServiceCostsItemBreakfastQtyMin)
-        .optional(),
-      lunchQty: zod
-        .number()
-        .min(createDailyEntryBodyServiceCostsItemLunchQtyMin)
-        .optional(),
-      dinnerQty: zod
-        .number()
-        .min(createDailyEntryBodyServiceCostsItemDinnerQtyMin)
-        .optional(),
-      midnightQty: zod
-        .number()
-        .min(createDailyEntryBodyServiceCostsItemMidnightQtyMin)
-        .optional(),
-      mealBoxQty: zod
-        .number()
-        .min(createDailyEntryBodyServiceCostsItemMealBoxQtyMin)
-        .optional(),
+      mealQuantities: zod
+        .array(
+          zod.object({
+            mealItemId: zod
+              .string()
+              .nullish()
+              .describe(
+                "The service meal item this quantity is for. Null only when\nediting an entry whose saved meal type has since been removed\nfrom the service — the row is then matched by `name`.\n",
+              ),
+            name: zod
+              .string()
+              .optional()
+              .describe(
+                "Required when mealItemId is null (snapshot row match).",
+              ),
+            qty: zod
+              .number()
+              .min(
+                createDailyEntryBodyServiceCostsItemMealQuantitiesItemQtyMin,
+              ),
+          }),
+        )
+        .optional()
+        .describe(
+          "Per meal-type quantity rows for kind=food services. On create,\n`mealItemId` must reference one of the service's meal items and\nthe server snapshots its current name + weight. On update, rows\nwhose `mealItemId` matches a previously saved row keep that row's\nsnapshot; rows for meal items deleted since the entry was saved\nare matched by `name`. Mandays for the food line are computed\nserver-side as sum(qty x weight) + manualMandays.\n",
+        ),
       subCosts: zod
         .array(
           zod.object({
@@ -1390,11 +1615,23 @@ export const GetDailyEntryResponse = zod
             ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
-          breakfastQty: zod.number().nullish(),
-          lunchQty: zod.number().nullish(),
-          dinnerQty: zod.number().nullish(),
-          midnightQty: zod.number().nullish(),
-          mealBoxQty: zod.number().nullish(),
+          mealQuantities: zod
+            .array(
+              zod.object({
+                mealItemId: zod.string().nullable(),
+                name: zod.string(),
+                weight: zod
+                  .number()
+                  .describe(
+                    "Snapshot weight (fraction) taken when the entry was saved.",
+                  ),
+                qty: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per meal-type rows for kind=food; empty for other kinds. Name and\nweight are the snapshot taken when the entry was saved, so they\nstay correct even after the service's meal items are edited or\nremoved (mealItemId becomes null on removal).\n",
+            ),
           subCosts: zod
             .array(
               zod.object({
@@ -1443,15 +1680,7 @@ export const updateDailyEntryBodyServiceCostsItemMandaysMin = 0;
 
 export const updateDailyEntryBodyServiceCostsItemManualMandaysMin = 0;
 
-export const updateDailyEntryBodyServiceCostsItemBreakfastQtyMin = 0;
-
-export const updateDailyEntryBodyServiceCostsItemLunchQtyMin = 0;
-
-export const updateDailyEntryBodyServiceCostsItemDinnerQtyMin = 0;
-
-export const updateDailyEntryBodyServiceCostsItemMidnightQtyMin = 0;
-
-export const updateDailyEntryBodyServiceCostsItemMealBoxQtyMin = 0;
+export const updateDailyEntryBodyServiceCostsItemMealQuantitiesItemQtyMin = 0;
 
 export const updateDailyEntryBodyServiceCostsItemSubCostsItemCostDefault = 0;
 export const updateDailyEntryBodyServiceCostsItemSubCostsItemCostMin = 0;
@@ -1493,26 +1722,32 @@ export const UpdateDailyEntryBody = zod.object({
           .describe(
             "Per-service manual mandays added on top of the auto-computed\n(food formula) mandays. Used by food services to add ad-hoc\nmandays not captured by the meal counts.\n",
           ),
-        breakfastQty: zod
-          .number()
-          .min(updateDailyEntryBodyServiceCostsItemBreakfastQtyMin)
-          .optional(),
-        lunchQty: zod
-          .number()
-          .min(updateDailyEntryBodyServiceCostsItemLunchQtyMin)
-          .optional(),
-        dinnerQty: zod
-          .number()
-          .min(updateDailyEntryBodyServiceCostsItemDinnerQtyMin)
-          .optional(),
-        midnightQty: zod
-          .number()
-          .min(updateDailyEntryBodyServiceCostsItemMidnightQtyMin)
-          .optional(),
-        mealBoxQty: zod
-          .number()
-          .min(updateDailyEntryBodyServiceCostsItemMealBoxQtyMin)
-          .optional(),
+        mealQuantities: zod
+          .array(
+            zod.object({
+              mealItemId: zod
+                .string()
+                .nullish()
+                .describe(
+                  "The service meal item this quantity is for. Null only when\nediting an entry whose saved meal type has since been removed\nfrom the service — the row is then matched by `name`.\n",
+                ),
+              name: zod
+                .string()
+                .optional()
+                .describe(
+                  "Required when mealItemId is null (snapshot row match).",
+                ),
+              qty: zod
+                .number()
+                .min(
+                  updateDailyEntryBodyServiceCostsItemMealQuantitiesItemQtyMin,
+                ),
+            }),
+          )
+          .optional()
+          .describe(
+            "Per meal-type quantity rows for kind=food services. On create,\n`mealItemId` must reference one of the service's meal items and\nthe server snapshots its current name + weight. On update, rows\nwhose `mealItemId` matches a previously saved row keep that row's\nsnapshot; rows for meal items deleted since the entry was saved\nare matched by `name`. Mandays for the food line are computed\nserver-side as sum(qty x weight) + manualMandays.\n",
+          ),
         subCosts: zod
           .array(
             zod.object({
@@ -1597,11 +1832,23 @@ export const UpdateDailyEntryResponse = zod
             ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
-          breakfastQty: zod.number().nullish(),
-          lunchQty: zod.number().nullish(),
-          dinnerQty: zod.number().nullish(),
-          midnightQty: zod.number().nullish(),
-          mealBoxQty: zod.number().nullish(),
+          mealQuantities: zod
+            .array(
+              zod.object({
+                mealItemId: zod.string().nullable(),
+                name: zod.string(),
+                weight: zod
+                  .number()
+                  .describe(
+                    "Snapshot weight (fraction) taken when the entry was saved.",
+                  ),
+                qty: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per meal-type rows for kind=food; empty for other kinds. Name and\nweight are the snapshot taken when the entry was saved, so they\nstay correct even after the service's meal items are edited or\nremoved (mealItemId becomes null on removal).\n",
+            ),
           subCosts: zod
             .array(
               zod.object({
@@ -1706,11 +1953,23 @@ export const ApproveDailyEntryResponse = zod
             ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
-          breakfastQty: zod.number().nullish(),
-          lunchQty: zod.number().nullish(),
-          dinnerQty: zod.number().nullish(),
-          midnightQty: zod.number().nullish(),
-          mealBoxQty: zod.number().nullish(),
+          mealQuantities: zod
+            .array(
+              zod.object({
+                mealItemId: zod.string().nullable(),
+                name: zod.string(),
+                weight: zod
+                  .number()
+                  .describe(
+                    "Snapshot weight (fraction) taken when the entry was saved.",
+                  ),
+                qty: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per meal-type rows for kind=food; empty for other kinds. Name and\nweight are the snapshot taken when the entry was saved, so they\nstay correct even after the service's meal items are edited or\nremoved (mealItemId becomes null on removal).\n",
+            ),
           subCosts: zod
             .array(
               zod.object({
@@ -1811,11 +2070,23 @@ export const RejectDailyEntryResponse = zod
             ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
-          breakfastQty: zod.number().nullish(),
-          lunchQty: zod.number().nullish(),
-          dinnerQty: zod.number().nullish(),
-          midnightQty: zod.number().nullish(),
-          mealBoxQty: zod.number().nullish(),
+          mealQuantities: zod
+            .array(
+              zod.object({
+                mealItemId: zod.string().nullable(),
+                name: zod.string(),
+                weight: zod
+                  .number()
+                  .describe(
+                    "Snapshot weight (fraction) taken when the entry was saved.",
+                  ),
+                qty: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per meal-type rows for kind=food; empty for other kinds. Name and\nweight are the snapshot taken when the entry was saved, so they\nstay correct even after the service's meal items are edited or\nremoved (mealItemId becomes null on removal).\n",
+            ),
           subCosts: zod
             .array(
               zod.object({
@@ -1938,11 +2209,23 @@ export const SubmitDailyEntryResponse = zod
             ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
-          breakfastQty: zod.number().nullish(),
-          lunchQty: zod.number().nullish(),
-          dinnerQty: zod.number().nullish(),
-          midnightQty: zod.number().nullish(),
-          mealBoxQty: zod.number().nullish(),
+          mealQuantities: zod
+            .array(
+              zod.object({
+                mealItemId: zod.string().nullable(),
+                name: zod.string(),
+                weight: zod
+                  .number()
+                  .describe(
+                    "Snapshot weight (fraction) taken when the entry was saved.",
+                  ),
+                qty: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per meal-type rows for kind=food; empty for other kinds. Name and\nweight are the snapshot taken when the entry was saved, so they\nstay correct even after the service's meal items are edited or\nremoved (mealItemId becomes null on removal).\n",
+            ),
           subCosts: zod
             .array(
               zod.object({
@@ -2043,11 +2326,23 @@ export const ResetDailyEntryResponse = zod
             ),
           mandayContribution: zod.number(),
           costPerManday: zod.number(),
-          breakfastQty: zod.number().nullish(),
-          lunchQty: zod.number().nullish(),
-          dinnerQty: zod.number().nullish(),
-          midnightQty: zod.number().nullish(),
-          mealBoxQty: zod.number().nullish(),
+          mealQuantities: zod
+            .array(
+              zod.object({
+                mealItemId: zod.string().nullable(),
+                name: zod.string(),
+                weight: zod
+                  .number()
+                  .describe(
+                    "Snapshot weight (fraction) taken when the entry was saved.",
+                  ),
+                qty: zod.number(),
+              }),
+            )
+            .optional()
+            .describe(
+              "Per meal-type rows for kind=food; empty for other kinds. Name and\nweight are the snapshot taken when the entry was saved, so they\nstay correct even after the service's meal items are edited or\nremoved (mealItemId becomes null on removal).\n",
+            ),
           subCosts: zod
             .array(
               zod.object({
@@ -2288,6 +2583,10 @@ export const GetProjectEntryMatrixQueryParams = zod.object({
     ),
 });
 
+export const getProjectEntryMatrixResponseProjectBackdatedDaysMin = 0;
+
+export const getProjectEntryMatrixResponseProjectFutureDaysMin = 0;
+
 export const getProjectEntryMatrixResponseProjectApprovalChainItemLevelNameMax = 32;
 
 export const getProjectEntryMatrixResponseServicesItemSubItemsItemNameMax = 255;
@@ -2311,6 +2610,20 @@ export const GetProjectEntryMatrixResponse = zod
         .boolean()
         .describe(
           "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+        ),
+      backdatedDays: zod
+        .number()
+        .min(getProjectEntryMatrixResponseProjectBackdatedDaysMin)
+        .nullish()
+        .describe(
+          "How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.",
+        ),
+      futureDays: zod
+        .number()
+        .min(getProjectEntryMatrixResponseProjectFutureDaysMin)
+        .nullish()
+        .describe(
+          "How many days in the future a non-admin may date an entry. 0 blocks future entries entirely; null means no limit.",
         ),
       createdAt: zod.coerce.date(),
       isAdminOwned: zod.boolean(),
@@ -2375,6 +2688,24 @@ export const GetProjectEntryMatrixResponse = zod
           )
           .describe(
             "Defined sub-services for kind=group; empty array otherwise.",
+          ),
+        mealItems: zod
+          .array(
+            zod
+              .object({
+                id: zod.string(),
+                name: zod.string(),
+                weight: zod
+                  .number()
+                  .describe(
+                    "Manday weight as a fraction (0.2 = 20% of a manday).",
+                  ),
+                sortOrder: zod.number(),
+              })
+              .describe("A meal type defined for a kind=food service."),
+          )
+          .describe(
+            "Defined meal types for kind=food; empty array otherwise. Fully\neditable at any time — daily entries snapshot the name + weight\nthey were saved with, so edits never change historical numbers.\n",
           ),
         hasEntries: zod
           .boolean()
@@ -2509,6 +2840,10 @@ export const GetProjectSummaryQueryParams = zod.object({
     ),
 });
 
+export const getProjectSummaryResponseProjectBackdatedDaysMin = 0;
+
+export const getProjectSummaryResponseProjectFutureDaysMin = 0;
+
 export const getProjectSummaryResponseProjectApprovalChainItemLevelNameMax = 32;
 
 export const getProjectSummaryResponseDailyEntriesItemManualMandaysMin = 0;
@@ -2533,6 +2868,20 @@ export const GetProjectSummaryResponse = zod.object({
       .boolean()
       .describe(
         "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+      ),
+    backdatedDays: zod
+      .number()
+      .min(getProjectSummaryResponseProjectBackdatedDaysMin)
+      .nullish()
+      .describe(
+        "How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.",
+      ),
+    futureDays: zod
+      .number()
+      .min(getProjectSummaryResponseProjectFutureDaysMin)
+      .nullish()
+      .describe(
+        "How many days in the future a non-admin may date an entry. 0 blocks future entries entirely; null means no limit.",
       ),
     createdAt: zod.coerce.date(),
     isAdminOwned: zod.boolean(),

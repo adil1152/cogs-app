@@ -5,6 +5,7 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { FoodMealItem } from "./foodMealItem";
 import type { ProjectServiceKind } from "./projectServiceKind";
 import type { ServiceSubItem } from "./serviceSubItem";
 
@@ -18,6 +19,11 @@ export interface ProjectService {
   color?: string | null;
   /** Defined sub-services for kind=group; empty array otherwise. */
   subItems: ServiceSubItem[];
+  /** Defined meal types for kind=food; empty array otherwise. Fully
+editable at any time — daily entries snapshot the name + weight
+they were saved with, so edits never change historical numbers.
+ */
+  mealItems: FoodMealItem[];
   /** True if at least one daily-entry cost row references this service.
 Used by the UI to lock add/remove of sub-items on group services
 once historical entries exist (rename/reorder remain allowed).

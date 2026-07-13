@@ -1588,9 +1588,12 @@ components:
         newPassword: { type: string, minLength: 8, maxLength: 200 }
     SmtpSettings:
       type: object
-      required: [configured, host, port, secure, username, fromEmail, fromName, hasPassword]
+      required: [configured, provider, host, port, secure, username, fromEmail, fromName, hasPassword, graphTenantId, graphClientId, hasGraphClientSecret, graphSenderEmail]
       properties:
         configured: { type: boolean }
+        provider:
+          type: string
+          enum: [smtp, graph]
         host: { type: [string, 'null'] }
         port: { type: [number, 'null'] }
         secure: { type: [boolean, 'null'] }
@@ -1598,13 +1601,25 @@ components:
         fromEmail: { type: [string, 'null'] }
         fromName: { type: [string, 'null'] }
         hasPassword: { type: boolean }
+        graphTenantId: { type: [string, 'null'] }
+        graphClientId: { type: [string, 'null'] }
+        hasGraphClientSecret: { type: boolean }
+        graphSenderEmail: { type: [string, 'null'] }
     UpdateSmtpSettingsBody:
       type: object
-      required: [host, port, secure, fromEmail]
+      required: [provider]
       properties:
-        host: { type: string, minLength: 1, maxLength: 255 }
-        port: { type: integer, minimum: 1, maximum: 65535 }
-        secure: { type: boolean }
+        provider:
+          type: string
+          enum: [smtp, graph]
+        host:
+          type: [string, 'null']
+          maxLength: 255
+        port:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 65535
+        secure: { type: [boolean, 'null'] }
         username:
           type: [string, 'null']
           maxLength: 255
@@ -1612,10 +1627,29 @@ components:
           type: [string, 'null']
           maxLength: 255
           description: Omit or null to keep the existing password.
-        fromEmail: { type: string, format: email, minLength: 3, maxLength: 255 }
+        fromEmail:
+          type: [string, 'null']
+          format: email
+          minLength: 3
+          maxLength: 255
         fromName:
           type: [string, 'null']
           maxLength: 120
+        graphTenantId:
+          type: [string, 'null']
+          maxLength: 120
+        graphClientId:
+          type: [string, 'null']
+          maxLength: 120
+        graphClientSecret:
+          type: [string, 'null']
+          maxLength: 255
+          description: Omit or null to keep the existing secret.
+        graphSenderEmail:
+          type: [string, 'null']
+          format: email
+          minLength: 3
+          maxLength: 255
     TestSmtpBody:
       type: object
       required: [to]
@@ -1699,6 +1733,14 @@ components:
         disabled:
           type: boolean
           description: When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.
+        backdatedDays:
+          type: [integer, 'null']
+          minimum: 0
+          description: How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.
+        futureDays:
+          type: [integer, 'null']
+          minimum: 0
+          description: How many days in the future a non-admin may date an entry. 0 blocks future entries entirely; null means no limit.
         createdAt: { type: string, format: date-time }
         isAdminOwned: { type: boolean }
         currentUserCanViewSummary: { type: boolean }
@@ -1733,6 +1775,12 @@ components:
         contractEnd: { type: string, format: date }
         notes: { type: string }
         pdfRequired: { type: boolean }
+        backdatedDays:
+          type: [integer, 'null']
+          minimum: 0
+        futureDays:
+          type: [integer, 'null']
+          minimum: 0
     UpdateProjectBody:
       type: object
       properties:
@@ -1746,6 +1794,12 @@ components:
         notes: { type: string }
         pdfRequired: { type: boolean }
         disabled: { type: boolean }
+        backdatedDays:
+          type: [integer, 'null']
+          minimum: 0
+        futureDays:
+          type: [integer, 'null']
+          minimum: 0
 
     ServiceSubItem:
       type: object
@@ -1771,10 +1825,35 @@ components:
           type: string
           nullable: true
           description: Optional hex color (#RRGGBB).
+    FoodMealItem:
+      type: object
+      required: [id, name, weight, sortOrder]
+      description: A meal type defined for a kind=food service.
+      properties:
+        id: { type: string }
+        name: { type: string }
+        weight:
+          type: number
+          description: Manday weight as a fraction (0.2 = 20% of a manday).
+        sortOrder: { type: integer }
+    FoodMealItemInput:
+      type: object
+      required: [name, weight]
+      properties:
+        id:
+          type: string
+          description: When set, identifies an existing meal item to update.
+        name: { type: string, minLength: 1, maxLength: 255 }
+        weight:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Manday weight as a fraction (0.2 = 20% of a manday).
+        sortOrder: { type: integer }
 
     ProjectService:
       type: object
-      required: [id, projectId, name, kind, sortOrder, subItems, hasEntries]
+      required: [id, projectId, name, kind, sortOrder, subItems, mealItems, hasEntries]
       properties:
         id: { type: string }
         projectId: { type: string }
@@ -1792,6 +1871,14 @@ components:
           description: Defined sub-services for kind=group; empty array otherwise.
           items:
             $ref: '#/components/schemas/ServiceSubItem'
+        mealItems:
+          type: array
+          description: |
+            Defined meal types for kind=food; empty array otherwise. Fully
+            editable at any time — daily entries snapshot the name + weight
+            they were saved with, so edits never change historical numbers.
+          items:
+            $ref: '#/components/schemas/FoodMealItem'
         hasEntries:
           type: boolean
           description: |
@@ -1815,6 +1902,14 @@ components:
           description: Initial sub-items (only meaningful when kind=group).
           items:
             $ref: '#/components/schemas/SubItemInput'
+        mealItems:
+          type: array
+          description: |
+            Initial meal types (only meaningful when kind=food). When omitted
+            for a food service, the default five (Breakfast 20%, Lunch /
+            Dinner / Midnight / Meal box 40%) are created.
+          items:
+            $ref: '#/components/schemas/FoodMealItemInput'
     UpdateProjectServiceBody:
       type: object
       properties:
@@ -1835,6 +1930,16 @@ components:
             409 once any cost entry references the parent service.
           items:
             $ref: '#/components/schemas/SubItemInput'
+        mealItems:
+          type: array
+          description: |
+            Full replacement set of meal types for a kind=food service. Items
+            with `id` are updated (rename / re-weight / reorder); items
+            without `id` are inserted; existing items not present are
+            deleted. Always allowed — historical entries keep the snapshot
+            they were saved with.
+          items:
+            $ref: '#/components/schemas/FoodMealItemInput'
     ReorderProjectServiceItem:
       type: object
       required: [id, sortOrder]
@@ -2051,6 +2156,33 @@ components:
           type: [string, 'null']
         occurredAt: { type: string, format: date-time }
 
+    MealQuantityInput:
+      type: object
+      required: [qty]
+      properties:
+        mealItemId:
+          type: [string, 'null']
+          description: |
+            The service meal item this quantity is for. Null only when
+            editing an entry whose saved meal type has since been removed
+            from the service — the row is then matched by `name`.
+        name:
+          type: string
+          description: Required when mealItemId is null (snapshot row match).
+        qty:
+          type: integer
+          minimum: 0
+    MealQuantityBreakdown:
+      type: object
+      required: [mealItemId, name, weight, qty]
+      properties:
+        mealItemId:
+          type: [string, 'null']
+        name: { type: string }
+        weight:
+          type: number
+          description: Snapshot weight (fraction) taken when the entry was saved.
+        qty: { type: integer }
     SubServiceCostInput:
       type: object
       required: [subItemId]
@@ -2095,21 +2227,18 @@ components:
             Per-service manual mandays added on top of the auto-computed
             (food formula) mandays. Used by food services to add ad-hoc
             mandays not captured by the meal counts.
-        breakfastQty:
-          type: integer
-          minimum: 0
-        lunchQty:
-          type: integer
-          minimum: 0
-        dinnerQty:
-          type: integer
-          minimum: 0
-        midnightQty:
-          type: integer
-          minimum: 0
-        mealBoxQty:
-          type: integer
-          minimum: 0
+        mealQuantities:
+          type: array
+          description: |
+            Per meal-type quantity rows for kind=food services. On create,
+            `mealItemId` must reference one of the service's meal items and
+            the server snapshots its current name + weight. On update, rows
+            whose `mealItemId` matches a previously saved row keep that row's
+            snapshot; rows for meal items deleted since the entry was saved
+            are matched by `name`. Mandays for the food line are computed
+            server-side as sum(qty x weight) + manualMandays.
+          items:
+            $ref: '#/components/schemas/MealQuantityInput'
         subCosts:
           type: array
           description: |
@@ -2136,16 +2265,15 @@ components:
           description: Per-service manual mandays added on top of the auto-computed value.
         mandayContribution: { type: number }
         costPerManday: { type: number }
-        breakfastQty:
-          type: [integer, 'null']
-        lunchQty:
-          type: [integer, 'null']
-        dinnerQty:
-          type: [integer, 'null']
-        midnightQty:
-          type: [integer, 'null']
-        mealBoxQty:
-          type: [integer, 'null']
+        mealQuantities:
+          type: array
+          description: |
+            Per meal-type rows for kind=food; empty for other kinds. Name and
+            weight are the snapshot taken when the entry was saved, so they
+            stay correct even after the service's meal items are edited or
+            removed (mealItemId becomes null on removal).
+          items:
+            $ref: '#/components/schemas/MealQuantityBreakdown'
         subCosts:
           type: array
           description: Per sub-item rows for kind=group; empty for other kinds.

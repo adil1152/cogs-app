@@ -1,32 +1,29 @@
-export const MEAL_WEIGHTS = {
-  breakfast: 0.2,
-  lunch: 0.4,
-  dinner: 0.4,
-  midnight: 0.4,
-  mealBox: 0.4,
-} as const;
-
-export interface MealCounts {
-  breakfastQty?: number;
-  lunchQty?: number;
-  dinnerQty?: number;
-  midnightQty?: number;
-  mealBoxQty?: number;
+export interface MealRowLike {
+  weight: number | string;
+  qty: number | string;
 }
 
-export function computeMealMandays(meals: MealCounts): number {
-  const b = meals.breakfastQty ?? 0;
-  const l = meals.lunchQty ?? 0;
-  const d = meals.dinnerQty ?? 0;
-  const m = meals.midnightQty ?? 0;
-  const mb = meals.mealBoxQty ?? 0;
-  return (
-    b * MEAL_WEIGHTS.breakfast +
-    l * MEAL_WEIGHTS.lunch +
-    d * MEAL_WEIGHTS.dinner +
-    m * MEAL_WEIGHTS.midnight +
-    mb * MEAL_WEIGHTS.mealBox
-  );
+/**
+ * Auto mandays for a food line: sum of qty x weight, where each weight is
+ * the meal type's manday fraction (0.2 = 20%). Weights come from the
+ * service's meal items (new entries) or the entry's saved snapshot (edits).
+ */
+export function computeMealRowsMandays(rows: MealRowLike[]): number {
+  return rows.reduce((sum, r) => {
+    const w = Number(r.weight);
+    const q = Number(r.qty);
+    if (Number.isNaN(w) || Number.isNaN(q)) return sum;
+    return sum + w * q;
+  }, 0);
+}
+
+/** UI shows whole percentages (20) but the API stores fractions (0.2). */
+export function weightToPercent(weight: number | string): number {
+  return Math.round(Number(weight) * 100 * 100) / 100;
+}
+
+export function percentToWeight(percent: number | string): number {
+  return Math.round((Number(percent) / 100) * 1000) / 1000;
 }
 
 export function safeCostPerManday(totalCost: number, totalMandays: number): number | null {

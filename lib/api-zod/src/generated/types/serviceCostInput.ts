@@ -5,6 +5,7 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { MealQuantityInput } from "./mealQuantityInput";
 import type { ServiceCostInputKind } from "./serviceCostInputKind";
 import type { SubServiceCostInput } from "./subServiceCostInput";
 
@@ -26,16 +27,15 @@ mandays not captured by the meal counts.
    * @minimum 0
    */
   manualMandays?: number;
-  /** @minimum 0 */
-  breakfastQty?: number;
-  /** @minimum 0 */
-  lunchQty?: number;
-  /** @minimum 0 */
-  dinnerQty?: number;
-  /** @minimum 0 */
-  midnightQty?: number;
-  /** @minimum 0 */
-  mealBoxQty?: number;
+  /** Per meal-type quantity rows for kind=food services. On create,
+`mealItemId` must reference one of the service's meal items and
+the server snapshots its current name + weight. On update, rows
+whose `mealItemId` matches a previously saved row keep that row's
+snapshot; rows for meal items deleted since the entry was saved
+are matched by `name`. Mandays for the food line are computed
+server-side as sum(qty x weight) + manualMandays.
+ */
+  mealQuantities?: MealQuantityInput[];
   /** Per sub-item cost+mandays rows for kind=group services. Cost and
 mandays for the parent service line are derived as the sum of
 these rows (plus manualMandays for mandays). Ignored for other kinds.

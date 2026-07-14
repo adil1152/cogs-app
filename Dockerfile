@@ -24,6 +24,8 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 RUN pnpm rebuild esbuild
 
 # Build the frontend and backend
+ENV PORT=5173
+ENV BASE_PATH=/
 RUN pnpm run build
 
 # Skip pnpm prune --prod because it deletes workspace dependencies in pnpm v11

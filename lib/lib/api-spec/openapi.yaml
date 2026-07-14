@@ -1,0 +1,2722 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: COGS (Cost of Goods Sold) Management API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: Auth
+    description: Browser and mobile authentication endpoints.
+  - name: Users
+    description: User and role management
+  - name: Projects
+    description: Projects and contract metadata
+  - name: Services
+    description: Project-level service lines
+  - name: Access
+    description: Per-project security and report visibility
+  - name: Entries
+    description: Daily mandays and service cost entries
+  - name: Reports
+    description: Dashboards, summaries and aggregations
+  - name: Attachments
+    description: PDF (and other) file attachments on daily entries.
+  - name: Storage
+    description: Object storage upload and serving endpoints.
+  - name: Settings
+    description: Application-wide settings (SMTP email configuration).
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/user:
+    get:
+      tags: [Auth]
+      operationId: getCurrentAuthUser
+      summary: Get the currently authenticated user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Auth status resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserEnvelope'
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerWithPassword
+      summary: Create an account with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterBody'
+      responses:
+        '200':
+          description: Registered and signed in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserEnvelope'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Email already taken with a password set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: loginWithPassword
+      summary: Sign in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginBody'
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserEnvelope'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Clear the current session
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Session cleared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+  /auth/me:
+    patch:
+      tags: [Auth]
+      operationId: updateCurrentUser
+      summary: Update the current user's profile (name + mobile)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeBody'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUser'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/me/password:
+    post:
+      tags: [Auth]
+      operationId: changeMyPassword
+      summary: Change the current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordBody'
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Current password did not match
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: Request a password reset email (public, never reveals whether the email exists)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordBody'
+      responses:
+        '200':
+          description: Accepted (sent if the account exists and email is configured)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForgotPasswordResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Set a new password using an emailed reset token (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordBody'
+      responses:
+        '200':
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid or expired token / validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /settings/smtp:
+    get:
+      tags: [Settings]
+      operationId: getSmtpSettings
+      summary: Get the configured SMTP settings (admin only, password never returned)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmtpSettings'
+    put:
+      tags: [Settings]
+      operationId: updateSmtpSettings
+      summary: Create or update the SMTP settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSmtpSettingsBody'
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmtpSettings'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /settings/smtp/test:
+    post:
+      tags: [Settings]
+      operationId: testSmtpSettings
+      summary: Send a test email using the saved SMTP settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestSmtpBody'
+      responses:
+        '200':
+          description: Test email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: SMTP not configured or send failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: List all users (for admin role and access management)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppUser'
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Create a user account (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppUser'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /users/{id}:
+    patch:
+      tags: [Users]
+      operationId: updateUser
+      summary: Update a user's profile, role, or password (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppUser'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /users/{id}/role:
+    patch:
+      tags: [Users]
+      operationId: updateUserRole
+      summary: Promote or demote a user (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRoleBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppUser'
+
+  /projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: List projects visible to the current user
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: Create a new project (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+  /projects/{id}:
+    get:
+      tags: [Projects]
+      operationId: getProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDetail'
+    patch:
+      tags: [Projects]
+      operationId: updateProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+    delete:
+      tags: [Projects]
+      operationId: deleteProject
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /projects/{id}/services:
+    get:
+      tags: [Services]
+      operationId: listProjectServices
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectService'
+    post:
+      tags: [Services]
+      operationId: createProjectService
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectServiceBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectService'
+  /projects/{id}/services/reorder:
+    patch:
+      tags: [Services]
+      operationId: reorderProjectServices
+      summary: Bulk update sort order for a project's services (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderProjectServicesBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectService'
+  /services/{id}:
+    patch:
+      tags: [Services]
+      operationId: updateProjectService
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectServiceBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectService'
+    delete:
+      tags: [Services]
+      operationId: deleteProjectService
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /security-groups:
+    get:
+      tags: [SecurityGroups]
+      operationId: listSecurityGroups
+      summary: List all security groups (admin only).
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SecurityGroup'
+    post:
+      tags: [SecurityGroups]
+      operationId: createSecurityGroup
+      summary: Create a new security group (admin only).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecurityGroupBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityGroup'
+  /security-groups/{id}:
+    patch:
+      tags: [SecurityGroups]
+      operationId: updateSecurityGroup
+      summary: Edit a security group (admin only). Changes propagate to all access rows that reference it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSecurityGroupBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityGroup'
+    delete:
+      tags: [SecurityGroups]
+      operationId: deleteSecurityGroup
+      summary: Delete a security group (admin only). Blocked while any access row still references it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        '409':
+          description: Group is still in use; remove or reassign access rows first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /projects/{id}/access:
+    get:
+      tags: [Access]
+      operationId: listProjectAccess
+      summary: List users with security access to this project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectAccess'
+    post:
+      tags: [Access]
+      operationId: grantProjectAccess
+      summary: Grant a user permission to view summary reports for this project (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantAccessBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectAccess'
+  /access/{id}:
+    patch:
+      tags: [Access]
+      operationId: updateProjectAccess
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAccessBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectAccess'
+    delete:
+      tags: [Access]
+      operationId: revokeProjectAccess
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /projects/{id}/entries:
+    get:
+      tags: [Entries]
+      operationId: listProjectEntries
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailyEntrySummary'
+    post:
+      tags: [Entries]
+      operationId: createDailyEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDailyEntryBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+  /entries/{id}:
+    get:
+      tags: [Entries]
+      operationId: getDailyEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+    patch:
+      tags: [Entries]
+      operationId: updateDailyEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDailyEntryBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+    delete:
+      tags: [Entries]
+      operationId: deleteDailyEntry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /entries/{id}/approve:
+    post:
+      tags: [Entries]
+      operationId: approveDailyEntry
+      summary: Advance the entry one approval level. Allowed for admins or the user assigned as the next-level approver on this project. Locks at final level.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /entries/{id}/reject:
+    post:
+      tags: [Entries]
+      operationId: rejectDailyEntry
+      summary: Revoke the most recent approval and return the entry to draft. Allowed for admins or the user assigned at the current approval level.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+  /entries/{id}/approvals:
+    get:
+      tags: [Entries]
+      operationId: listEntryApprovals
+      summary: List approvals already granted on this entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntryApproval'
+  /entries/{id}/submit:
+    post:
+      tags: [Entries]
+      operationId: submitDailyEntry
+      summary: |
+        Move a draft entry into the approval queue (status draft → pending).
+        Allowed for admins or any user with canEditEntries on the project.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+        '400':
+          description: Entry is not in draft status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /entries/{id}/reset:
+    post:
+      tags: [Entries]
+      operationId: resetDailyEntry
+      summary: Reset entry to draft (clears all approvals). Allowed for admins or users with canResetApproval on the project.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyEntryDetail'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /entries/{id}/audit:
+    get:
+      tags: [Entries]
+      operationId: listEntryAudit
+      summary: Chronological audit log for an entry (creation, edits, approvals, rejects, resets)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLogEntry'
+
+  /entries/{id}/attachments:
+    get:
+      tags: [Attachments]
+      operationId: listEntryAttachments
+      summary: List file attachments on an entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntryAttachment'
+    post:
+      tags: [Attachments]
+      operationId: createEntryAttachment
+      summary: Record an uploaded file on an entry (call after the file has been PUT to the presigned URL)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEntryAttachmentBody'
+      responses:
+        '201':
+          description: Attachment recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryAttachment'
+  /entries/{id}/attachments/{attachmentId}:
+    delete:
+      tags: [Attachments]
+      operationId: deleteEntryAttachment
+      summary: Remove an attachment from an entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL generated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+        '400':
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve an uploaded object entity
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content streamed with the correct Content-Type.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Object not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /projects/{id}/approvers:
+    get:
+      tags: [Projects]
+      operationId: listProjectApprovers
+      summary: List per-level approver assignments for this project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApproverAssignment'
+    put:
+      tags: [Projects]
+      operationId: setProjectApprovers
+      summary: Replace the full set of approver assignments for this project (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetProjectApproversBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApproverAssignment'
+
+  /reports/projects/{id}/entry-matrix:
+    get:
+      tags: [Reports]
+      operationId: getProjectEntryMatrix
+      summary: |
+        Entry-wise pivot for a single project: returns the project's services and
+        every entry in the date range with each entry's per-service cost and
+        manday contribution. Used by the /reports/entry-wise screen.
+        Requires canViewSummary on the project (or admin).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryMatrixReport'
+        '403':
+          description: Forbidden — user lacks summary access for this project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /reports/dashboard:
+    get:
+      tags: [Reports]
+      operationId: getDashboard
+      summary: Headline numbers for today, week, month
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardReport'
+  /reports/recent-activity:
+    get:
+      tags: [Reports]
+      operationId: getRecentActivity
+      summary: Most recent daily entries across all visible projects
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecentActivityItem'
+  /reports/projects/{id}/summary:
+    get:
+      tags: [Reports]
+      operationId: getProjectSummary
+      summary: Per-project summary report (requires summary access)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: serviceIds
+          in: query
+          required: false
+          description: Comma-separated service IDs to restrict the summary to.
+            When provided, mandays are recomputed from the chosen services'
+            cost rows instead of the entry's stored total.
+          schema:
+            type: string
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectSummaryReport'
+        '403':
+          description: Forbidden — user lacks summary access for this project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /reports/aggregate:
+    get:
+      tags: [Reports]
+      operationId: getAggregateReport
+      summary: Cross-project aggregate breakdown by service
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: projectIds
+          in: query
+          required: false
+          description: Comma-separated list of project ids to include.
+          schema:
+            type: string
+        - name: serviceIds
+          in: query
+          required: false
+          description: Comma-separated list of service ids to include.
+          schema:
+            type: string
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AggregateReport'
+  /reports/trends:
+    get:
+      tags: [Reports]
+      operationId: getTrendsReport
+      summary: Daily trend series of total cost and cost per manday
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: projectIds
+          in: query
+          required: false
+          description: Comma-separated list of project ids to include.
+          schema:
+            type: string
+        - name: serviceIds
+          in: query
+          required: false
+          description: Comma-separated list of service ids to include.
+          schema:
+            type: string
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendsReport'
+  /reports/service-entries:
+    get:
+      tags: [Reports]
+      operationId: listServiceEntries
+      summary: |
+        Drill-down view: list every (entry × service) row matching the filters.
+        Used by the services-breakdown drill-down on Reports and Project Summary.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: projectIds
+          in: query
+          required: false
+          description: Comma-separated list of project ids to include.
+          schema:
+            type: string
+        - name: serviceIds
+          in: query
+          required: false
+          description: Comma-separated list of service ids to include.
+          schema:
+            type: string
+        - name: statuses
+          in: query
+          required: false
+          description: Comma-separated list of entry statuses (draft|pending|approved). Defaults to all.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceEntryRow'
+  /services:
+    get:
+      tags: [Reports]
+      operationId: listVisibleServices
+      summary: List services across visible projects, optionally filtered by project ids
+      parameters:
+        - name: projectIds
+          in: query
+          required: false
+          description: Comma-separated list of project ids to filter by.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceCatalogItem'
+  /projects/{id}/approval-chain:
+    get:
+      tags: [Projects]
+      operationId: getProjectApprovalChain
+      summary: Get the ordered approval chain for a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalChainEntry'
+    put:
+      tags: [Projects]
+      operationId: setProjectApprovalChain
+      summary: Replace the ordered approval chain for a project (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetApprovalChainBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalChainEntry'
+components:
+  parameters:
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      description: Opaque session token — `Bearer <sid>`.
+      schema:
+        type: string
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      description: Browser session cookie.
+      schema:
+        type: string
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, mobile, profileImageUrl, role]
+      properties:
+        id:
+          type: string
+        email:
+          type: [string, 'null']
+          format: email
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+        mobile:
+          type: [string, 'null']
+          description: Optional mobile number. Free-form, never required.
+        profileImageUrl:
+          type: [string, 'null']
+        role:
+          type: string
+          enum: [admin, user]
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/AuthUser'
+            - type: 'null'
+    RegisterBody:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, minLength: 3, maxLength: 255 }
+        password: { type: string, minLength: 8, maxLength: 200 }
+        firstName:
+          type: [string, 'null']
+          maxLength: 80
+        lastName:
+          type: [string, 'null']
+          maxLength: 80
+        mobile:
+          type: [string, 'null']
+          maxLength: 32
+    LoginBody:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, minLength: 3, maxLength: 255 }
+        password: { type: string, minLength: 1, maxLength: 200 }
+    LogoutResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    SuccessResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    UpdateMeBody:
+      type: object
+      properties:
+        firstName:
+          type: [string, 'null']
+          maxLength: 80
+        lastName:
+          type: [string, 'null']
+          maxLength: 80
+        mobile:
+          type: [string, 'null']
+          maxLength: 32
+    ChangePasswordBody:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 1, maxLength: 200 }
+        newPassword: { type: string, minLength: 8, maxLength: 200 }
+    ForgotPasswordBody:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, minLength: 3, maxLength: 255 }
+    ForgotPasswordResponse:
+      type: object
+      required: [success, emailConfigured]
+      properties:
+        success:
+          type: boolean
+          const: true
+        emailConfigured:
+          type: boolean
+          description: False when no SMTP settings are saved, so the UI can tell the user to contact an admin instead.
+    ResetPasswordBody:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string, minLength: 20, maxLength: 200 }
+        newPassword: { type: string, minLength: 8, maxLength: 200 }
+    SmtpSettings:
+      type: object
+      required: [configured, provider, host, port, secure, username, fromEmail, fromName, hasPassword, graphTenantId, graphClientId, hasGraphClientSecret, graphSenderEmail]
+      properties:
+        configured: { type: boolean }
+        provider:
+          type: string
+          enum: [smtp, graph]
+        host: { type: [string, 'null'] }
+        port: { type: [number, 'null'] }
+        secure: { type: [boolean, 'null'] }
+        username: { type: [string, 'null'] }
+        fromEmail: { type: [string, 'null'] }
+        fromName: { type: [string, 'null'] }
+        hasPassword: { type: boolean }
+        graphTenantId: { type: [string, 'null'] }
+        graphClientId: { type: [string, 'null'] }
+        hasGraphClientSecret: { type: boolean }
+        graphSenderEmail: { type: [string, 'null'] }
+    UpdateSmtpSettingsBody:
+      type: object
+      required: [provider]
+      properties:
+        provider:
+          type: string
+          enum: [smtp, graph]
+        host:
+          type: [string, 'null']
+          maxLength: 255
+        port:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 65535
+        secure: { type: [boolean, 'null'] }
+        username:
+          type: [string, 'null']
+          maxLength: 255
+        password:
+          type: [string, 'null']
+          maxLength: 255
+          description: Omit or null to keep the existing password.
+        fromEmail:
+          type: [string, 'null']
+          format: email
+          minLength: 3
+          maxLength: 255
+        fromName:
+          type: [string, 'null']
+          maxLength: 120
+        graphTenantId:
+          type: [string, 'null']
+          maxLength: 120
+        graphClientId:
+          type: [string, 'null']
+          maxLength: 120
+        graphClientSecret:
+          type: [string, 'null']
+          maxLength: 255
+          description: Omit or null to keep the existing secret.
+        graphSenderEmail:
+          type: [string, 'null']
+          format: email
+          minLength: 3
+          maxLength: 255
+    TestSmtpBody:
+      type: object
+      required: [to]
+      properties:
+        to: { type: string, format: email, minLength: 3, maxLength: 255 }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    AppUser:
+      $ref: '#/components/schemas/AuthUser'
+    CreateUserBody:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, minLength: 3, maxLength: 255 }
+        password: { type: string, minLength: 8, maxLength: 200 }
+        firstName:
+          type: [string, 'null']
+          maxLength: 80
+        lastName:
+          type: [string, 'null']
+          maxLength: 80
+        mobile:
+          type: [string, 'null']
+          maxLength: 32
+        role:
+          type: string
+          enum: [admin, user]
+          default: user
+    UpdateUserBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 255
+        firstName:
+          type: [string, 'null']
+          maxLength: 80
+        lastName:
+          type: [string, 'null']
+          maxLength: 80
+        mobile:
+          type: [string, 'null']
+          maxLength: 32
+        role:
+          type: string
+          enum: [admin, user]
+        password:
+          type: string
+          minLength: 8
+          maxLength: 200
+    UpdateUserRoleBody:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, user]
+
+    Project:
+      type: object
+      required: [id, name, location, contractStart, contractEnd, createdAt, isAdminOwned, currentUserCanViewSummary, currentUserCanEditEntries, currentUserCanResetApproval, approvalChain, pdfRequired, disabled]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        code:
+          type: [string, 'null']
+        location: { type: string }
+        contractStart: { type: string, format: date }
+        contractEnd: { type: string, format: date }
+        notes:
+          type: [string, 'null']
+        pdfRequired:
+          type: boolean
+          description: When true, an entry on this project requires at least one attached PDF before it can be submitted for approval.
+        disabled:
+          type: boolean
+          description: When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.
+        backdatedDays:
+          type: [integer, 'null']
+          minimum: 0
+          description: How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.
+        futureDays:
+          type: [integer, 'null']
+          minimum: 0
+          description: How many days in the future a non-admin may date an entry. 0 blocks future entries entirely; null means no limit.
+        createdAt: { type: string, format: date-time }
+        isAdminOwned: { type: boolean }
+        currentUserCanViewSummary: { type: boolean }
+        currentUserCanEditEntries: { type: boolean }
+        currentUserCanResetApproval: { type: boolean }
+        approvalChain:
+          type: array
+          description: Ordered approval chain for this project (position 1 is first, last is final lock).
+          items:
+            $ref: '#/components/schemas/ApprovalChainEntry'
+    ProjectDetail:
+      allOf:
+        - $ref: '#/components/schemas/Project'
+        - type: object
+          required: [services]
+          properties:
+            services:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProjectService'
+    CreateProjectBody:
+      type: object
+      required: [name, location, contractStart, contractEnd]
+      properties:
+        name: { type: string, minLength: 1 }
+        code:
+          type: string
+          maxLength: 32
+          description: Optional short code used as the prefix for entry sequence numbers (e.g. ACME → ACME-0001).
+        location: { type: string, minLength: 1 }
+        contractStart: { type: string, format: date }
+        contractEnd: { type: string, format: date }
+        notes: { type: string }
+        pdfRequired: { type: boolean }
+        backdatedDays:
+          type: [integer, 'null']
+          minimum: 0
+        futureDays:
+          type: [integer, 'null']
+          minimum: 0
+    UpdateProjectBody:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        code:
+          type: [string, 'null']
+          maxLength: 32
+        location: { type: string, minLength: 1 }
+        contractStart: { type: string, format: date }
+        contractEnd: { type: string, format: date }
+        notes: { type: string }
+        pdfRequired: { type: boolean }
+        disabled: { type: boolean }
+        backdatedDays:
+          type: [integer, 'null']
+          minimum: 0
+        futureDays:
+          type: [integer, 'null']
+          minimum: 0
+
+    ServiceSubItem:
+      type: object
+      required: [id, name, sortOrder]
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
+          description: Optional hex color (#RRGGBB) for charts/legends.
+    SubItemInput:
+      type: object
+      required: [name]
+      properties:
+        id:
+          type: string
+          description: When set, identifies an existing sub-item to rename / reorder.
+        name: { type: string, minLength: 1, maxLength: 255 }
+        sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
+          description: Optional hex color (#RRGGBB).
+    FoodMealItem:
+      type: object
+      required: [id, name, weight, sortOrder]
+      description: A meal type defined for a kind=food service.
+      properties:
+        id: { type: string }
+        name: { type: string }
+        weight:
+          type: number
+          description: Manday weight as a fraction (0.2 = 20% of a manday).
+        sortOrder: { type: integer }
+    FoodMealItemInput:
+      type: object
+      required: [name, weight]
+      properties:
+        id:
+          type: string
+          description: When set, identifies an existing meal item to update.
+        name: { type: string, minLength: 1, maxLength: 255 }
+        weight:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Manday weight as a fraction (0.2 = 20% of a manday).
+        sortOrder: { type: integer }
+
+    ProjectService:
+      type: object
+      required: [id, projectId, name, kind, sortOrder, subItems, mealItems, hasEntries]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        name: { type: string }
+        kind:
+          type: string
+          enum: [food, standard, group]
+        sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
+          description: Optional hex color (#RRGGBB) used as the service's brand color in tables and charts.
+        subItems:
+          type: array
+          description: Defined sub-services for kind=group; empty array otherwise.
+          items:
+            $ref: '#/components/schemas/ServiceSubItem'
+        mealItems:
+          type: array
+          description: |
+            Defined meal types for kind=food; empty array otherwise. Fully
+            editable at any time — daily entries snapshot the name + weight
+            they were saved with, so edits never change historical numbers.
+          items:
+            $ref: '#/components/schemas/FoodMealItem'
+        hasEntries:
+          type: boolean
+          description: |
+            True if at least one daily-entry cost row references this service.
+            Used by the UI to lock add/remove of sub-items on group services
+            once historical entries exist (rename/reorder remain allowed).
+    CreateProjectServiceBody:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string, minLength: 1 }
+        kind:
+          type: string
+          enum: [food, standard, group]
+        sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
+        subItems:
+          type: array
+          description: Initial sub-items (only meaningful when kind=group).
+          items:
+            $ref: '#/components/schemas/SubItemInput'
+        mealItems:
+          type: array
+          description: |
+            Initial meal types (only meaningful when kind=food). When omitted
+            for a food service, the default five (Breakfast 20%, Lunch /
+            Dinner / Midnight / Meal box 40%) are created.
+          items:
+            $ref: '#/components/schemas/FoodMealItemInput'
+    UpdateProjectServiceBody:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        kind:
+          type: string
+          enum: [food, standard, group]
+        sortOrder: { type: integer }
+        color:
+          type: string
+          nullable: true
+        subItems:
+          type: array
+          description: |
+            Full replacement set of sub-items. Items with `id` are kept
+            (rename / reorder); items without `id` are inserted; existing
+            sub-items not present are deleted. Add/remove is rejected with
+            409 once any cost entry references the parent service.
+          items:
+            $ref: '#/components/schemas/SubItemInput'
+        mealItems:
+          type: array
+          description: |
+            Full replacement set of meal types for a kind=food service. Items
+            with `id` are updated (rename / re-weight / reorder); items
+            without `id` are inserted; existing items not present are
+            deleted. Always allowed — historical entries keep the snapshot
+            they were saved with.
+          items:
+            $ref: '#/components/schemas/FoodMealItemInput'
+    ReorderProjectServiceItem:
+      type: object
+      required: [id, sortOrder]
+      properties:
+        id: { type: string }
+        sortOrder: { type: integer }
+    ReorderProjectServicesBody:
+      type: object
+      required: [services]
+      properties:
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReorderProjectServiceItem'
+
+    SecurityGroup:
+      type: object
+      required: [id, name, canViewSummary, canEditEntries, canResetApproval, assignmentCount, createdAt]
+      description: |
+        A reusable named bundle of permission flags. When a `project_access` row
+        references a security group, the user's effective permissions are the
+        OR-merge of the group's flags and the row's own flags.
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: string, nullable: true }
+        canViewSummary: { type: boolean }
+        canEditEntries: { type: boolean }
+        canResetApproval: { type: boolean }
+        assignmentCount:
+          type: integer
+          minimum: 0
+          description: How many project_access rows currently reference this group.
+        createdAt: { type: string, format: date-time }
+    CreateSecurityGroupBody:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: string, nullable: true }
+        canViewSummary: { type: boolean, default: false }
+        canEditEntries: { type: boolean, default: false }
+        canResetApproval: { type: boolean, default: false }
+    UpdateSecurityGroupBody:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: string, nullable: true }
+        canViewSummary: { type: boolean }
+        canEditEntries: { type: boolean }
+        canResetApproval: { type: boolean }
+
+    ProjectAccess:
+      type: object
+      required:
+        - id
+        - projectId
+        - userId
+        - canViewSummary
+        - canEditEntries
+        - canResetApproval
+        - effectiveCanViewSummary
+        - effectiveCanEditEntries
+        - effectiveCanResetApproval
+        - grantedAt
+        - user
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        userId: { type: string }
+        securityGroupId:
+          type: string
+          nullable: true
+          description: When set, the linked group's flags are OR-merged with this row's flags.
+        securityGroup:
+          $ref: '#/components/schemas/SecurityGroup'
+          nullable: true
+        canViewSummary:
+          type: boolean
+          description: Per-row "extra" flag, granted in addition to the group's flag (if any).
+        canEditEntries: { type: boolean }
+        canResetApproval: { type: boolean }
+        effectiveCanViewSummary:
+          type: boolean
+          description: Final permission used for authorization checks (group OR row).
+        effectiveCanEditEntries: { type: boolean }
+        effectiveCanResetApproval: { type: boolean }
+        grantedAt: { type: string, format: date-time }
+        user:
+          $ref: '#/components/schemas/AppUser'
+    GrantAccessBody:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: string }
+        securityGroupId:
+          type: string
+          nullable: true
+        canViewSummary:
+          type: boolean
+          default: true
+        canEditEntries:
+          type: boolean
+          default: false
+        canResetApproval:
+          type: boolean
+          default: false
+    UpdateAccessBody:
+      type: object
+      properties:
+        securityGroupId:
+          type: string
+          nullable: true
+        canViewSummary: { type: boolean }
+        canEditEntries: { type: boolean }
+        canResetApproval: { type: boolean }
+
+    ApproverAssignment:
+      type: object
+      required: [id, projectId, level, levelName, userId, user]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        level:
+          type: integer
+          minimum: 1
+        levelName: { type: string }
+        userId: { type: string }
+        user:
+          $ref: '#/components/schemas/AppUser'
+    SetProjectApproversBody:
+      type: object
+      required: [assignments]
+      properties:
+        assignments:
+          type: array
+          items:
+            type: object
+            required: [level, userId]
+            properties:
+              level:
+                type: integer
+                minimum: 1
+              userId: { type: string }
+
+    ApprovalChainEntry:
+      type: object
+      required: [position, levelName]
+      properties:
+        id:
+          type: string
+          nullable: true
+          description: >-
+            Stable persisted id of the approval level. Null for the synthetic
+            default chain (before any chain is saved). When sending a set-chain
+            request, include the id of each surviving level so assignments
+            follow the level across renames and reorders.
+        position:
+          type: integer
+          minimum: 1
+        levelName:
+          type: string
+          minLength: 1
+          maxLength: 32
+    SetApprovalChainBody:
+      type: object
+      required: [chain]
+      properties:
+        chain:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ApprovalChainEntry'
+
+    ServiceCatalogItem:
+      type: object
+      required: [id, projectId, projectName, name, kind]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        projectName: { type: string }
+        name: { type: string }
+        kind:
+          type: string
+          enum: [food, standard, group]
+        color:
+          type: string
+          nullable: true
+
+    AuditLogEntry:
+      type: object
+      required: [id, dailyEntryId, projectId, action, occurredAt]
+      properties:
+        id: { type: string }
+        dailyEntryId:
+          type: [string, 'null']
+        projectId: { type: string }
+        action:
+          type: string
+          description: 'CREATE | UPDATE | DELETE | APPROVE | REJECT | RESET | SUBMIT'
+        level:
+          type: [integer, 'null']
+        levelName:
+          type: [string, 'null']
+        field:
+          type: [string, 'null']
+        oldValue:
+          type: [string, 'null']
+        newValue:
+          type: [string, 'null']
+        actorId:
+          type: [string, 'null']
+        actorName:
+          type: [string, 'null']
+        occurredAt: { type: string, format: date-time }
+
+    MealQuantityInput:
+      type: object
+      required: [qty]
+      properties:
+        mealItemId:
+          type: [string, 'null']
+          description: |
+            The service meal item this quantity is for. Null only when
+            editing an entry whose saved meal type has since been removed
+            from the service — the row is then matched by `name`.
+        name:
+          type: string
+          description: Required when mealItemId is null (snapshot row match).
+        qty:
+          type: integer
+          minimum: 0
+    MealQuantityBreakdown:
+      type: object
+      required: [mealItemId, name, weight, qty]
+      properties:
+        mealItemId:
+          type: [string, 'null']
+        name: { type: string }
+        weight:
+          type: number
+          description: Snapshot weight (fraction) taken when the entry was saved.
+        qty: { type: integer }
+    SubServiceCostInput:
+      type: object
+      required: [subItemId]
+      properties:
+        subItemId: { type: string }
+        cost:
+          type: number
+          minimum: 0
+          default: 0
+        mandays:
+          type: number
+          minimum: 0
+          default: 0
+    SubServiceCostBreakdown:
+      type: object
+      required: [subItemId, subItemName, cost, mandays]
+      properties:
+        subItemId: { type: string }
+        subItemName: { type: string }
+        cost: { type: number }
+        mandays: { type: number }
+
+    ServiceCostInput:
+      type: object
+      required: [projectServiceId, kind]
+      properties:
+        projectServiceId: { type: string }
+        kind:
+          type: string
+          enum: [food, standard, group]
+        cost:
+          type: number
+          description: Total daily cost for this service line (SAR)
+        mandays:
+          type: number
+          minimum: 0
+          description: Optional per-service mandays contribution
+        manualMandays:
+          type: number
+          minimum: 0
+          description: |
+            Per-service manual mandays added on top of the auto-computed
+            (food formula) mandays. Used by food services to add ad-hoc
+            mandays not captured by the meal counts.
+        mealQuantities:
+          type: array
+          description: |
+            Per meal-type quantity rows for kind=food services. On create,
+            `mealItemId` must reference one of the service's meal items and
+            the server snapshots its current name + weight. On update, rows
+            whose `mealItemId` matches a previously saved row keep that row's
+            snapshot; rows for meal items deleted since the entry was saved
+            are matched by `name`. Mandays for the food line are computed
+            server-side as sum(qty x weight) + manualMandays.
+          items:
+            $ref: '#/components/schemas/MealQuantityInput'
+        subCosts:
+          type: array
+          description: |
+            Per sub-item cost+mandays rows for kind=group services. Cost and
+            mandays for the parent service line are derived as the sum of
+            these rows (plus manualMandays for mandays). Ignored for other kinds.
+          items:
+            $ref: '#/components/schemas/SubServiceCostInput'
+    ServiceCostBreakdown:
+      type: object
+      required: [id, projectServiceId, serviceName, kind, cost, mandayContribution, costPerManday]
+      properties:
+        id: { type: string }
+        projectServiceId: { type: string }
+        serviceName: { type: string }
+        kind:
+          type: string
+          enum: [food, standard, group]
+        cost: { type: number }
+        mandays:
+          type: [number, 'null']
+        manualMandays:
+          type: number
+          description: Per-service manual mandays added on top of the auto-computed value.
+        mandayContribution: { type: number }
+        costPerManday: { type: number }
+        mealQuantities:
+          type: array
+          description: |
+            Per meal-type rows for kind=food; empty for other kinds. Name and
+            weight are the snapshot taken when the entry was saved, so they
+            stay correct even after the service's meal items are edited or
+            removed (mealItemId becomes null on removal).
+          items:
+            $ref: '#/components/schemas/MealQuantityBreakdown'
+        subCosts:
+          type: array
+          description: Per sub-item rows for kind=group; empty for other kinds.
+          items:
+            $ref: '#/components/schemas/SubServiceCostBreakdown'
+
+    EntryApproval:
+      type: object
+      required: [id, dailyEntryId, level, levelName, approvedAt]
+      properties:
+        id: { type: string }
+        dailyEntryId: { type: string }
+        level: { type: integer }
+        levelName: { type: string }
+        approverId:
+          type: [string, 'null']
+        approverName:
+          type: [string, 'null']
+        approvedAt: { type: string, format: date-time }
+
+    EntryStatus:
+      type: string
+      enum: [draft, pending, approved]
+      description: |
+        Workflow state. `draft` = created but not yet submitted (won't show
+        up in approver queues). `pending` = submitted; advancing through the
+        approval chain. `approved` = final approval recorded; entry is locked.
+    DailyEntrySummary:
+      type: object
+      required: [id, projectId, projectName, entryDate, location, totalMandays, totalCost, costPerManday, totalMandaysOverride, manualMandays, status, currentApprovalLevel, isLocked, attachmentCount]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        projectName: { type: string }
+        entryDate: { type: string, format: date }
+        location: { type: string }
+        totalMandays: { type: number }
+        totalCost: { type: number }
+        costPerManday: { type: number }
+        totalMandaysOverride: { type: boolean }
+        manualMandays:
+          type: number
+          minimum: 0
+          description: Extra mandays added on top of the auto-summed service mandays. Ignored when totalMandaysOverride is true.
+        attachmentCount:
+          type: integer
+          minimum: 0
+          description: Number of files attached to this entry.
+        status:
+          $ref: '#/components/schemas/EntryStatus'
+        currentApprovalLevel: { type: integer }
+        isLocked: { type: boolean }
+        lockedAt:
+          type: [string, 'null']
+          format: date-time
+        notes:
+          type: [string, 'null']
+        sequenceNumber:
+          type: [integer, 'null']
+        sequenceCode:
+          type: [string, 'null']
+    DailyEntryDetail:
+      allOf:
+        - $ref: '#/components/schemas/DailyEntrySummary'
+        - type: object
+          required: [serviceCosts, attachments]
+          properties:
+            serviceCosts:
+              type: array
+              items:
+                $ref: '#/components/schemas/ServiceCostBreakdown'
+            attachments:
+              type: array
+              items:
+                $ref: '#/components/schemas/EntryAttachment'
+    CreateDailyEntryBody:
+      type: object
+      required: [entryDate, location, serviceCosts]
+      properties:
+        entryDate: { type: string, format: date }
+        location: { type: string, minLength: 1 }
+        totalMandays:
+          type: number
+          minimum: 0
+          description: Only honored when totalMandaysOverride is true; otherwise auto-summed from serviceCosts plus manualMandays.
+        totalMandaysOverride:
+          type: boolean
+          default: false
+        manualMandays:
+          type: number
+          minimum: 0
+          default: 0
+          description: Added on top of auto-summed service mandays. Ignored when totalMandaysOverride is true.
+        notes: { type: string }
+        serviceCosts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceCostInput'
+    UpdateDailyEntryBody:
+      type: object
+      properties:
+        entryDate: { type: string, format: date }
+        location: { type: string, minLength: 1 }
+        totalMandays:
+          type: number
+          minimum: 0
+        totalMandaysOverride:
+          type: boolean
+        manualMandays:
+          type: number
+          minimum: 0
+        notes: { type: string }
+        serviceCosts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceCostInput'
+    EntryAttachment:
+      type: object
+      required: [id, dailyEntryId, objectPath, fileName, fileSize, mimeType, uploadedAt]
+      properties:
+        id: { type: string }
+        dailyEntryId: { type: string }
+        objectPath:
+          type: string
+          description: Normalized path returned by the storage upload endpoint (begins with `/objects/...`).
+        fileName: { type: string }
+        fileSize: { type: integer, minimum: 0 }
+        mimeType: { type: string }
+        uploadedById:
+          type: [string, 'null']
+        uploadedAt: { type: string, format: date-time }
+    CreateEntryAttachmentBody:
+      type: object
+      required: [objectPath, fileName]
+      properties:
+        objectPath: { type: string, minLength: 1 }
+        fileName: { type: string, minLength: 1, maxLength: 255 }
+        fileSize: { type: integer, minimum: 0, default: 0 }
+        mimeType: { type: string, maxLength: 128 }
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name: { type: string, minLength: 1 }
+        size: { type: integer, minimum: 1 }
+        contentType: { type: string, minLength: 1 }
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL: { type: string, format: uri }
+        objectPath: { type: string }
+        metadata:
+          $ref: '#/components/schemas/UploadUrlRequest'
+
+    DashboardKpi:
+      type: object
+      required: [totalCost, totalMandays, costPerManday, entryCount]
+      properties:
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        costPerManday: { type: number }
+        entryCount: { type: integer }
+    ServiceTotal:
+      type: object
+      required: [serviceName, kind, totalCost, totalMandayContribution]
+      properties:
+        serviceName: { type: string }
+        kind:
+          type: string
+          enum: [food, standard, group]
+        color:
+          type: string
+          nullable: true
+        totalCost: { type: number }
+        totalMandayContribution: { type: number }
+    SubServiceTotal:
+      type: object
+      description: |
+        Per-sub-service totals inside a group service's breakdown row.
+        Only present when the parent service kind is "group".
+      required: [subItemId, name, totalCost, totalMandayContribution, costPerManday]
+      properties:
+        subItemId: { type: string }
+        name: { type: string }
+        color:
+          type: string
+          nullable: true
+        totalCost: { type: number }
+        totalMandayContribution: { type: number }
+        costPerManday: { type: number }
+    ProjectServiceTotal:
+      type: object
+      description: |
+        Per-project, per-service totals for the selected date range. The same
+        service NAME in different projects is reported as separate rows
+        (keyed on projectId + serviceId).
+      required:
+        - projectId
+        - projectName
+        - serviceId
+        - serviceName
+        - kind
+        - totalCost
+        - totalMandayContribution
+        - costPerManday
+      properties:
+        projectId: { type: string }
+        projectName: { type: string }
+        serviceId: { type: string }
+        serviceName: { type: string }
+        kind:
+          type: string
+          enum: [food, standard, group]
+        color:
+          type: string
+          nullable: true
+        totalCost: { type: number }
+        totalMandayContribution: { type: number }
+        costPerManday: { type: number }
+        subBreakdown:
+          type: array
+          description: |
+            For kind="group" services: per-sub-service totals so the UI can
+            expand the row inline. Empty / omitted for non-group services.
+          items:
+            $ref: '#/components/schemas/SubServiceTotal'
+    ServiceEntryRow:
+      type: object
+      description: |
+        One row per (daily entry × service) used by the service drill-down view.
+      required:
+        - entryId
+        - projectId
+        - projectName
+        - serviceId
+        - serviceName
+        - kind
+        - entryDate
+        - location
+        - cost
+        - mandayContribution
+        - costPerManday
+      properties:
+        entryId: { type: string }
+        projectId: { type: string }
+        projectName: { type: string }
+        serviceId: { type: string }
+        serviceName: { type: string }
+        kind:
+          type: string
+          enum: [food, standard, group]
+        color:
+          type: string
+          nullable: true
+        entryDate: { type: string, format: date }
+        location: { type: string }
+        cost: { type: number }
+        mandayContribution: { type: number }
+        costPerManday: { type: number }
+        sequenceCode:
+          type: [string, 'null']
+    EntryMatrixCostCell:
+      type: object
+      description: One service's cost contribution on a given entry.
+      required: [serviceId, cost, mandayContribution, costPerManday]
+      properties:
+        serviceId: { type: string }
+        cost: { type: number }
+        mandayContribution: { type: number }
+        costPerManday: { type: number }
+    EntryMatrixRow:
+      type: object
+      required:
+        - entryId
+        - entryDate
+        - location
+        - totalCost
+        - totalMandays
+        - costPerManday
+        - status
+        - costs
+      properties:
+        entryId: { type: string }
+        entryDate: { type: string, format: date }
+        location: { type: string }
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        costPerManday: { type: number }
+        sequenceCode:
+          type: [string, 'null']
+        sequenceNumber:
+          type: [integer, 'null']
+        status:
+          $ref: '#/components/schemas/EntryStatus'
+        currentApprovalLevel: { type: integer }
+        isLocked: { type: boolean }
+        costs:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryMatrixCostCell'
+    EntryMatrixServiceTotal:
+      type: object
+      required: [serviceId, totalCost, totalMandayContribution, costPerManday]
+      properties:
+        serviceId: { type: string }
+        totalCost: { type: number }
+        totalMandayContribution: { type: number }
+        costPerManday: { type: number }
+    EntryMatrixReport:
+      type: object
+      description: |
+        Entry-wise pivot for a single project. `services` are the project's
+        services (in display order) used as horizontal columns. `entries` is
+        one row per daily entry in the date range with sparse `costs[]`
+        keyed by serviceId. `serviceTotals` lets the UI render a footer.
+      required: [project, range, services, entries, serviceTotals]
+      properties:
+        project:
+          $ref: '#/components/schemas/Project'
+        range:
+          type: object
+          required: [from, to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectService'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryMatrixRow'
+        serviceTotals:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntryMatrixServiceTotal'
+    ProjectTotal:
+      type: object
+      required: [projectId, projectName, location, totalCost, totalMandays, costPerManday]
+      properties:
+        projectId: { type: string }
+        projectName: { type: string }
+        location: { type: string }
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        costPerManday: { type: number }
+    DashboardReport:
+      type: object
+      required: [today, weekToDate, monthToDate, serviceBreakdown, projectBreakdown]
+      properties:
+        today:
+          $ref: '#/components/schemas/DashboardKpi'
+        weekToDate:
+          $ref: '#/components/schemas/DashboardKpi'
+        monthToDate:
+          $ref: '#/components/schemas/DashboardKpi'
+        serviceBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceTotal'
+        projectBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectTotal'
+    RecentActivityItem:
+      type: object
+      required: [id, projectId, projectName, entryDate, totalCost, totalMandays, createdAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        projectName: { type: string }
+        entryDate: { type: string, format: date }
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        createdAt: { type: string, format: date-time }
+        createdByName:
+          type: [string, 'null']
+
+    ProjectSummaryReport:
+      type: object
+      required: [project, range, kpi, serviceBreakdown, dailyEntries]
+      properties:
+        project:
+          $ref: '#/components/schemas/Project'
+        range:
+          type: object
+          required: [from, to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        kpi:
+          $ref: '#/components/schemas/DashboardKpi'
+        serviceBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectServiceTotal'
+        dailyEntries:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyEntrySummary'
+
+    AggregateReport:
+      type: object
+      required: [range, kpi, serviceBreakdown, projectBreakdown]
+      properties:
+        range:
+          type: object
+          required: [from, to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        kpi:
+          $ref: '#/components/schemas/DashboardKpi'
+        serviceBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectServiceTotal'
+        projectBreakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectTotal'
+
+    TrendPoint:
+      type: object
+      required: [date, totalCost, totalMandays, costPerManday]
+      properties:
+        date: { type: string, format: date }
+        totalCost: { type: number }
+        totalMandays: { type: number }
+        costPerManday: { type: number }
+    TrendsReport:
+      type: object
+      required: [range, points]
+      properties:
+        range:
+          type: object
+          required: [from, to]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendPoint'

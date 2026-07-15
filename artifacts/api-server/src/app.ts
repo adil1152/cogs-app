@@ -2,6 +2,8 @@ import express, { type Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
+import path from "path";
+import { fileURLToPath } from "url";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./middlewares/authMiddleware";
@@ -33,6 +35,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(authMiddleware);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 app.use("/api", router);
+
+// Serve static assets for the cogs-tracker frontend
+const frontendPath = path.resolve(__dirname, "../../cogs-tracker/dist/public");
+app.use(express.static(frontendPath));
+
+// Fallback for React Router (Single Page Application)
+app.use((req, res, next) => {
+  if (req.method === "GET" && req.accepts("html")) {
+    res.sendFile(path.join(frontendPath, "index.html"));
+  } else {
+    next();
+  }
+});
 
 export default app;

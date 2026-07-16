@@ -54,17 +54,25 @@ jobs:
         env:
           PROD_ENV: ${{ secrets.PROD_ENV_FILE }}
           STAGING_ENV: ${{ secrets.STAGING_ENV_FILE }}
+          PROD_KEY: ${{ secrets.PROD_SSH_KEY }}
+          STAGING_KEY: ${{ secrets.STAGING_SSH_KEY }}
         run: |
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "TARGET_HOST=${{ secrets.PROD_HOST }}" >> $GITHUB_ENV
             echo "ENV_FILE_SECRET_B64=$(echo "$PROD_ENV" | base64 -w 0)" >> $GITHUB_ENV
             echo "CONTAINER_PORT=8080" >> $GITHUB_ENV
-            echo "DOMAIN_NAME=example.com" >> $GITHUB_ENV
+            echo "DOMAIN_NAME=cogs-app.qnc.sa" >> $GITHUB_ENV
+            echo "TARGET_SSH_KEY<<EOF" >> $GITHUB_ENV
+            echo "$PROD_KEY" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
           elif [ "${{ github.ref }}" = "refs/heads/staging" ]; then
             echo "TARGET_HOST=${{ secrets.STAGING_HOST }}" >> $GITHUB_ENV
             echo "ENV_FILE_SECRET_B64=$(echo "$STAGING_ENV" | base64 -w 0)" >> $GITHUB_ENV
             echo "CONTAINER_PORT=8080" >> $GITHUB_ENV
-            echo "DOMAIN_NAME=cogs-app.qnc.sa" >> $GITHUB_ENV
+            echo "DOMAIN_NAME=test-cogs-app.qnc.sa" >> $GITHUB_ENV
+            echo "TARGET_SSH_KEY<<EOF" >> $GITHUB_ENV
+            echo "$STAGING_KEY" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
           fi
 
       - name: Deploy to EC2 via SSH
@@ -72,7 +80,7 @@ jobs:
         with:
           host: ${{ env.TARGET_HOST }}
           username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ env.TARGET_SSH_KEY }}
           envs: REGISTRY,IMAGE_NAME,ENV_FILE_SECRET_B64,CONTAINER_PORT,DOMAIN_NAME
           script: |
             # Login to GitHub Container Registry
@@ -86,7 +94,7 @@ jobs:
             echo "$ENV_FILE_SECRET_B64" | base64 -d > .env
             
             # Sync database schema
-            docker run --rm -e NODE_ENV=production --env-file .env -w /app/lib/db $IMAGE_URL npx drizzle-kit push --force --config ./drizzle.config.ts
+            docker run --rm -e NODE_ENV=production -e PGSSLMODE=require -e NODE_TLS_REJECT_UNAUTHORIZED=0 --env-file .env -w /app/lib/db $IMAGE_URL npx drizzle-kit push --config ./drizzle.config.ts
             
             # Stop and remove the old container if it exists
             docker stop cogs-tracker-app || true

@@ -11,12 +11,24 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  UserCircle,
+  KeyRound,
+  ChevronsUpDown,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "@workspace/replit-auth-web";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { QncLogo } from "@/components/QncLogo";
 import { ThemeToggle } from "@/components/ThemeProvider";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface NavItem {
   label: string;
@@ -80,6 +92,14 @@ const NAV: NavItem[] = [
     adminOnly: true,
     match: (p) => p.startsWith("/admin/security-groups"),
   },
+  {
+    label: "Settings",
+    href: "/admin/settings",
+    icon: Settings,
+    iconColor: "text-slate-500",
+    adminOnly: true,
+    match: (p) => p.startsWith("/admin/settings"),
+  },
 ];
 
 const COLLAPSE_KEY = "qnc-sidebar-collapsed";
@@ -111,7 +131,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen text-foreground flex">
       <aside
         className={cn(
-          "shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col transition-[width] duration-200",
+          "shrink-0 glass-sidebar text-sidebar-foreground border-r flex flex-col transition-[width] duration-200 shadow-sm",
           "sticky top-0 self-start h-screen z-30",
           collapsed ? "w-16" : "w-60",
         )}
@@ -124,16 +144,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
             collapsed ? "px-2 justify-center" : "px-5 gap-3",
           )}
         >
-          <div className="h-10 w-10 rounded-md bg-white grid place-items-center shrink-0 p-1 ring-1 ring-sidebar-border">
-            <QncLogo className="h-full w-full" />
+          <div className="h-10 w-10 rounded-md bg-primary text-primary-foreground grid place-items-center shrink-0 shadow-sm">
+            <QncLogo className="h-6 w-6 text-white" />
           </div>
           {!collapsed && (
-            <div className="leading-tight min-w-0 flex-1">
+            <div className="leading-tight min-w-0 flex-1 animate-in fade-in slide-in-from-left-2 duration-300">
               <div className="font-semibold tracking-tight text-[15px] truncate">
-                Qudrat National Co.
+                Qudrat National
               </div>
-              <div className="text-[10.5px] uppercase tracking-wider text-sidebar-foreground/60 truncate">
-                Full facility management
+              <div className="text-[10.5px] uppercase tracking-wider text-sidebar-foreground/60 truncate font-medium">
+                COGS Tracker
               </div>
             </div>
           )}
@@ -195,51 +215,108 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
           {collapsed ? (
             <div className="flex flex-col items-center gap-1.5">
-              <div className="h-8 w-8 rounded-full bg-sidebar-accent grid place-items-center text-xs font-semibold text-sidebar-accent-foreground">
-                {(user?.firstName?.[0] ?? user?.email?.[0] ?? "?").toUpperCase()}
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="h-8 w-8 rounded-full bg-sidebar-accent grid place-items-center text-xs font-semibold text-sidebar-accent-foreground hover:ring-2 hover:ring-sidebar-ring/40 transition-shadow"
+                    data-testid="button-user-menu"
+                    title="Account menu"
+                  >
+                    {(user?.firstName?.[0] ?? user?.email?.[0] ?? "?").toUpperCase()}
+                  </button>
+                </DropdownMenuTrigger>
+                <UserMenuContent
+                  name={user?.firstName ?? user?.email ?? "—"}
+                  email={user?.email ?? ""}
+                  role={user?.role ?? "user"}
+                  onLogout={logout}
+                />
+              </DropdownMenu>
               <ThemeToggle className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40 h-8 w-8" />
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={logout}
-                className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40 h-8 w-8"
-                data-testid="button-logout"
-                title="Log out"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-2.5 px-1 py-1 mt-1">
-              <div className="h-8 w-8 rounded-full bg-sidebar-accent grid place-items-center text-xs font-semibold text-sidebar-accent-foreground">
-                {(user?.firstName?.[0] ?? user?.email?.[0] ?? "?").toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm truncate">
-                  {user?.firstName ?? user?.email ?? "—"}
-                </div>
-                <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60">
-                  {user?.role ?? "user"}
-                </div>
-              </div>
+            <div className="flex items-center gap-2 px-1 py-1 mt-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="flex-1 min-w-0 flex items-center gap-2.5 rounded-md px-1.5 py-1.5 hover:bg-sidebar-accent/40 transition-colors text-left"
+                    data-testid="button-user-menu"
+                  >
+                    <div className="h-8 w-8 rounded-full bg-sidebar-accent grid place-items-center text-xs font-semibold text-sidebar-accent-foreground shrink-0">
+                      {(user?.firstName?.[0] ?? user?.email?.[0] ?? "?").toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm truncate">
+                        {user?.firstName ?? user?.email ?? "—"}
+                      </div>
+                      <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/60">
+                        {user?.role ?? "user"}
+                      </div>
+                    </div>
+                    <ChevronsUpDown className="h-3.5 w-3.5 text-sidebar-foreground/50 shrink-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <UserMenuContent
+                  name={user?.firstName ?? user?.email ?? "—"}
+                  email={user?.email ?? ""}
+                  role={user?.role ?? "user"}
+                  onLogout={logout}
+                />
+              </DropdownMenu>
               <ThemeToggle className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40" />
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={logout}
-                className="text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40 h-8 w-8"
-                data-testid="button-logout"
-                title="Log out"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
             </div>
           )}
         </div>
       </aside>
       <main className="flex-1 min-w-0 overflow-x-hidden">{children}</main>
     </div>
+  );
+}
+
+function UserMenuContent({
+  name,
+  email,
+  role,
+  onLogout,
+}: {
+  name: string;
+  email: string;
+  role: string;
+  onLogout: () => void;
+}) {
+  const [, navigate] = useLocation();
+  return (
+    <DropdownMenuContent side="top" align="start" className="w-56">
+      <DropdownMenuLabel className="font-normal">
+        <div className="text-sm font-semibold truncate">{name}</div>
+        {email && (
+          <div className="text-xs text-muted-foreground truncate">{email}</div>
+        )}
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+          {role}
+        </div>
+      </DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        onClick={() => navigate("/account")}
+        data-testid="menu-item-account"
+      >
+        <UserCircle className="h-4 w-4 mr-2 text-sky-500" />
+        My account
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        onClick={() => navigate("/account#password")}
+        data-testid="menu-item-change-password"
+      >
+        <KeyRound className="h-4 w-4 mr-2 text-amber-500" />
+        Change password
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={onLogout} data-testid="button-logout">
+        <LogOut className="h-4 w-4 mr-2 text-rose-500" />
+        Log out
+      </DropdownMenuItem>
+    </DropdownMenuContent>
   );
 }
 
@@ -253,7 +330,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="border-b border-border bg-card/60 backdrop-blur">
+    <div className="border-b glass">
       <div className="px-8 py-6 flex items-end justify-between gap-4">
         <div>
           <h1

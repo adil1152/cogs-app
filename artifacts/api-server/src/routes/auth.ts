@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import {
   GetCurrentAuthUserResponse,
@@ -7,18 +8,22 @@ import {
   LogoutResponse,
   UpdateCurrentUserBody as UpdateMeBody,
   ChangeMyPasswordBody as ChangePasswordBody,
+  ForgotPasswordBody,
+  ResetPasswordBody,
 } from "@workspace/api-zod";
-import { db, usersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { db, usersTable, passwordResetTokensTable } from "@workspace/db";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import {
   clearSession,
   getSessionId,
   createSession,
   setSessionCookie,
   updateSessionUser,
+  deleteSessionsForUser,
   type SessionData,
 } from "../lib/auth";
 import { requireAuth } from "../middlewares/requireAuth";
+import { getSmtpSettingsRow, isEmailConfigured, sendMail } from "../lib/mailer";
 
 const router: IRouter = Router();
 
@@ -222,5 +227,131 @@ router.post(
     res.json({ success: true });
   },
 );
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function appOrigin(): string {
+  const published = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
+  if (published) return `https://${published}`;
+  const dev = process.env.REPLIT_DEV_DOMAIN?.trim();
+  if (dev) return `https://${dev}`;
+  return "http://localhost:80";
+}
+
+router.post("/auth/forgot-password", async (req: Request, res: Response) => {
+  const parsed = ForgotPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid email" });
+    return;
+  }
+
+  const smtp = await getSmtpSettingsRow();
+  if (!isEmailConfigured(smtp)) {
+    // Tell the UI email isn't set up — that isn't an account-enumeration
+    // signal, it's global app state.
+    res.json({ success: true, emailConfigured: false });
+    return;
+  }
+
+  const email = normEmail(parsed.data.email);
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.email, email));
+
+  // Always respond success — never reveal whether the account exists.
+  if (user && user.passwordHash) {
+    const token = crypto.randomBytes(32).toString("hex");
+    await db.insert(passwordResetTokensTable).values({
+      userId: user.id,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+    });
+
+    const link = `${appOrigin()}/reset-password?token=${token}`;
+    try {
+      await sendMail({
+        to: email,
+        subject: "COGS Tracker — password reset",
+        text:
+          `Someone requested a password reset for your COGS Tracker account.\n\n` +
+          `Open this link to set a new password (valid for 1 hour):\n${link}\n\n` +
+          `If you didn't request this, you can ignore this email.`,
+        html:
+          `<p>Someone requested a password reset for your COGS Tracker account.</p>` +
+          `<p><a href="${link}">Set a new password</a> (valid for 1 hour)</p>` +
+          `<p>If you didn't request this, you can ignore this email.</p>`,
+      });
+    } catch (err) {
+      req.log.warn({ err }, "Password reset email failed to send");
+      // Still return success — do not leak account existence via errors.
+    }
+  }
+
+  res.json({ success: true, emailConfigured: true });
+});
+
+router.post("/auth/reset-password", async (req: Request, res: Response) => {
+  const parsed = ResetPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({ error: "Password must be at least 8 characters long" });
+    return;
+  }
+
+  const tokenHash = hashToken(parsed.data.token);
+  const now = new Date();
+  const [row] = await db
+    .select()
+    .from(passwordResetTokensTable)
+    .where(
+      and(
+        eq(passwordResetTokensTable.tokenHash, tokenHash),
+        isNull(passwordResetTokensTable.usedAt),
+        gt(passwordResetTokensTable.expiresAt, now),
+      ),
+    );
+
+  if (!row) {
+    res
+      .status(400)
+      .json({ error: "This reset link is invalid or has expired" });
+    return;
+  }
+
+  // Mark used atomically so the same token can't be redeemed twice.
+  const marked = await db
+    .update(passwordResetTokensTable)
+    .set({ usedAt: now })
+    .where(
+      and(
+        eq(passwordResetTokensTable.id, row.id),
+        isNull(passwordResetTokensTable.usedAt),
+      ),
+    )
+    .returning();
+  if (marked.length === 0) {
+    res
+      .status(400)
+      .json({ error: "This reset link is invalid or has expired" });
+    return;
+  }
+
+  const newHash = await bcrypt.hash(parsed.data.newPassword, BCRYPT_ROUNDS);
+  await db
+    .update(usersTable)
+    .set({ passwordHash: newHash, updatedAt: now })
+    .where(eq(usersTable.id, row.userId));
+
+  // Kick out any existing sessions for this account.
+  await deleteSessionsForUser(row.userId);
+
+  res.json({ success: true });
+});
 
 export default router;

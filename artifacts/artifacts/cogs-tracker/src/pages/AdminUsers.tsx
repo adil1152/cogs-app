@@ -39,7 +39,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Pencil, Plus } from "lucide-react";
+import {
+  PaginationControls,
+  usePagination,
+} from "@/components/PaginationControls";
+import { Loader2, Pencil, Plus, Search } from "lucide-react";
+import { useMemo } from "react";
 
 type Role = "admin" | "user";
 
@@ -125,6 +130,23 @@ export default function AdminUsers() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState<UserFormState>(EMPTY_FORM);
+  const [search, setSearch] = useState("");
+
+  const filteredUsers = useMemo(() => {
+    const list = users ?? [];
+    const q = search.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((u) =>
+      [u.firstName, u.lastName, u.email, u.mobile, u.role]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [users, search]);
+
+  const { page, setPage, pageCount, pageRows, total, pageSize } =
+    usePagination(filteredUsers, search);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<AppUser | null>(null);
@@ -199,7 +221,24 @@ export default function AdminUsers() {
           </Button>
         }
       />
-      <div className="px-8 py-6">
+      <div className="px-8 py-6 space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email or mobile…"
+              className="pl-8"
+              data-testid="input-user-search"
+            />
+          </div>
+          {users && users.length > 0 && (
+            <div className="text-xs text-muted-foreground" data-testid="text-user-count">
+              {filteredUsers.length} of {users.length} users
+            </div>
+          )}
+        </div>
         <Card>
           <CardContent className="p-0">
             {isLoading ? (
@@ -216,7 +255,20 @@ export default function AdminUsers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(users ?? []).map((u) => {
+                  {pageRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="py-10 text-center text-sm text-muted-foreground"
+                        data-testid="text-no-user-match"
+                      >
+                        {search.trim()
+                          ? `No users match “${search}”.`
+                          : "No users yet."}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                  {pageRows.map((u) => {
                     const isMe = u.id === me?.id;
                     return (
                       <TableRow key={u.id} data-testid={`user-row-${u.id}`}>
@@ -270,6 +322,14 @@ export default function AdminUsers() {
             )}
           </CardContent>
         </Card>
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          setPage={setPage}
+          total={total}
+          pageSize={pageSize}
+          testidPrefix="users-pagination"
+        />
       </div>
 
       {/* Create user dialog */}

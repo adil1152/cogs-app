@@ -32,6 +32,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  PaginationControls,
+  usePagination,
+} from "@/components/PaginationControls";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/format";
 import {
@@ -54,6 +59,7 @@ export default function Projects() {
   });
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [statusTab, setStatusTab] = useState<"active" | "disabled">("active");
   const [view, setView] = useState<"grid" | "list">(() => {
     try {
       return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
@@ -70,17 +76,32 @@ export default function Projects() {
     }
   };
 
+  // Non-admins never receive disabled projects from the API, so the tab
+  // split only matters for admins.
+  const activeProjects = useMemo(
+    () => (projects ?? []).filter((p) => !(p as any).disabled),
+    [projects],
+  );
+  const disabledProjects = useMemo(
+    () => (projects ?? []).filter((p) => (p as any).disabled),
+    [projects],
+  );
+  const tabProjects =
+    isAdmin && statusTab === "disabled" ? disabledProjects : activeProjects;
+
   const filtered = useMemo(() => {
-    if (!projects) return [];
     const q = search.trim().toLowerCase();
-    if (!q) return projects;
-    return projects.filter(
+    if (!q) return tabProjects;
+    return tabProjects.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         (p.location ?? "").toLowerCase().includes(q) ||
         ((p as any).code ?? "").toLowerCase().includes(q),
     );
-  }, [projects, search]);
+  }, [tabProjects, search]);
+
+  const { page, setPage, pageCount, pageRows, total, pageSize } =
+    usePagination(filtered, `${statusTab}|${search}`);
 
   return (
     <AppLayout>
@@ -101,6 +122,21 @@ export default function Projects() {
       />
       <div className="px-8 py-6 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
+          {isAdmin && (
+            <Tabs
+              value={statusTab}
+              onValueChange={(v) => setStatusTab(v as "active" | "disabled")}
+            >
+              <TabsList>
+                <TabsTrigger value="active" data-testid="tab-active-projects">
+                  Active ({activeProjects.length})
+                </TabsTrigger>
+                <TabsTrigger value="disabled" data-testid="tab-disabled-projects">
+                  Disabled ({disabledProjects.length})
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -133,19 +169,19 @@ export default function Projects() {
               <List className="h-4 w-4" />
             </Button>
           </div>
-          {projects && projects.length > 0 && (
+          {tabProjects.length > 0 && (
             <div
               className="text-xs text-muted-foreground"
               data-testid="text-project-count"
             >
-              {filtered.length} of {projects.length} projects
+              {filtered.length} of {tabProjects.length} projects
             </div>
           )}
         </div>
 
         {isLoading ? (
           <div className="text-sm text-muted-foreground">Loading…</div>
-        ) : projects && projects.length > 0 ? (
+        ) : tabProjects.length > 0 ? (
           filtered.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
@@ -156,7 +192,7 @@ export default function Projects() {
             </Card>
           ) : view === "grid" ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map((p) => (
+              {pageRows.map((p) => (
                 <Link key={p.id} href={`/projects/${p.id}`}>
                   <a className="block group" data-testid={`project-${p.id}`}>
                     <Card
@@ -192,19 +228,29 @@ export default function Projects() {
               ))}
             </div>
           ) : (
-            <ProjectListTable projects={filtered} />
+            <ProjectListTable projects={pageRows} />
           )
         ) : (
           <Card>
             <CardContent className="py-12 text-center">
               <div className="text-sm text-muted-foreground">
-                {isAdmin
-                  ? "No projects yet. Create the first one to get started."
-                  : "You haven't been granted access to any projects yet. Ask your admin."}
+                {isAdmin && statusTab === "disabled"
+                  ? "No disabled projects. Projects you disable from their Settings tab will show up here."
+                  : isAdmin
+                    ? "No projects yet. Create the first one to get started."
+                    : "You haven't been granted access to any projects yet. Ask your admin."}
               </div>
             </CardContent>
           </Card>
         )}
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          setPage={setPage}
+          total={total}
+          pageSize={pageSize}
+          testidPrefix="projects-pagination"
+        />
       </div>
       {isAdmin && <NewProjectDialog open={open} onOpenChange={setOpen} />}
     </AppLayout>

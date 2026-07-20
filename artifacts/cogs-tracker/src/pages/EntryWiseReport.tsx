@@ -1,391 +1,765 @@
 import { useMemo, useState } from "react";
-import { Link, useLocation } from "wouter";
-import { useForm } from "react-hook-form";
-import { useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   useListProjects,
-  useCreateProject,
+  useGetProjectEntryMatrix,
   getListProjectsQueryKey,
-  type CreateProjectBody,
+  getGetProjectEntryMatrixQueryKey,
 } from "@workspace/api-client-react";
-import { useAuth } from "@workspace/replit-auth-web";
 import { AppLayout, PageHeader } from "@/components/AppLayout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ProjectCombobox } from "@/components/ProjectCombobox";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  PaginationControls,
-  usePagination,
-} from "@/components/PaginationControls";
-import { useToast } from "@/hooks/use-toast";
-import { formatDate } from "@/lib/format";
+  ServiceDrilldownDialog,
+  type ServiceDrilldownTarget,
+} from "@/components/ServiceDrilldownDialog";
 import {
-  Plus,
-  MapPin,
-  Calendar,
-  ChevronRight,
-  Search,
-  LayoutGrid,
-  List,
-} from "lucide-react";
+  formatCurrency,
+  formatNumber,
+  formatDate,
+  daysAgoISO,
+  todayISO,
+} from "@/lib/format";
+import { buildUrl, readSearch, useSyncUrlParams } from "@/lib/return-to";
+import { Download, SlidersHorizontal, Lock, ChevronsUpDown } from "lucide-react";
+import { ColorDot } from "@/components/ColorDot";
+import { tintBgStyle } from "@/lib/serviceColor";
+import { SortableHead, sortRows, useSortState } from "@/components/SortableHead";
 
-const VIEW_KEY = "qnc-projects-view";
+type Metric = "cost" | "mandays" | "avg";
 
-export default function Projects() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const { data: projects, isLoading } = useListProjects({
+const METRIC_LABEL: Record<Metric, string> = {
+  cost: "Cost (SAR)",
+  mandays: "Mandays",
+  avg: "SAR / manday",
+};
+
+export default function EntryWiseReport() {
+  const [, navigate] = useLocation();
+  // Hydrate filters from the URL on mount so that "Back to Entry-wise report"
+  // from an entry page restores the exact same view, and so the page can be
+  // bookmarked / shared.
+  const [projectId, setProjectId] = useState<string>(
+    () => readSearch().get("projectId") ?? "",
+  );
+  const [from, setFrom] = useState<string>(
+    () => readSearch().get("from") ?? daysAgoISO(29),
+  );
+  const [to, setTo] = useState<string>(
+    () => readSearch().get("to") ?? todayISO(),
+  );
+
+  // Mirror current filter state back into the URL (replace, no history spam).
+  useSyncUrlParams("/reports/entry-wise", { projectId, from, to });
+
+  // The "back to here" link we hand to entry pages and the drilldown dialog.
+  const returnUrl = buildUrl("/reports/entry-wise", { projectId, from, to });
+
+  const [hiddenServices, setHiddenServices] = useState<Set<string>>(new Set());
+  const [metrics, setMetrics] = useState<Set<Metric>>(
+    new Set(["cost", "mandays", "avg"]),
+  );
+  const [drilldown, setDrilldown] = useState<ServiceDrilldownTarget | null>(
+    null,
+  );
+
+  const { data: allProjects } = useListProjects({
     query: { queryKey: getListProjectsQueryKey() },
   });
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [statusTab, setStatusTab] = useState<"active" | "disabled">("active");
-  const [view, setView] = useState<"grid" | "list">(() => {
-    try {
-      return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
-    } catch {
-      return "grid";
-    }
+  const projects = useMemo(
+    () => (allProjects ?? []).filter((p) => p.currentUserCanViewSummary),
+    [allProjects],
+  );
+
+  const params = { from, to };
+  const matrixQuery = useGetProjectEntryMatrix(projectId, params, {
+    query: {
+      enabled: !!projectId,
+      queryKey: getGetProjectEntryMatrixQueryKey(projectId, params),
+    },
   });
-  const setViewPersist = (v: "grid" | "list") => {
-    setView(v);
-    try {
-      localStorage.setItem(VIEW_KEY, v);
-    } catch {
-      /* ignore */
+  const matrix = matrixQuery.data;
+
+  const visibleServices = useMemo(
+    () => (matrix?.services ?? []).filter((s) => !hiddenServices.has(s.id)),
+    [matrix, hiddenServices],
+  );
+  const visibleMetrics: Metric[] = useMemo(
+    () => (["cost", "mandays", "avg"] as Metric[]).filter((m) => metrics.has(m)),
+    [metrics],
+  );
+  const grandTotalCost = useMemo(
+    () => (matrix?.entries ?? []).reduce((sum, e) => sum + e.totalCost, 0),
+    [matrix],
+  );
+
+  // Sort keys: "seq", "date", "location", "total", or "svc|<serviceId>|<metric>".
+  const sorter = useSortState<string>();
+  const sortedEntries = useMemo(
+    () =>
+      sortRows(matrix?.entries ?? [], sorter.sort, (e, key) => {
+        if (key === "seq") return e.sequenceCode ?? e.entryId;
+        if (key === "date") return e.entryDate;
+        if (key === "location") return e.location;
+        if (key === "total") return e.totalCost;
+        if (key.startsWith("svc|")) {
+          const sep = key.lastIndexOf("|");
+          const serviceId = key.slice(4, sep);
+          const metric = key.slice(sep + 1) as Metric;
+          const c = e.costs.find((x) => x.serviceId === serviceId);
+          if (!c) return null;
+          if (metric === "cost") return c.cost;
+          if (metric === "mandays") return c.mandayContribution;
+          return c.mandayContribution > 0 ? c.costPerManday : null;
+        }
+        return null;
+      }),
+    [matrix, sorter.sort],
+  );
+
+  function toggleService(id: string) {
+    setHiddenServices((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleMetric(m: Metric) {
+    setMetrics((prev) => {
+      const next = new Set(prev);
+      if (next.has(m)) next.delete(m);
+      else next.add(m);
+      return next;
+    });
+  }
+
+  function showAllServices() {
+    setHiddenServices(new Set());
+  }
+  function hideAllServices() {
+    setHiddenServices(new Set((matrix?.services ?? []).map((s) => s.id)));
+  }
+
+  async function exportXlsx() {
+    if (!matrix) return;
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    wb.creator = "QNC COGS Tracker";
+    wb.created = new Date();
+    const ws = wb.addWorksheet("Entry-wise report");
+
+    const totalCols = 3 + visibleServices.length * visibleMetrics.length + 1;
+    const totalColIdx = totalCols;
+
+    // Title block
+    ws.mergeCells(1, 1, 1, totalCols);
+    const titleCell = ws.getCell(1, 1);
+    titleCell.value = `Entry-wise report — ${matrix.project.name}`;
+    titleCell.font = { size: 14, bold: true };
+    titleCell.alignment = { horizontal: "left", vertical: "middle" };
+
+    ws.mergeCells(2, 1, 2, totalCols);
+    ws.getCell(2, 1).value = `Date range: ${formatDate(matrix.range.from)} — ${formatDate(matrix.range.to)}`;
+
+    ws.mergeCells(3, 1, 3, totalCols);
+    ws.getCell(3, 1).value = `Generated: ${new Date().toLocaleString()}`;
+
+    // Header row 1: service group headers
+    const headerRow1Idx = 5;
+    const headerRow2Idx = 6;
+    ws.getCell(headerRow1Idx, 1).value = "#";
+    ws.getCell(headerRow1Idx, 2).value = "Date";
+    ws.getCell(headerRow1Idx, 3).value = "Location";
+    ws.mergeCells(headerRow1Idx, 1, headerRow2Idx, 1);
+    ws.mergeCells(headerRow1Idx, 2, headerRow2Idx, 2);
+    ws.mergeCells(headerRow1Idx, 3, headerRow2Idx, 3);
+
+    visibleServices.forEach((svc, i) => {
+      const startCol = 4 + i * visibleMetrics.length;
+      const endCol = startCol + visibleMetrics.length - 1;
+      if (visibleMetrics.length > 1) {
+        ws.mergeCells(headerRow1Idx, startCol, headerRow1Idx, endCol);
+      }
+      const groupCell = ws.getCell(headerRow1Idx, startCol);
+      groupCell.value = svc.name;
+      groupCell.alignment = { horizontal: "center" };
+      visibleMetrics.forEach((m, j) => {
+        ws.getCell(headerRow2Idx, startCol + j).value = METRIC_LABEL[m];
+      });
+    });
+
+    // Entry total column header (rightmost, spanning both header rows)
+    ws.mergeCells(headerRow1Idx, totalColIdx, headerRow2Idx, totalColIdx);
+    ws.getCell(headerRow1Idx, totalColIdx).value = "Entry total (SAR)";
+    ws.getCell(headerRow1Idx, totalColIdx).alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
+
+    // Style headers
+    for (let c = 1; c <= totalCols; c++) {
+      [headerRow1Idx, headerRow2Idx].forEach((r) => {
+        const cell = ws.getCell(r, c);
+        cell.font = { bold: true };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFEEF2FF" },
+        };
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFCBD5E1" } },
+          left: { style: "thin", color: { argb: "FFCBD5E1" } },
+          right: { style: "thin", color: { argb: "FFCBD5E1" } },
+          bottom: { style: "thin", color: { argb: "FFCBD5E1" } },
+        };
+      });
     }
-  };
 
-  // Non-admins never receive disabled projects from the API, so the tab
-  // split only matters for admins.
-  const activeProjects = useMemo(
-    () => (projects ?? []).filter((p) => !(p as any).disabled),
-    [projects],
-  );
-  const disabledProjects = useMemo(
-    () => (projects ?? []).filter((p) => (p as any).disabled),
-    [projects],
-  );
-  const tabProjects =
-    isAdmin && statusTab === "disabled" ? disabledProjects : activeProjects;
+    // Body rows
+    let rowIdx = headerRow2Idx + 1;
+    matrix.entries.forEach((entry) => {
+      ws.getCell(rowIdx, 1).value =
+        entry.sequenceCode ?? entry.entryId.slice(0, 6);
+      ws.getCell(rowIdx, 2).value = formatDate(entry.entryDate);
+      ws.getCell(rowIdx, 3).value = entry.location;
+      visibleServices.forEach((svc, i) => {
+        const startCol = 4 + i * visibleMetrics.length;
+        const cell = entry.costs.find((c) => c.serviceId === svc.id);
+        visibleMetrics.forEach((m, j) => {
+          const c = ws.getCell(rowIdx, startCol + j);
+          if (!cell) {
+            c.value = null;
+          } else if (m === "cost") {
+            c.value = cell.cost;
+            c.numFmt = '#,##0.00';
+          } else if (m === "mandays") {
+            c.value = cell.mandayContribution;
+            c.numFmt = '#,##0.00';
+          } else {
+            c.value = cell.mandayContribution > 0 ? cell.costPerManday : null;
+            c.numFmt = '#,##0.00';
+          }
+        });
+      });
+      const totalCell = ws.getCell(rowIdx, totalColIdx);
+      totalCell.value = entry.totalCost;
+      totalCell.numFmt = '#,##0.00';
+      totalCell.font = { bold: true };
+      rowIdx++;
+    });
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return tabProjects;
-    return tabProjects.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.location ?? "").toLowerCase().includes(q) ||
-        ((p as any).code ?? "").toLowerCase().includes(q),
-    );
-  }, [tabProjects, search]);
+    // Totals row
+    const totalsRow = rowIdx;
+    ws.getCell(totalsRow, 1).value = "Totals";
+    ws.mergeCells(totalsRow, 1, totalsRow, 3);
+    visibleServices.forEach((svc, i) => {
+      const startCol = 4 + i * visibleMetrics.length;
+      const t = matrix.serviceTotals.find((x) => x.serviceId === svc.id);
+      visibleMetrics.forEach((m, j) => {
+        const c = ws.getCell(totalsRow, startCol + j);
+        if (!t) {
+          c.value = 0;
+        } else if (m === "cost") {
+          c.value = t.totalCost;
+        } else if (m === "mandays") {
+          c.value = t.totalMandayContribution;
+        } else {
+          c.value = t.totalMandayContribution > 0 ? t.costPerManday : null;
+        }
+        c.numFmt = '#,##0.00';
+      });
+    });
+    const grandTotalCell = ws.getCell(totalsRow, totalColIdx);
+    grandTotalCell.value = grandTotalCost;
+    grandTotalCell.numFmt = '#,##0.00';
+    for (let c = 1; c <= totalCols; c++) {
+      const cell = ws.getCell(totalsRow, c);
+      cell.font = { bold: true };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFF1F5F9" },
+      };
+      cell.border = {
+        top: { style: "medium", color: { argb: "FF94A3B8" } },
+      };
+    }
 
-  const { page, setPage, pageCount, pageRows, total, pageSize } =
-    usePagination(filtered, `${statusTab}|${search}`);
+    // Column widths
+    ws.getColumn(1).width = 14;
+    ws.getColumn(2).width = 14;
+    ws.getColumn(3).width = 22;
+    for (let c = 4; c <= totalCols; c++) {
+      ws.getColumn(c).width = 16;
+    }
+
+    // Freeze the first three columns (#, Date, Location) and header rows
+    ws.views = [
+      {
+        state: "frozen",
+        xSplit: 3,
+        ySplit: headerRow2Idx,
+      },
+    ];
+
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `entry-wise-${matrix.project.name.replace(/\s+/g, "-")}-${matrix.range.from}_${matrix.range.to}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  const projectName = matrix?.project.name ?? "—";
 
   return (
     <AppLayout>
-      <PageHeader
-        title="Projects"
-        subtitle={
-          isAdmin
-            ? "Every project on the platform. Create new projects and grant viewing access from each project's page."
-            : "Projects you have access to."
-        }
-        actions={
-          isAdmin && (
-            <Button onClick={() => setOpen(true)} data-testid="button-new-project">
-              <Plus className="mr-2 h-4 w-4" /> New project
-            </Button>
-          )
-        }
-      />
-      <div className="px-8 py-6 space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
-          {isAdmin && (
-            <Tabs
-              value={statusTab}
-              onValueChange={(v) => setStatusTab(v as "active" | "disabled")}
-            >
-              <TabsList>
-                <TabsTrigger value="active" data-testid="tab-active-projects">
-                  Active ({activeProjects.length})
-                </TabsTrigger>
-                <TabsTrigger value="disabled" data-testid="tab-disabled-projects">
-                  Disabled ({disabledProjects.length})
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          )}
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, location or code…"
-              className="pl-8"
-              data-testid="input-project-search"
-            />
-          </div>
-          <div className="flex items-center rounded-md border border-border p-0.5">
-            <Button
-              variant={view === "grid" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-8 px-2.5"
-              onClick={() => setViewPersist("grid")}
-              title="Card view"
-              data-testid="button-view-grid"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={view === "list" ? "secondary" : "ghost"}
-              size="sm"
-              className="h-8 px-2.5"
-              onClick={() => setViewPersist("list")}
-              title="List view"
-              data-testid="button-view-list"
-            >
-              <List className="h-4 w-4" />
-            </Button>
-          </div>
-          {tabProjects.length > 0 && (
-            <div
-              className="text-xs text-muted-foreground"
-              data-testid="text-project-count"
-            >
-              {filtered.length} of {tabProjects.length} projects
-            </div>
-          )}
-        </div>
+      <div className="space-y-6">
+        <PageHeader
+          title="Entry-wise report"
+          subtitle="Pick a project to see every daily entry with all of its services laid out side-by-side. Click any service value to drill into the contributing entries."
+        />
 
-        {isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading…</div>
-        ) : tabProjects.length > 0 ? (
-          filtered.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <div className="text-sm text-muted-foreground" data-testid="text-no-match">
-                  No projects match “{search}”.
-                </div>
-              </CardContent>
-            </Card>
-          ) : view === "grid" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pageRows.map((p) => (
-                <Link key={p.id} href={`/projects/${p.id}`}>
-                  <a className="block group" data-testid={`project-${p.id}`}>
-                    <Card
-                      className={`hover:-translate-y-1 hover:border-accent/40 hover:shadow-md hover:bg-card/80 transition-all duration-300 cursor-pointer h-full ${
-                        (p as any).disabled ? "opacity-60 grayscale-[0.5]" : ""
-                      }`}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Filters</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto] items-end">
+              <div className="space-y-1.5">
+                <Label htmlFor="ew-project">Project</Label>
+                <ProjectCombobox
+                  projects={projects ?? []}
+                  value={projectId}
+                  testidPrefix="ew-project"
+                  onSelect={setProjectId}
+                  trigger={
+                    <Button
+                      id="ew-project"
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between font-normal"
+                      data-testid="ew-project"
                     >
-                      <CardContent className="pt-6 pb-6">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2 font-bold tracking-tight text-lg">
-                            {p.name}
-                            {(p as any).disabled && (
-                              <Badge variant="secondary" className="font-mono uppercase tracking-wider text-[10px]" data-testid={`badge-disabled-${p.id}`}>
-                                Disabled
-                              </Badge>
-                            )}
-                          </div>
-                          <ChevronRight className="h-5 w-5 text-muted-foreground/50 group-hover:text-accent group-hover:translate-x-1 transition-all duration-300" />
-                        </div>
-                        <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground font-medium">
-                          <MapPin className="h-4 w-4 text-accent/70" /> {p.location}
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-2 text-sm text-muted-foreground font-medium">
-                          <Calendar className="h-4 w-4 text-accent/70" /> {formatDate(p.contractStart)} → {formatDate(p.contractEnd)}
-                        </div>
-                        {p.notes && (
-                          <p className="mt-4 text-xs text-muted-foreground/80 line-clamp-2 leading-relaxed">{p.notes}</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </a>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <ProjectListTable projects={pageRows} />
-          )
-        ) : (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <div className="text-sm text-muted-foreground">
-                {isAdmin && statusTab === "disabled"
-                  ? "No disabled projects. Projects you disable from their Settings tab will show up here."
-                  : isAdmin
-                    ? "No projects yet. Create the first one to get started."
-                    : "You haven't been granted access to any projects yet. Ask your admin."}
+                      <span className="truncate">
+                        {(projects ?? []).find((p) => p.id === projectId)
+                          ?.name ?? "Select a project…"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  }
+                />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ew-from">From</Label>
+                <Input
+                  id="ew-from"
+                  type="date"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                  data-testid="ew-from"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ew-to">To</Label>
+                <Input
+                  id="ew-to"
+                  type="date"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                  data-testid="ew-to"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      disabled={!matrix}
+                      data-testid="ew-columns"
+                    >
+                      <SlidersHorizontal className="h-4 w-4 mr-2" />
+                      Columns
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    className="w-72 max-h-[70vh] overflow-y-auto"
+                  >
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                          Metrics
+                        </div>
+                        <div className="space-y-2">
+                          {(["cost", "mandays", "avg"] as Metric[]).map((m) => (
+                            <label
+                              key={m}
+                              className="flex items-center gap-2 text-sm cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={metrics.has(m)}
+                                onCheckedChange={() => toggleMetric(m)}
+                              />
+                              {METRIC_LABEL[m]}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                            Services
+                          </div>
+                          <div className="flex gap-1 text-xs">
+                            <button
+                              type="button"
+                              onClick={showAllServices}
+                              className="text-primary hover:underline"
+                            >
+                              All
+                            </button>
+                            <span className="text-muted-foreground">·</span>
+                            <button
+                              type="button"
+                              onClick={hideAllServices}
+                              className="text-primary hover:underline"
+                            >
+                              None
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {(matrix?.services ?? []).map((s) => (
+                            <label
+                              key={s.id}
+                              className="flex items-center gap-2 text-sm cursor-pointer"
+                            >
+                              <Checkbox
+                                checked={!hiddenServices.has(s.id)}
+                                onCheckedChange={() => toggleService(s.id)}
+                              />
+                              <ColorDot color={(s as any).color} name={s.name} />
+                              <span className="flex-1">{s.name}</span>
+                              <span className="text-xs text-muted-foreground capitalize">
+                                {s.kind}
+                              </span>
+                            </label>
+                          ))}
+                          {(matrix?.services ?? []).length === 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              No services on this project.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button
+                  onClick={exportXlsx}
+                  disabled={!matrix || matrix.entries.length === 0}
+                  data-testid="ew-export"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Excel
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {!projectId ? (
+          <Card>
+            <CardContent className="py-16 text-center text-sm text-muted-foreground">
+              Choose a project above to generate the report.
+            </CardContent>
+          </Card>
+        ) : matrixQuery.isLoading ? (
+          <Card>
+            <CardContent className="py-16 text-center text-sm text-muted-foreground">
+              Loading…
+            </CardContent>
+          </Card>
+        ) : matrixQuery.isError ? (
+          <Card>
+            <CardContent className="py-16 text-center text-sm text-destructive">
+              Couldn't load the report. You may not have summary access to this
+              project.
+            </CardContent>
+          </Card>
+        ) : !matrix ? null : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {projectName} ·{" "}
+                <span className="text-muted-foreground font-normal">
+                  {formatDate(matrix.range.from)} → {formatDate(matrix.range.to)}
+                </span>
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                {matrix.entries.length} entr
+                {matrix.entries.length === 1 ? "y" : "ies"} ·{" "}
+                {visibleServices.length} of {matrix.services.length} service
+                {matrix.services.length === 1 ? "" : "s"} shown
+              </p>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto">
+              {matrix.entries.length === 0 ? (
+                <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  No entries in this date range.
+                </div>
+              ) : visibleServices.length === 0 || visibleMetrics.length === 0 ? (
+                <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+                  All columns are hidden — pick at least one service and one
+                  metric from the Columns menu.
+                </div>
+              ) : (
+                <Table className="min-w-max">
+                  <TableHeader>
+                    <TableRow>
+                      <SortableHead
+                        sortKey="seq"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        firstDir="asc"
+                        rowSpan={2}
+                        className="align-bottom whitespace-nowrap sticky left-0 bg-background z-20"
+                        style={{ minWidth: 110, width: 110 }}
+                      >
+                        #
+                      </SortableHead>
+                      <SortableHead
+                        sortKey="date"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        firstDir="asc"
+                        rowSpan={2}
+                        className="align-bottom whitespace-nowrap sticky bg-background z-20"
+                        style={{ left: 110, minWidth: 110, width: 110 }}
+                      >
+                        Date
+                      </SortableHead>
+                      <SortableHead
+                        sortKey="location"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        firstDir="asc"
+                        rowSpan={2}
+                        className="align-bottom whitespace-nowrap sticky bg-background z-20 border-r border-border shadow-[inset_-1px_0_0_0_var(--border)]"
+                        style={{ left: 220, minWidth: 200, width: 200 }}
+                      >
+                        Location
+                      </SortableHead>
+                      {visibleServices.map((s) => (
+                        <TableHead
+                          key={s.id}
+                          colSpan={visibleMetrics.length}
+                          className="text-center border-l border-border whitespace-nowrap"
+                          style={tintBgStyle((s as any).color, 0.18, s.name)}
+                        >
+                          <div className="font-medium inline-flex items-center justify-center gap-1.5">
+                            <ColorDot color={(s as any).color} name={s.name} />
+                            {s.name}
+                          </div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-normal">
+                            {s.kind}
+                          </div>
+                        </TableHead>
+                      ))}
+                      <SortableHead
+                        sortKey="total"
+                        sort={sorter.sort}
+                        onSort={sorter.toggleSort}
+                        align="right"
+                        rowSpan={2}
+                        className="align-bottom text-right whitespace-nowrap border-l-2 border-border bg-muted/30"
+                      >
+                        Entry total
+                      </SortableHead>
+                    </TableRow>
+                    <TableRow>
+                      {visibleServices.map((s) =>
+                        visibleMetrics.map((m, idx) => (
+                          <SortableHead
+                            key={`${s.id}-${m}`}
+                            sortKey={`svc|${s.id}|${m}`}
+                            sort={sorter.sort}
+                            onSort={sorter.toggleSort}
+                            align="right"
+                            className={
+                              "text-right text-[11px] whitespace-nowrap " +
+                              (idx === 0 ? "border-l border-border" : "")
+                            }
+                          >
+                            {METRIC_LABEL[m]}
+                          </SortableHead>
+                        )),
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedEntries.map((e) => (
+                      <TableRow
+                        key={e.entryId}
+                        data-testid={`ew-row-${e.entryId}`}
+                      >
+                        <TableCell
+                          className="font-mono text-xs whitespace-nowrap sticky left-0 bg-background z-10 cursor-pointer hover:underline"
+                          onClick={() =>
+                            navigate(
+                              buildUrl(
+                                `/projects/${matrix.project.id}/entries/${e.entryId}`,
+                                { returnTo: returnUrl },
+                              ),
+                            )
+                          }
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {e.isLocked && (
+                              <Lock className="h-3 w-3 text-muted-foreground" />
+                            )}
+                            {e.sequenceCode ?? e.entryId.slice(0, 6)}
+                          </span>
+                        </TableCell>
+                        <TableCell
+                          className="whitespace-nowrap sticky bg-background z-10"
+                          style={{ left: 110, minWidth: 110, width: 110 }}
+                        >
+                          {formatDate(e.entryDate)}
+                        </TableCell>
+                        <TableCell
+                          className="whitespace-nowrap sticky bg-background z-10 border-r border-border shadow-[inset_-1px_0_0_0_var(--border)]"
+                          style={{ left: 220, minWidth: 200, width: 200 }}
+                        >
+                          {e.location}
+                        </TableCell>
+                        {visibleServices.map((s) => {
+                          const c = e.costs.find((x) => x.serviceId === s.id);
+                          return visibleMetrics.map((m, idx) => {
+                            const value = !c
+                              ? "—"
+                              : m === "cost"
+                                ? formatCurrency(c.cost)
+                                : m === "mandays"
+                                  ? formatNumber(c.mandayContribution, 2)
+                                  : c.mandayContribution > 0
+                                    ? formatCurrency(c.costPerManday)
+                                    : "—";
+                            return (
+                              <TableCell
+                                key={`${e.entryId}-${s.id}-${m}`}
+                                className={
+                                  "text-right tabular-nums whitespace-nowrap " +
+                                  (idx === 0 ? "border-l border-border " : "") +
+                                  (c
+                                    ? "cursor-pointer hover:bg-muted/50"
+                                    : "text-muted-foreground")
+                                }
+                                style={tintBgStyle((s as any).color, 0.06, s.name)}
+                                onClick={() => {
+                                  if (!c) return;
+                                  setDrilldown({
+                                    serviceId: s.id,
+                                    serviceName: s.name,
+                                    projectId: matrix.project.id,
+                                    projectName: matrix.project.name,
+                                    from: matrix.range.from,
+                                    to: matrix.range.to,
+                                    scopeToProject: true,
+                                    returnTo: returnUrl,
+                                  });
+                                }}
+                              >
+                                {value}
+                              </TableCell>
+                            );
+                          });
+                        })}
+                        <TableCell className="text-right tabular-nums font-semibold whitespace-nowrap border-l-2 border-border bg-muted/30">
+                          {formatCurrency(e.totalCost)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell
+                        colSpan={3}
+                        className="font-semibold sticky left-0 bg-muted/40 z-10 border-r border-border"
+                      >
+                        Totals
+                      </TableCell>
+                      {visibleServices.map((s) => {
+                        const t = matrix.serviceTotals.find(
+                          (x) => x.serviceId === s.id,
+                        );
+                        return visibleMetrics.map((m, idx) => {
+                          const value = !t
+                            ? "—"
+                            : m === "cost"
+                              ? formatCurrency(t.totalCost)
+                              : m === "mandays"
+                                ? formatNumber(t.totalMandayContribution, 2)
+                                : t.totalMandayContribution > 0
+                                  ? formatCurrency(t.costPerManday)
+                                  : "—";
+                          return (
+                            <TableCell
+                              key={`tot-${s.id}-${m}`}
+                              className={
+                                "text-right tabular-nums font-semibold whitespace-nowrap " +
+                                (idx === 0 ? "border-l border-border" : "")
+                              }
+                              style={tintBgStyle((s as any).color, 0.12, s.name)}
+                            >
+                              {value}
+                            </TableCell>
+                          );
+                        });
+                      })}
+                      <TableCell className="text-right tabular-nums font-bold whitespace-nowrap border-l-2 border-border bg-muted/50">
+                        {formatCurrency(grandTotalCost)}
+                      </TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              )}
             </CardContent>
           </Card>
         )}
-        <PaginationControls
-          page={page}
-          pageCount={pageCount}
-          setPage={setPage}
-          total={total}
-          pageSize={pageSize}
-          testidPrefix="projects-pagination"
-        />
       </div>
-      {isAdmin && <NewProjectDialog open={open} onOpenChange={setOpen} />}
+
+      <ServiceDrilldownDialog
+        target={drilldown}
+        onClose={() => setDrilldown(null)}
+      />
     </AppLayout>
-  );
-}
-
-function ProjectListTable({ projects }: { projects: any[] }) {
-  const [, navigate] = useLocation();
-  return (
-    <Card>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Code</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Contract</TableHead>
-              <TableHead className="w-8" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {projects.map((p) => (
-              <TableRow
-                key={p.id}
-                className={`cursor-pointer transition-colors hover:bg-accent/5 ${
-                  p.disabled ? "opacity-60" : ""
-                }`}
-                onClick={() => navigate(`/projects/${p.id}`)}
-                data-testid={`project-row-${p.id}`}
-              >
-                <TableCell>
-                  <span className="inline-flex items-center gap-2 font-medium">
-                    {p.name}
-                    {p.disabled && (
-                      <Badge variant="secondary" data-testid={`badge-disabled-${p.id}`}>
-                        Disabled
-                      </Badge>
-                    )}
-                  </span>
-                </TableCell>
-                <TableCell>
-                  {p.code ? (
-                    <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider">
-                      {p.code}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-muted-foreground">{p.location}</TableCell>
-                <TableCell className="text-muted-foreground text-xs">
-                  {formatDate(p.contractStart)} → {formatDate(p.contractEnd)}
-                </TableCell>
-                <TableCell>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
-function NewProjectDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const { register, handleSubmit, reset, formState } = useForm<CreateProjectBody>();
-  const createProject = useCreateProject({
-    mutation: {
-      onSuccess: () => {
-        toast({ title: "Project created" });
-        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-        reset();
-        onOpenChange(false);
-      },
-      onError: (err: any) =>
-        toast({ title: "Could not create project", description: err.message, variant: "destructive" }),
-    },
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New project</DialogTitle>
-          <DialogDescription>Set the basics. Add services and grant access from the project page.</DialogDescription>
-        </DialogHeader>
-        <form
-          onSubmit={handleSubmit((data) => createProject.mutate({ data }))}
-          className="space-y-3"
-        >
-          <Field label="Project name" required>
-            <Input {...register("name", { required: true })} data-testid="input-project-name" />
-          </Field>
-          <Field label="Location" required>
-            <Input {...register("location", { required: true })} data-testid="input-project-location" />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Contract start" required>
-              <Input type="date" {...register("contractStart", { required: true })} data-testid="input-contract-start" />
-            </Field>
-            <Field label="Contract end" required>
-              <Input type="date" {...register("contractEnd", { required: true })} data-testid="input-contract-end" />
-            </Field>
-          </div>
-          <Field label="Notes">
-            <Textarea rows={3} {...register("notes")} data-testid="input-project-notes" />
-          </Field>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button
-              type="submit"
-              disabled={createProject.isPending || !formState.isValid}
-              data-testid="button-create-project"
-            >
-              Create project
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-        {label}
-        {required && <span className="text-destructive ml-0.5">*</span>}
-      </Label>
-      {children}
-    </div>
   );
 }

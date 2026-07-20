@@ -26,14 +26,7 @@ import {
 import { AppLayout, PageHeader } from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ProjectCombobox } from "@/components/ProjectCombobox";
 import { formatCurrency, formatNumber, formatDate, todayISO } from "@/lib/format";
 import { ArrowRight, ChevronDown, Plus } from "lucide-react";
 import { resolveServiceColor } from "@/lib/serviceColor";
@@ -125,32 +118,18 @@ export default function Dashboard() {
                 <Plus className="mr-2 h-4 w-4" /> New entry
               </Button>
             ) : editableProjects.length > 1 ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              <ProjectCombobox
+                projects={editableProjects}
+                align="end"
+                testidPrefix="new-entry-project"
+                onSelect={(id) => navigate(`/projects/${id}/entries/new`)}
+                trigger={
                   <Button data-testid="button-new-entry">
                     <Plus className="mr-2 h-4 w-4" /> New entry
                     <ChevronDown className="ml-2 h-4 w-4" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
-                  <DropdownMenuLabel>Pick a project</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {editableProjects.map((p) => (
-                    <DropdownMenuItem
-                      key={p.id}
-                      data-testid={`new-entry-project-${p.id}`}
-                      onSelect={() => navigate(`/projects/${p.id}/entries/new`)}
-                    >
-                      <span className="truncate">{p.name}</span>
-                      {p.location ? (
-                        <span className="ml-auto pl-4 text-xs text-muted-foreground truncate">
-                          {p.location}
-                        </span>
-                      ) : null}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                }
+              />
             ) : null}
           </div>
         }

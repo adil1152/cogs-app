@@ -649,6 +649,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /security-groups/{id}/members:
+    get:
+      tags: [SecurityGroups]
+      operationId: listSecurityGroupMembers
+      summary: List global members of a security group (admin only). Members get the group's flags on every project.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SecurityGroupMember'
+    post:
+      tags: [SecurityGroups]
+      operationId: addSecurityGroupMember
+      summary: Add a user as a global member of a security group (admin only).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddSecurityGroupMemberBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityGroupMember'
+        '409':
+          description: User is already a member of this group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /security-group-members/{id}:
+    delete:
+      tags: [SecurityGroups]
+      operationId: removeSecurityGroupMember
+      summary: Remove a global member from a security group (admin only).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Removed
 
   /projects/{id}/access:
     get:
@@ -1957,11 +2020,12 @@ components:
 
     SecurityGroup:
       type: object
-      required: [id, name, canViewSummary, canEditEntries, canResetApproval, assignmentCount, createdAt]
+      required: [id, name, canViewSummary, canEditEntries, canResetApproval, autoAssignNewProjects, assignmentCount, memberCount, createdAt]
       description: |
         A reusable named bundle of permission flags. When a `project_access` row
         references a security group, the user's effective permissions are the
-        OR-merge of the group's flags and the row's own flags.
+        OR-merge of the group's flags and the row's own flags. Users added as
+        global MEMBERS of a group get the group's flags on every project.
       properties:
         id: { type: string }
         name: { type: string, minLength: 1, maxLength: 64 }
@@ -1969,11 +2033,36 @@ components:
         canViewSummary: { type: boolean }
         canEditEntries: { type: boolean }
         canResetApproval: { type: boolean }
+        autoAssignNewProjects:
+          type: boolean
+          description: |
+            When true, every MEMBER of this group is automatically granted a
+            project_access row (linked to this group) on each newly created
+            project.
         assignmentCount:
           type: integer
           minimum: 0
           description: How many project_access rows currently reference this group.
+        memberCount:
+          type: integer
+          minimum: 0
+          description: How many users are global members of this group (flags apply to all projects).
         createdAt: { type: string, format: date-time }
+    SecurityGroupMember:
+      type: object
+      required: [id, securityGroupId, userId, grantedAt, user]
+      properties:
+        id: { type: string }
+        securityGroupId: { type: string }
+        userId: { type: string }
+        grantedAt: { type: string, format: date-time }
+        user:
+          $ref: '#/components/schemas/AppUser'
+    AddSecurityGroupMemberBody:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: string }
     CreateSecurityGroupBody:
       type: object
       required: [name]
@@ -1983,6 +2072,7 @@ components:
         canViewSummary: { type: boolean, default: false }
         canEditEntries: { type: boolean, default: false }
         canResetApproval: { type: boolean, default: false }
+        autoAssignNewProjects: { type: boolean, default: false }
     UpdateSecurityGroupBody:
       type: object
       properties:
@@ -1991,6 +2081,7 @@ components:
         canViewSummary: { type: boolean }
         canEditEntries: { type: boolean }
         canResetApproval: { type: boolean }
+        autoAssignNewProjects: { type: boolean }
 
     ProjectAccess:
       type: object

@@ -9,7 +9,8 @@
 /**
  * A reusable named bundle of permission flags. When a `project_access` row
 references a security group, the user's effective permissions are the
-OR-merge of the group's flags and the row's own flags.
+OR-merge of the group's flags and the row's own flags. Users added as
+global MEMBERS of a group get the group's flags on every project.
 
  */
 export interface SecurityGroup {
@@ -23,10 +24,20 @@ export interface SecurityGroup {
   canViewSummary: boolean;
   canEditEntries: boolean;
   canResetApproval: boolean;
+  /** When true, every MEMBER of this group is automatically granted a
+project_access row (linked to this group) on each newly created
+project.
+ */
+  autoAssignNewProjects: boolean;
   /**
    * How many project_access rows currently reference this group.
    * @minimum 0
    */
   assignmentCount: number;
+  /**
+   * How many users are global members of this group (flags apply to all projects).
+   * @minimum 0
+   */
+  memberCount: number;
   createdAt: Date;
 }

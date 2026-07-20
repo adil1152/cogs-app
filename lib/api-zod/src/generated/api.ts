@@ -1116,6 +1116,8 @@ export const listSecurityGroupsResponseNameMax = 64;
 
 export const listSecurityGroupsResponseAssignmentCountMin = 0;
 
+export const listSecurityGroupsResponseMemberCountMin = 0;
+
 export const ListSecurityGroupsResponseItem = zod
   .object({
     id: zod.string(),
@@ -1124,14 +1126,25 @@ export const ListSecurityGroupsResponseItem = zod
     canViewSummary: zod.boolean(),
     canEditEntries: zod.boolean(),
     canResetApproval: zod.boolean(),
+    autoAssignNewProjects: zod
+      .boolean()
+      .describe(
+        "When true, every MEMBER of this group is automatically granted a\nproject_access row (linked to this group) on each newly created\nproject.\n",
+      ),
     assignmentCount: zod
       .number()
       .min(listSecurityGroupsResponseAssignmentCountMin)
       .describe("How many project_access rows currently reference this group."),
+    memberCount: zod
+      .number()
+      .min(listSecurityGroupsResponseMemberCountMin)
+      .describe(
+        "How many users are global members of this group (flags apply to all projects).",
+      ),
     createdAt: zod.coerce.date(),
   })
   .describe(
-    "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags.\n",
+    "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags. Users added as\nglobal MEMBERS of a group get the group's flags on every project.\n",
   );
 export const ListSecurityGroupsResponse = zod.array(
   ListSecurityGroupsResponseItem,
@@ -1145,6 +1158,7 @@ export const createSecurityGroupBodyNameMax = 64;
 export const createSecurityGroupBodyCanViewSummaryDefault = false;
 export const createSecurityGroupBodyCanEditEntriesDefault = false;
 export const createSecurityGroupBodyCanResetApprovalDefault = false;
+export const createSecurityGroupBodyAutoAssignNewProjectsDefault = false;
 
 export const CreateSecurityGroupBody = zod.object({
   name: zod.string().min(1).max(createSecurityGroupBodyNameMax),
@@ -1158,6 +1172,9 @@ export const CreateSecurityGroupBody = zod.object({
   canResetApproval: zod
     .boolean()
     .default(createSecurityGroupBodyCanResetApprovalDefault),
+  autoAssignNewProjects: zod
+    .boolean()
+    .default(createSecurityGroupBodyAutoAssignNewProjectsDefault),
 });
 
 /**
@@ -1175,11 +1192,14 @@ export const UpdateSecurityGroupBody = zod.object({
   canViewSummary: zod.boolean().optional(),
   canEditEntries: zod.boolean().optional(),
   canResetApproval: zod.boolean().optional(),
+  autoAssignNewProjects: zod.boolean().optional(),
 });
 
 export const updateSecurityGroupResponseNameMax = 64;
 
 export const updateSecurityGroupResponseAssignmentCountMin = 0;
+
+export const updateSecurityGroupResponseMemberCountMin = 0;
 
 export const UpdateSecurityGroupResponse = zod
   .object({
@@ -1189,20 +1209,78 @@ export const UpdateSecurityGroupResponse = zod
     canViewSummary: zod.boolean(),
     canEditEntries: zod.boolean(),
     canResetApproval: zod.boolean(),
+    autoAssignNewProjects: zod
+      .boolean()
+      .describe(
+        "When true, every MEMBER of this group is automatically granted a\nproject_access row (linked to this group) on each newly created\nproject.\n",
+      ),
     assignmentCount: zod
       .number()
       .min(updateSecurityGroupResponseAssignmentCountMin)
       .describe("How many project_access rows currently reference this group."),
+    memberCount: zod
+      .number()
+      .min(updateSecurityGroupResponseMemberCountMin)
+      .describe(
+        "How many users are global members of this group (flags apply to all projects).",
+      ),
     createdAt: zod.coerce.date(),
   })
   .describe(
-    "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags.\n",
+    "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags. Users added as\nglobal MEMBERS of a group get the group's flags on every project.\n",
   );
 
 /**
  * @summary Delete a security group (admin only). Blocked while any access row still references it.
  */
 export const DeleteSecurityGroupParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List global members of a security group (admin only). Members get the group's flags on every project.
+ */
+export const ListSecurityGroupMembersParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const ListSecurityGroupMembersResponseItem = zod.object({
+  id: zod.string(),
+  securityGroupId: zod.string(),
+  userId: zod.string(),
+  grantedAt: zod.coerce.date(),
+  user: zod.object({
+    id: zod.string(),
+    email: zod.string().email().nullable(),
+    firstName: zod.string().nullable(),
+    lastName: zod.string().nullable(),
+    mobile: zod
+      .string()
+      .nullable()
+      .describe("Optional mobile number. Free-form, never required."),
+    profileImageUrl: zod.string().nullable(),
+    role: zod.enum(["admin", "user"]),
+  }),
+});
+export const ListSecurityGroupMembersResponse = zod.array(
+  ListSecurityGroupMembersResponseItem,
+);
+
+/**
+ * @summary Add a user as a global member of a security group (admin only).
+ */
+export const AddSecurityGroupMemberParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const AddSecurityGroupMemberBody = zod.object({
+  userId: zod.string(),
+});
+
+/**
+ * @summary Remove a global member from a security group (admin only).
+ */
+export const RemoveSecurityGroupMemberParams = zod.object({
   id: zod.coerce.string(),
 });
 
@@ -1216,6 +1294,8 @@ export const ListProjectAccessParams = zod.object({
 export const listProjectAccessResponseSecurityGroupNameMax = 64;
 
 export const listProjectAccessResponseSecurityGroupAssignmentCountMin = 0;
+
+export const listProjectAccessResponseSecurityGroupMemberCountMin = 0;
 
 export const ListProjectAccessResponseItem = zod.object({
   id: zod.string(),
@@ -1238,17 +1318,28 @@ export const ListProjectAccessResponseItem = zod.object({
       canViewSummary: zod.boolean(),
       canEditEntries: zod.boolean(),
       canResetApproval: zod.boolean(),
+      autoAssignNewProjects: zod
+        .boolean()
+        .describe(
+          "When true, every MEMBER of this group is automatically granted a\nproject_access row (linked to this group) on each newly created\nproject.\n",
+        ),
       assignmentCount: zod
         .number()
         .min(listProjectAccessResponseSecurityGroupAssignmentCountMin)
         .describe(
           "How many project_access rows currently reference this group.",
         ),
+      memberCount: zod
+        .number()
+        .min(listProjectAccessResponseSecurityGroupMemberCountMin)
+        .describe(
+          "How many users are global members of this group (flags apply to all projects).",
+        ),
       createdAt: zod.coerce.date(),
     })
     .nullish()
     .describe(
-      "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags.\n",
+      "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags. Users added as\nglobal MEMBERS of a group get the group's flags on every project.\n",
     ),
   canViewSummary: zod
     .boolean()
@@ -1320,6 +1411,8 @@ export const updateProjectAccessResponseSecurityGroupNameMax = 64;
 
 export const updateProjectAccessResponseSecurityGroupAssignmentCountMin = 0;
 
+export const updateProjectAccessResponseSecurityGroupMemberCountMin = 0;
+
 export const UpdateProjectAccessResponse = zod.object({
   id: zod.string(),
   projectId: zod.string(),
@@ -1341,17 +1434,28 @@ export const UpdateProjectAccessResponse = zod.object({
       canViewSummary: zod.boolean(),
       canEditEntries: zod.boolean(),
       canResetApproval: zod.boolean(),
+      autoAssignNewProjects: zod
+        .boolean()
+        .describe(
+          "When true, every MEMBER of this group is automatically granted a\nproject_access row (linked to this group) on each newly created\nproject.\n",
+        ),
       assignmentCount: zod
         .number()
         .min(updateProjectAccessResponseSecurityGroupAssignmentCountMin)
         .describe(
           "How many project_access rows currently reference this group.",
         ),
+      memberCount: zod
+        .number()
+        .min(updateProjectAccessResponseSecurityGroupMemberCountMin)
+        .describe(
+          "How many users are global members of this group (flags apply to all projects).",
+        ),
       createdAt: zod.coerce.date(),
     })
     .nullish()
     .describe(
-      "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags.\n",
+      "A reusable named bundle of permission flags. When a `project_access` row\nreferences a security group, the user's effective permissions are the\nOR-merge of the group's flags and the row's own flags. Users added as\nglobal MEMBERS of a group get the group's flags on every project.\n",
     ),
   canViewSummary: zod
     .boolean()

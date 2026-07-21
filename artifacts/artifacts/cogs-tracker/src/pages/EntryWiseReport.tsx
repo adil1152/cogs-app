@@ -12,13 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ProjectCombobox } from "@/components/ProjectCombobox";
 import {
   Popover,
   PopoverContent,
@@ -45,7 +39,7 @@ import {
   todayISO,
 } from "@/lib/format";
 import { buildUrl, readSearch, useSyncUrlParams } from "@/lib/return-to";
-import { Download, SlidersHorizontal, Lock } from "lucide-react";
+import { Download, SlidersHorizontal, Lock, ChevronsUpDown } from "lucide-react";
 import { ColorDot } from "@/components/ColorDot";
 import { tintBgStyle } from "@/lib/serviceColor";
 import { SortableHead, sortRows, useSortState } from "@/components/SortableHead";
@@ -360,18 +354,27 @@ export default function EntryWiseReport() {
             <div className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto] items-end">
               <div className="space-y-1.5">
                 <Label htmlFor="ew-project">Project</Label>
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger id="ew-project" data-testid="ew-project">
-                    <SelectValue placeholder="Select a project…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(projects ?? []).map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ProjectCombobox
+                  projects={projects ?? []}
+                  value={projectId}
+                  testidPrefix="ew-project"
+                  onSelect={setProjectId}
+                  trigger={
+                    <Button
+                      id="ew-project"
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between font-normal"
+                      data-testid="ew-project"
+                    >
+                      <span className="truncate">
+                        {(projects ?? []).find((p) => p.id === projectId)
+                          ?.name ?? "Select a project…"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  }
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="ew-from">From</Label>

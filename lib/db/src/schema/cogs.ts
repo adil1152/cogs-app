@@ -125,6 +125,9 @@ export const securityGroupsTable = pgTable(
     canViewSummary: boolean("can_view_summary").notNull().default(false),
     canEditEntries: boolean("can_edit_entries").notNull().default(false),
     canResetApproval: boolean("can_reset_approval").notNull().default(false),
+    autoAssignNewProjects: boolean("auto_assign_new_projects")
+      .notNull()
+      .default(false),
     createdById: varchar("created_by_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
@@ -170,6 +173,40 @@ export const projectAccessTable = pgTable(
 
 export type SecurityGroup = typeof securityGroupsTable.$inferSelect;
 export type InsertSecurityGroup = typeof securityGroupsTable.$inferInsert;
+
+/**
+ * Global group membership: a member gets the group's permission flags on
+ * EVERY (non-disabled) project, without needing per-project access rows.
+ */
+export const securityGroupMembersTable = pgTable(
+  "security_group_members",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    securityGroupId: varchar("security_group_id")
+      .notNull()
+      .references(() => securityGroupsTable.id, { onDelete: "cascade" }),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    grantedById: varchar("granted_by_id").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    grantedAt: timestamp("granted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("UQ_security_group_members_group_user").on(
+      t.securityGroupId,
+      t.userId,
+    ),
+    index("IDX_security_group_members_user").on(t.userId),
+  ],
+);
+
+export type SecurityGroupMember = typeof securityGroupMembersTable.$inferSelect;
+export type InsertSecurityGroupMember =
+  typeof securityGroupMembersTable.$inferInsert;
 
 export const dailyEntriesTable = pgTable(
   "daily_entries",

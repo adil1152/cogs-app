@@ -37,6 +37,7 @@ export type {
   ProjectTotal,
   ServiceEntryRow,
   SecurityGroup,
+  SecurityGroupMember,
   RecentActivityItem,
   ReorderProjectServiceItem,
   ServiceCostBreakdown,

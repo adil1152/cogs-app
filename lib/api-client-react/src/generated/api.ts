@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AddSecurityGroupMemberBody,
   AggregateReport,
   ApprovalChainEntry,
   ApproverAssignment,
@@ -60,6 +61,7 @@ import type {
   ReorderProjectServicesBody,
   ResetPasswordBody,
   SecurityGroup,
+  SecurityGroupMember,
   ServiceCatalogItem,
   ServiceEntryRow,
   SetApprovalChainBody,
@@ -2549,6 +2551,270 @@ export const useDeleteSecurityGroup = <
   TContext
 > => {
   return useMutation(getDeleteSecurityGroupMutationOptions(options));
+};
+
+/**
+ * @summary List global members of a security group (admin only). Members get the group's flags on every project.
+ */
+export const getListSecurityGroupMembersUrl = (id: string) => {
+  return `/api/security-groups/${id}/members`;
+};
+
+export const listSecurityGroupMembers = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SecurityGroupMember[]> => {
+  return customFetch<SecurityGroupMember[]>(
+    getListSecurityGroupMembersUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListSecurityGroupMembersQueryKey = (id: string) => {
+  return [`/api/security-groups/${id}/members`] as const;
+};
+
+export const getListSecurityGroupMembersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSecurityGroupMembers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSecurityGroupMembers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSecurityGroupMembersQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSecurityGroupMembers>>
+  > = ({ signal }) =>
+    listSecurityGroupMembers(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSecurityGroupMembers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSecurityGroupMembersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSecurityGroupMembers>>
+>;
+export type ListSecurityGroupMembersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List global members of a security group (admin only). Members get the group's flags on every project.
+ */
+
+export function useListSecurityGroupMembers<
+  TData = Awaited<ReturnType<typeof listSecurityGroupMembers>>,
+  TError = ErrorType<unknown>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSecurityGroupMembers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSecurityGroupMembersQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a user as a global member of a security group (admin only).
+ */
+export const getAddSecurityGroupMemberUrl = (id: string) => {
+  return `/api/security-groups/${id}/members`;
+};
+
+export const addSecurityGroupMember = async (
+  id: string,
+  addSecurityGroupMemberBody: AddSecurityGroupMemberBody,
+  options?: RequestInit,
+): Promise<SecurityGroupMember> => {
+  return customFetch<SecurityGroupMember>(getAddSecurityGroupMemberUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(addSecurityGroupMemberBody),
+  });
+};
+
+export const getAddSecurityGroupMemberMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addSecurityGroupMember>>,
+    TError,
+    { id: string; data: BodyType<AddSecurityGroupMemberBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof addSecurityGroupMember>>,
+  TError,
+  { id: string; data: BodyType<AddSecurityGroupMemberBody> },
+  TContext
+> => {
+  const mutationKey = ["addSecurityGroupMember"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof addSecurityGroupMember>>,
+    { id: string; data: BodyType<AddSecurityGroupMemberBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return addSecurityGroupMember(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AddSecurityGroupMemberMutationResult = NonNullable<
+  Awaited<ReturnType<typeof addSecurityGroupMember>>
+>;
+export type AddSecurityGroupMemberMutationBody =
+  BodyType<AddSecurityGroupMemberBody>;
+export type AddSecurityGroupMemberMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Add a user as a global member of a security group (admin only).
+ */
+export const useAddSecurityGroupMember = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof addSecurityGroupMember>>,
+    TError,
+    { id: string; data: BodyType<AddSecurityGroupMemberBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof addSecurityGroupMember>>,
+  TError,
+  { id: string; data: BodyType<AddSecurityGroupMemberBody> },
+  TContext
+> => {
+  return useMutation(getAddSecurityGroupMemberMutationOptions(options));
+};
+
+/**
+ * @summary Remove a global member from a security group (admin only).
+ */
+export const getRemoveSecurityGroupMemberUrl = (id: string) => {
+  return `/api/security-group-members/${id}`;
+};
+
+export const removeSecurityGroupMember = async (
+  id: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getRemoveSecurityGroupMemberUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getRemoveSecurityGroupMemberMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeSecurityGroupMember>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeSecurityGroupMember>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["removeSecurityGroupMember"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeSecurityGroupMember>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return removeSecurityGroupMember(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RemoveSecurityGroupMemberMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeSecurityGroupMember>>
+>;
+
+export type RemoveSecurityGroupMemberMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Remove a global member from a security group (admin only).
+ */
+export const useRemoveSecurityGroupMember = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeSecurityGroupMember>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof removeSecurityGroupMember>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRemoveSecurityGroupMemberMutationOptions(options));
 };
 
 /**

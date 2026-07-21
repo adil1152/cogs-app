@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./addSecurityGroupMemberBody";
 export * from "./aggregateReport";
 export * from "./aggregateReportRange";
 export * from "./approvalChainEntry";
@@ -71,6 +72,7 @@ export * from "./reorderProjectServiceItem";
 export * from "./reorderProjectServicesBody";
 export * from "./resetPasswordBody";
 export * from "./securityGroup";
+export * from "./securityGroupMember";
 export * from "./serviceCatalogItem";
 export * from "./serviceCatalogItemKind";
 export * from "./serviceCostBreakdown";

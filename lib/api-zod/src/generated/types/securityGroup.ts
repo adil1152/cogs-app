@@ -24,6 +24,11 @@ export interface SecurityGroup {
   canViewSummary: boolean;
   canEditEntries: boolean;
   canResetApproval: boolean;
+  /** When true, every MEMBER of this group is automatically granted a
+project_access row (linked to this group) on each newly created
+project.
+ */
+  autoAssignNewProjects: boolean;
   /**
    * How many project_access rows currently reference this group.
    * @minimum 0

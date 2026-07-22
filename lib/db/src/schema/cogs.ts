@@ -125,9 +125,6 @@ export const securityGroupsTable = pgTable(
     canViewSummary: boolean("can_view_summary").notNull().default(false),
     canEditEntries: boolean("can_edit_entries").notNull().default(false),
     canResetApproval: boolean("can_reset_approval").notNull().default(false),
-    autoAssignNewProjects: boolean("auto_assign_new_projects")
-      .notNull()
-      .default(false),
     createdById: varchar("created_by_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),

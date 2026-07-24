@@ -1,5 +1,18 @@
-import { db, projectApprovalChainTable } from "@workspace/db";
-import { asc, eq, inArray } from "drizzle-orm";
+import { db, projectApprovalChainTable, dailyEntriesTable } from "@workspace/db";
+import { and, asc, eq, gt, inArray, type SQL } from "drizzle-orm";
+
+/**
+ * Single definition of "actively in the middle of approval": a pending entry
+ * that has already received at least one approval (currentApprovalLevel > 0).
+ * Only these entries block approval-chain reorders — draft, rejected and
+ * fully approved entries do not.
+ */
+export function midApprovalCondition(): SQL {
+  return and(
+    eq(dailyEntriesTable.status, "pending"),
+    gt(dailyEntriesTable.currentApprovalLevel, 0),
+  )!;
+}
 
 /**
  * Default per-project approval chain used when a project has no explicit

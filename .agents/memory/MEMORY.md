@@ -1,0 +1,2 @@
+- [Approval chain edits](approval-chain-edits.md) — chain edits are all-or-nothing gated on cycle-tied entries; assignments follow levels by id, and persisted level ids rotate on every save.
+- [Rollbacks revert merged work](rollback-reverts.md) — user checkpoint rollbacks can silently undo previously merged features; verify a "done" feature exists in code before building on it or reporting it.

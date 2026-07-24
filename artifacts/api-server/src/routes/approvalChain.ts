@@ -5,13 +5,16 @@ import {
   projectApprovalChainTable,
   projectApproverAssignmentsTable,
   dailyEntriesTable,
-  entryApprovalsTable,
 } from "@workspace/db";
-import { and, eq, gt, or, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { SetProjectApprovalChainBody } from "@workspace/api-zod";
 import { requireAdmin, requireAuth } from "../middlewares/requireAuth";
 import { getProjectVisibility } from "../lib/projectAccess";
-import { defaultChain, getProjectChain } from "../lib/approvalChain";
+import {
+  defaultChain,
+  getProjectChain,
+  midApprovalCondition,
+} from "../lib/approvalChain";
 
 const router: IRouter = Router();
 
@@ -101,25 +104,19 @@ router.put(
         sql`SELECT id FROM ${projectsTable} WHERE id = ${projectId} FOR UPDATE`,
       );
 
-      // Single gate: the approval chain routes approvals by numeric position
-      // and records history keyed by position. Editing it while any entry is
-      // still tied to the cycle (an approval in progress and/or any recorded
-      // approval history) would corrupt in-flight routing and history. Require
-      // the admin to clear those entries first.
+      // Single gate: the approval chain routes approvals by numeric position.
+      // Only entries actively in the MIDDLE of approval (pending with at
+      // least one approval already given) block a reorder — their in-flight
+      // routing would be corrupted. Draft, rejected and fully APPROVED
+      // entries do not block: their history is a snapshot and no further
+      // routing happens.
       const [tied] = await tx
-        .select({ n: sql<number>`COUNT(DISTINCT ${dailyEntriesTable.id})::int` })
+        .select({ n: sql<number>`COUNT(*)::int` })
         .from(dailyEntriesTable)
-        .leftJoin(
-          entryApprovalsTable,
-          eq(entryApprovalsTable.dailyEntryId, dailyEntriesTable.id),
-        )
         .where(
           and(
             eq(dailyEntriesTable.projectId, projectId),
-            or(
-              gt(dailyEntriesTable.currentApprovalLevel, 0),
-              sql`${entryApprovalsTable.id} IS NOT NULL`,
-            ),
+            midApprovalCondition(),
           ),
         );
       const tiedCount = tied?.n ?? 0;
@@ -127,7 +124,7 @@ router.put(
         const e = new Error(
           `This project has ${tiedCount} ${
             tiedCount === 1 ? "entry" : "entries"
-          } in the approval cycle. Reset ${
+          } in the middle of approval. Reset ${
             tiedCount === 1 ? "it" : "them"
           } to draft (or delete ${
             tiedCount === 1 ? "it" : "them"

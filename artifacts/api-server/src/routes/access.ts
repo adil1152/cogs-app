@@ -48,8 +48,10 @@ async function serializeAccess(a: typeof projectAccessTable.$inferSelect) {
           canViewSummary: group.canViewSummary,
           canEditEntries: group.canEditEntries,
           canResetApproval: group.canResetApproval,
-          // assignmentCount is not used by the client when nested here.
+          autoAssignNewProjects: group.autoAssignNewProjects,
+          // Counts are not used by the client when nested here.
           assignmentCount: 0,
+          memberCount: 0,
           createdAt: group.createdAt.toISOString(),
         }
       : null,

@@ -3,6 +3,7 @@ import {
   projectsTable,
   projectAccessTable,
   securityGroupsTable,
+  securityGroupMembersTable,
 } from "@workspace/db";
 import { and, eq, inArray } from "drizzle-orm";
 import type { ChainEntry } from "./approvalChain";
@@ -20,8 +21,42 @@ export interface VisibleProject {
  * - Admins see all projects (full access).
  * - Regular users see projects where they have an access record (effective
  *   permission = OR-merge of the linked security group's flags and the row's
- *   own flags).
+ *   own flags), plus every non-disabled project when they are a global member
+ *   of any security group (the group's flags apply to all projects).
  */
+interface GlobalFlags {
+  canViewSummary: boolean;
+  canEditEntries: boolean;
+  canResetApproval: boolean;
+}
+
+/**
+ * OR-merge of the flags of every security group the user is a GLOBAL member
+ * of. These flags apply to every non-disabled project.
+ */
+async function getGlobalGroupFlags(userId: string): Promise<GlobalFlags> {
+  const rows = await db
+    .select({ group: securityGroupsTable })
+    .from(securityGroupMembersTable)
+    .innerJoin(
+      securityGroupsTable,
+      eq(securityGroupsTable.id, securityGroupMembersTable.securityGroupId),
+    )
+    .where(
+      and(
+        eq(securityGroupMembersTable.userId, userId),
+        // Auto-assign groups grant access via per-project rows created at
+        // project creation, NOT via global membership flags.
+        eq(securityGroupsTable.autoAssignNewProjects, false),
+      ),
+    );
+  return {
+    canViewSummary: rows.some((r) => r.group.canViewSummary),
+    canEditEntries: rows.some((r) => r.group.canEditEntries),
+    canResetApproval: rows.some((r) => r.group.canResetApproval),
+  };
+}
+
 export async function listVisibleProjects(
   userId: string,
   role: string,
@@ -37,30 +72,41 @@ export async function listVisibleProjects(
     }));
   }
 
-  const accessRows = await db
-    .select({
-      access: projectAccessTable,
-      group: securityGroupsTable,
-    })
-    .from(projectAccessTable)
-    .leftJoin(
-      securityGroupsTable,
-      eq(securityGroupsTable.id, projectAccessTable.securityGroupId),
-    )
-    .where(eq(projectAccessTable.userId, userId));
+  const [accessRows, globalFlags] = await Promise.all([
+    db
+      .select({
+        access: projectAccessTable,
+        group: securityGroupsTable,
+      })
+      .from(projectAccessTable)
+      .leftJoin(
+        securityGroupsTable,
+        eq(securityGroupsTable.id, projectAccessTable.securityGroupId),
+      )
+      .where(eq(projectAccessTable.userId, userId)),
+    getGlobalGroupFlags(userId),
+  ]);
+
+  const hasGlobalAccess =
+    globalFlags.canViewSummary ||
+    globalFlags.canEditEntries ||
+    globalFlags.canResetApproval;
 
   const projectIds = accessRows.map((r) => r.access.projectId);
-  if (projectIds.length === 0) return [];
+  if (projectIds.length === 0 && !hasGlobalAccess) return [];
 
   const projects = await db
     .select()
     .from(projectsTable)
     .where(
-      and(
-        inArray(projectsTable.id, projectIds),
-        eq(projectsTable.disabled, false),
-      ),
-    );
+      hasGlobalAccess
+        ? eq(projectsTable.disabled, false)
+        : and(
+            inArray(projectsTable.id, projectIds),
+            eq(projectsTable.disabled, false),
+          ),
+    )
+    .orderBy(projectsTable.name);
 
   const accessById = new Map(accessRows.map((r) => [r.access.projectId, r]));
   return projects.map((p) => {
@@ -70,11 +116,17 @@ export async function listVisibleProjects(
     return {
       project: p,
       canViewSummary:
-        ((g?.canViewSummary ?? false) || (a?.canViewSummary ?? false)),
+        globalFlags.canViewSummary ||
+        (g?.canViewSummary ?? false) ||
+        (a?.canViewSummary ?? false),
       canEditEntries:
-        ((g?.canEditEntries ?? false) || (a?.canEditEntries ?? false)),
+        globalFlags.canEditEntries ||
+        (g?.canEditEntries ?? false) ||
+        (a?.canEditEntries ?? false),
       canResetApproval:
-        ((g?.canResetApproval ?? false) || (a?.canResetApproval ?? false)),
+        globalFlags.canResetApproval ||
+        (g?.canResetApproval ?? false) ||
+        (a?.canResetApproval ?? false),
       isAdminOwned: false,
     };
   });
@@ -127,33 +179,42 @@ export async function getProjectVisibility(
     };
   }
 
-  const [row] = await db
-    .select({
-      access: projectAccessTable,
-      group: securityGroupsTable,
-    })
-    .from(projectAccessTable)
-    .leftJoin(
-      securityGroupsTable,
-      eq(securityGroupsTable.id, projectAccessTable.securityGroupId),
-    )
-    .where(
-      and(
-        eq(projectAccessTable.userId, userId),
-        eq(projectAccessTable.projectId, projectId),
+  const [[row], globalFlags] = await Promise.all([
+    db
+      .select({
+        access: projectAccessTable,
+        group: securityGroupsTable,
+      })
+      .from(projectAccessTable)
+      .leftJoin(
+        securityGroupsTable,
+        eq(securityGroupsTable.id, projectAccessTable.securityGroupId),
+      )
+      .where(
+        and(
+          eq(projectAccessTable.userId, userId),
+          eq(projectAccessTable.projectId, projectId),
+        ),
       ),
-    );
+    getGlobalGroupFlags(userId),
+  ]);
 
   const a = row?.access;
   const g = row?.group;
   return {
     project,
     canViewSummary:
-      ((g?.canViewSummary ?? false) || (a?.canViewSummary ?? false)),
+      globalFlags.canViewSummary ||
+      (g?.canViewSummary ?? false) ||
+      (a?.canViewSummary ?? false),
     canEditEntries:
-      ((g?.canEditEntries ?? false) || (a?.canEditEntries ?? false)),
+      globalFlags.canEditEntries ||
+      (g?.canEditEntries ?? false) ||
+      (a?.canEditEntries ?? false),
     canResetApproval:
-      ((g?.canResetApproval ?? false) || (a?.canResetApproval ?? false)),
+      globalFlags.canResetApproval ||
+      (g?.canResetApproval ?? false) ||
+      (a?.canResetApproval ?? false),
     isAdminOwned: false,
   };
 }

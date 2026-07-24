@@ -76,18 +76,9 @@ export default function Login() {
               />
             </div>
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sidebar-foreground/80">
-                  Password
-                </Label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs text-sidebar-primary hover:underline font-medium"
-                  data-testid="link-forgot-password"
-                >
-                  Forgot password?
-                </Link>
-              </div>
+              <Label htmlFor="password" className="text-sidebar-foreground/80">
+                Password
+              </Label>
               <PasswordInput
                 id="password"
                 autoComplete="current-password"

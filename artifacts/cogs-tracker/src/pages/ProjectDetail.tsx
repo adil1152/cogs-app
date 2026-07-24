@@ -42,6 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { UserCombobox } from "@/components/UserCombobox";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -1617,14 +1618,12 @@ function GrantAccessCard({
           <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_auto_auto_auto_auto] gap-3 items-end">
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">User</Label>
-              <Select value={userId} onValueChange={setUserId}>
-                <SelectTrigger data-testid="select-grant-user"><SelectValue placeholder="Choose a user" /></SelectTrigger>
-                <SelectContent>
-                  {users.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.firstName ?? u.email} — {u.email}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <UserCombobox
+                users={users}
+                value={userId}
+                onSelect={setUserId}
+                testidPrefix="grant-user"
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Security group</Label>

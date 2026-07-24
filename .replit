@@ -19,37 +19,8 @@ expertMode = true
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
 
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
-externalPort = 80
-
-[[ports]]
-localPort = 8082
-externalPort = 3001
-
-[[ports]]
-localPort = 8083
-externalPort = 3003
-
-[[ports]]
-localPort = 8084
-externalPort = 3002
-
-[[ports]]
-localPort = 8085
-externalPort = 4200
-
-[[ports]]
-localPort = 8086
-externalPort = 5000
-
-[[ports]]
-localPort = 26060
-externalPort = 3000
-
 [nix]
 channel = "stable-25_05"
+
+[objectStorage]
+defaultBucketID = "replit-objstore-1bcb21e5-b114-4a1f-88b4-8b43d7153fde"

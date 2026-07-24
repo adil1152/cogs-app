@@ -12,12 +12,17 @@
   },
   "private": true,
   "devDependencies": {
-    "typescript": "~5.9.2",
-    "prettier": "^3.8.1"
+    "@rollup/rollup-win32-x64-msvc": "^4.62.2",
+    "@tailwindcss/oxide-win32-x64-msvc": "^4.3.3",
+    "lightningcss-win32-x64-msvc": "^1.33.0",
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2"
   },
-  "pnpm": {
-    "approvedBuilds": {
-      "esbuild": "0.27.3"
-    }
-  }
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "pnpm.onlyBuiltDependencies": [
+    "esbuild"
+  ]
 }

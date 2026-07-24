@@ -1,5 +1,12 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, projectsTable, projectServicesTable } from "@workspace/db";
+import {
+  db,
+  projectsTable,
+  projectServicesTable,
+  securityGroupsTable,
+  securityGroupMembersTable,
+  projectAccessTable,
+} from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { CreateProjectBody, UpdateProjectBody } from "@workspace/api-zod";
 import { requireAuth, requireAdmin } from "../middlewares/requireAuth";
@@ -16,6 +23,62 @@ import {
 } from "../lib/approvalChain";
 
 const router: IRouter = Router();
+
+/**
+ * Auto-grant access on a freshly created project: every member of a security
+ * group flagged `autoAssignNewProjects` gets one project_access row.
+ * - Member of exactly one auto-assign group: row linked to that group with
+ *   row flags false — effective permissions come live from the group's flags
+ *   via the OR-merge, so later group edits propagate.
+ * - Member of several auto-assign groups: one row with securityGroupId null
+ *   and the row flags set to the OR of all those groups' flags at creation
+ *   time (deterministic, no permission loss).
+ */
+async function autoAssignGroupsToProject(
+  projectId: string,
+  grantedById: string,
+): Promise<void> {
+  const rows = await db
+    .select({
+      userId: securityGroupMembersTable.userId,
+      group: securityGroupsTable,
+    })
+    .from(securityGroupMembersTable)
+    .innerJoin(
+      securityGroupsTable,
+      eq(securityGroupsTable.id, securityGroupMembersTable.securityGroupId),
+    )
+    .where(eq(securityGroupsTable.autoAssignNewProjects, true));
+  if (rows.length === 0) return;
+  const byUser = new Map<string, (typeof rows)[number]["group"][]>();
+  for (const r of rows) {
+    const list = byUser.get(r.userId) ?? [];
+    list.push(r.group);
+    byUser.set(r.userId, list);
+  }
+  const values = Array.from(byUser.entries()).map(([userId, groups]) =>
+    groups.length === 1
+      ? {
+          projectId,
+          userId,
+          securityGroupId: groups[0].id,
+          canViewSummary: false,
+          canEditEntries: false,
+          canResetApproval: false,
+          grantedById,
+        }
+      : {
+          projectId,
+          userId,
+          securityGroupId: null,
+          canViewSummary: groups.some((g) => g.canViewSummary),
+          canEditEntries: groups.some((g) => g.canEditEntries),
+          canResetApproval: groups.some((g) => g.canResetApproval),
+          grantedById,
+        },
+  );
+  await db.insert(projectAccessTable).values(values).onConflictDoNothing();
+}
 
 router.get(
   "/projects",
@@ -73,6 +136,7 @@ router.post(
         .returning();
 
       const chain = await seedDefaultChain(created.id);
+      await autoAssignGroupsToProject(created.id, req.user!.id);
 
       res.status(201).json(
         serializeProject(

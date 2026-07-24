@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "b26O02WZxrunGRztohYU7"
+uri = "file://exports/cogs-tracker-source.zip"
+type = "unspecified"
+title = "COGS Tracker — full project source (zip)"

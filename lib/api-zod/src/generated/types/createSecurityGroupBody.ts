@@ -16,4 +16,5 @@ export interface CreateSecurityGroupBody {
   canViewSummary?: boolean;
   canEditEntries?: boolean;
   canResetApproval?: boolean;
+  autoAssignNewProjects?: boolean;
 }

@@ -242,7 +242,16 @@ function appOrigin(): string {
   return "http://localhost:80";
 }
 
+// Self-service password reset is disabled: admins reset passwords via
+// /admin/users. Flip this to false to re-enable the flow (the frontend
+// pages/link were also removed and would need restoring).
+const PASSWORD_RESET_DISABLED = true;
+
 router.post("/auth/forgot-password", async (req: Request, res: Response) => {
+  if (PASSWORD_RESET_DISABLED) {
+    res.status(404).json({ error: "Password reset is disabled" });
+    return;
+  }
   const parsed = ForgotPasswordBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid email" });
@@ -296,6 +305,10 @@ router.post("/auth/forgot-password", async (req: Request, res: Response) => {
 });
 
 router.post("/auth/reset-password", async (req: Request, res: Response) => {
+  if (PASSWORD_RESET_DISABLED) {
+    res.status(404).json({ error: "Password reset is disabled" });
+    return;
+  }
   const parsed = ResetPasswordBody.safeParse(req.body);
   if (!parsed.success) {
     res

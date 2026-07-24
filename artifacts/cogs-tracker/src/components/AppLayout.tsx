@@ -12,7 +12,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   UserCircle,
-  KeyRound,
   ChevronsUpDown,
   Settings,
 } from "lucide-react";
@@ -303,13 +302,6 @@ function UserMenuContent({
       >
         <UserCircle className="h-4 w-4 mr-2 text-sky-500" />
         My account
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        onClick={() => navigate("/account#password")}
-        data-testid="menu-item-change-password"
-      >
-        <KeyRound className="h-4 w-4 mr-2 text-amber-500" />
-        Change password
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem onClick={onLogout} data-testid="button-logout">

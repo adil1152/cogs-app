@@ -1,0 +1,404 @@
+Build a new **MIS – Management Information System** module inside the existing QNC COGS application.
+
+### 1. Critical Rules
+
+* Do **not** break, delete, rename, overwrite, or modify existing COGS functionality.
+* Do not modify existing COGS tables, APIs, routes, workflows, permissions, or reports unless absolutely required.
+* MIS must be a **separate, modular module** with its own pages, routes, database models, permissions, workflows, and reports.
+* Reuse the existing authentication, UI components, layout, and coding standards where appropriate.
+* Use the uploaded **MIS entry.xls** only as a business reference; do not copy its layout blindly.
+
+### 2. Analyze First
+
+Before coding, inspect the existing project and identify:
+
+* Frontend/backend frameworks
+* Database
+* Authentication and roles
+* Project structure
+* Existing COGS modules
+* Security/authority logic
+* Reporting system
+* Naming conventions
+
+Create a short implementation plan before development.
+
+### 3. MIS Navigation
+
+Create:
+
+* MIS Dashboard
+* Projects
+* Project Settings
+* MIS Entries
+* Reports
+* Authorities/Security
+* Configuration
+
+The MIS module must remain visually and logically separate from COGS.
+
+### 4. Project Configuration
+
+Each project must have independent MIS configuration:
+
+* Project Name/Code
+* Manager
+* Status
+* Start/End Date
+* Currency
+* Enabled MIS Tabs
+* Reporting settings
+
+**Important:** MIS must NOT be limited to Income, Cost, Expenses, and Salaries.
+
+Authorized users must be able to create **custom tabs/categories** without development.
+
+Example tabs:
+
+* Income
+* Cost
+* Expenses
+* Salaries
+* Food Services
+* Laundry
+* Transportation
+* Accommodation
+* Manpower
+* Utilities
+* Equipment
+* Maintenance
+* Consumables
+* Other Services
+
+These are examples only.
+
+### 5. Dynamic Tabs
+
+Create a **MIS Tabs/Categories Master** with:
+
+* Tab Name
+* Code
+* Description
+* Tab Type
+* Sequence
+* Active/Inactive
+* Applicable Projects
+* Allow Entry
+* Allow Reporting
+
+Tab Type should support:
+
+* Income
+* Cost
+* Expense
+* Salary
+* Other
+
+Administrators must be able to create unlimited additional tabs.
+
+Each project can independently:
+
+* Enable/disable tabs
+* Add/deactivate services
+* Reorder services
+
+Changes to one project must not affect other projects.
+
+### 6. Services
+
+Every tab must support its own configurable services/items.
+
+Service fields:
+
+* Service Name
+* Description
+* Unit
+* Default Rate
+* Active/Inactive
+* Sequence
+* Project Assignment
+* Effective From/To Date
+
+Example:
+
+Food Services → Breakfast, Lunch, Dinner
+Laundry → Uniform, Bed Linen, Towels
+Transportation → Bus, Car, Pickup
+
+Do not hard-code these services.
+
+### 7. MIS Entries
+
+Create a dynamic entry screen:
+
+**Project → Tab → Service → From Date → To Date → Quantity → Rate → Amount → Remarks**
+
+Every transaction must be **period-based** using From Date and To Date.
+
+Validation:
+
+* From Date ≤ To Date
+* Required project/tab/service/dates
+* Required amount where applicable
+* Prevent unauthorized access/modification
+* Prevent inappropriate negative values
+* Approved records cannot be deleted without permission
+* Prevent duplicate periods where appropriate
+
+Amount:
+
+**Amount = Quantity × Rate**
+
+Allow authorized users to override rates.
+
+Workflow:
+
+**Draft → Submitted → Approved / Rejected → Draft**
+
+Include:
+
+* Save Draft
+* Submit
+* Approve
+* Reject
+* Edit
+* Cancel
+* History
+
+### 8. Financial Classification
+
+The system must understand how each tab contributes to reporting.
+
+Calculate:
+
+**Gross Profit = Income − Cost**
+
+**Net Profit = Income − Cost − Expenses − Salaries**
+
+**Profit Margin = Net Profit ÷ Income × 100**
+
+Handle zero income safely.
+
+Custom "Other" tabs must allow administrators to define whether/how they affect financial reporting.
+
+### 9. Security
+
+Create MIS security independently from COGS.
+
+Roles:
+
+* MIS Admin
+* MIS Manager
+* Project Manager
+* Finance
+* Data Entry
+* Viewer
+
+Permissions should cover:
+
+* Projects
+* Configuration
+* Tabs/services
+* Entries
+* Approval
+* Reports
+* Export
+* Financial summaries
+
+Use project-level record security. Users should only access assigned projects unless they have global MIS permission.
+
+Do not automatically give COGS users MIS access.
+
+### 10. Dashboard
+
+Create a professional MIS dashboard with filters:
+
+* Project
+* From Date
+* To Date
+* Tab
+* Service
+
+KPIs:
+
+* Total Income
+* Total Cost
+* Total Expenses
+* Total Salaries
+* Gross Profit
+* Net Profit
+* Profit Margin
+
+### 11. Reports
+
+Create:
+
+1. Income Report
+2. Cost Report
+3. Expense Report
+4. Salary Report
+5. MIS Summary
+6. Project Profitability
+7. Project Comparison
+8. Period Comparison
+9. Service/Tab Comparison
+
+Reports must dynamically recognize newly created tabs and services.
+
+Filters:
+
+* Project
+* Tab
+* Service
+* From/To Date
+* Entry Type
+
+Exports:
+
+* Excel
+* PDF
+* CSV where practical
+
+Allow drill-down from summary figures to underlying entries.
+
+### 12. Project Comparison
+
+Allow multiple projects to be compared by:
+
+* Income
+* Costs
+* Expenses
+* Salaries
+* Net Profit
+* Profit Margin
+
+Include tables/charts where useful.
+
+### 13. Audit Trail
+
+Track:
+
+* Created By/Date
+* Updated By/Date
+* Approval actions
+* User
+* Date/Time
+* Old Value
+* New Value
+* Remarks
+
+Users can view history according to permission.
+
+### 14. Database
+
+Create separate MIS models/tables, for example:
+
+* MIS Projects
+* MIS Tabs
+* MIS Services
+* MIS Entries
+* MIS Approvals
+* MIS Audit Logs
+* MIS Permissions
+
+Use proper relationships, indexes, pagination, and server-side filtering.
+
+**Do not merge MIS transactions with COGS transaction tables.**
+
+Keep architecture ready for future integrations with:
+
+* COGS
+* Meal Count
+* Odoo
+
+Do not implement those integrations in Phase 1.
+
+### 15. Implementation Phases
+
+**Phase 1**
+
+* MIS module/navigation
+* Project setup
+* Tabs/services configuration
+* Security
+* Dashboard
+
+**Phase 2**
+
+* Dynamic entries
+* Income/Cost/Expense/Salary functionality
+
+**Phase 3**
+
+* Workflow
+* Audit trail
+
+**Phase 4**
+
+* Reports
+* Profitability
+* Project/service comparison
+* Excel/PDF exports
+
+**Phase 5**
+
+* UI refinement
+* Performance
+* Testing
+* Deployment readiness
+
+### 16. Performance & Safety
+
+* Use database indexes
+* Pagination
+* Server-side filtering
+* Efficient reporting queries
+* Do not load all transactions into the browser
+* Keep migrations reversible
+* Never delete existing COGS data
+* Verify existing COGS functionality after implementation
+
+### 17. Testing
+
+Test:
+
+* Authentication
+* MIS permissions
+* Project security
+* Project configuration
+* Dynamic tabs
+* Dynamic services
+* Period-based entries
+* Calculations
+* Workflow
+* Audit trail
+* Dashboard
+* Reports
+* Project comparison
+* Excel/PDF exports
+* Unauthorized access
+* Existing COGS functionality
+
+### 18. Final Deliverable
+
+After implementation provide:
+
+1. Files/modules created
+2. Database changes/migrations
+3. Routes/pages
+4. Roles/permissions
+5. Workflow
+6. Test results
+7. Confirmation that COGS still works
+8. Assumptions made from MIS entry.xls
+9. Items requiring business confirmation
+
+Build this as a **production-quality, database-driven QNC MIS module**, not a prototype.
+
+**Most important requirement:**
+
+The MIS must be **fully dynamic**:
+
+**Create Tab → Add Services → Assign to Project → Define Rate/Period → Enter Transactions → Approve → Report**
+
+No developer should be required when QNC needs to create a new business category or service.

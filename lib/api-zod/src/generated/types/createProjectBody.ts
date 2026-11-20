@@ -20,6 +20,7 @@ export interface CreateProjectBody {
   contractEnd: Date;
   notes?: string;
   pdfRequired?: boolean;
+  allowDuplicateDates?: boolean;
   /**
    * @minimum 0
    * @nullable

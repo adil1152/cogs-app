@@ -21,6 +21,8 @@ export interface Project {
   pdfRequired: boolean;
   /** When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it. */
   disabled: boolean;
+  /** When true, multiple daily entries may share the same date on this project. When false (default), creating a second entry for a date is rejected. */
+  allowDuplicateDates?: boolean;
   /**
    * How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.
    * @minimum 0

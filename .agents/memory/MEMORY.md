@@ -1,2 +1,8 @@
 - [Approval chain edits](approval-chain-edits.md) — chain edits are all-or-nothing gated on cycle-tied entries; assignments follow levels by id, and persisted level ids rotate on every save.
 - [Rollbacks revert merged work](rollback-reverts.md) — user checkpoint rollbacks can silently undo previously merged features; verify a "done" feature exists in code before building on it or reporting it.
+- [MIS workbook interpretation](mis-workbook-interpretation.md) — written dynamic-entry requirements override fixed workbook periods and percentage-expense examples.
+- [MIS resume drafts](mis-resume-drafts.md) — resuming a partial draft restores unfinished services alongside saved values in the same bulk transaction.
+- [MIS quantity defaults](mis-quantity-links.md) — Income-to-Cost links supply editable quantities, never forced equality or copied amounts.
+- [MIS percentage expenses](mis-percentage-expenses.md) — Overhead and OP Expense are separate protected percentage charges; derived profit must not reveal hidden amounts.
+- [Optional MIS appearance](mis-appearance.md) — Glass is a selectable alternative with a saved default, not a replacement for Classic or a COGS restyle.
+- [Whole-system audit](system-audit.md) — global admins track COGS and MIS changes; capture atomically, redact credentials, and reset actor context on every connection checkout.

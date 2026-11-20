@@ -1,5 +1,14 @@
 # COGS Tracker
 
+## MIS module isolation
+
+MIS is an independent module under `/mis` and `/api/mis`, not a replacement for
+COGS. Reuse sign-in and UI primitives only; COGS roles, groups, projects,
+transactions, approvals, and reports must not confer MIS access or supply MIS
+financial data. Do not modify existing COGS behavior when maintaining MIS.
+MIS database objects use the `mis_` prefix and explicit additive migrations.
+See `docs/mis-api-contract.md` and `docs/mis-implementation-plan.md`.
+
 A web-based daily Cost-of-Goods-Sold (COGS) tracker for project managers running multi-site
 service contracts (catering, cleaning, security, transport, etc.).
 
@@ -79,6 +88,13 @@ service contracts (catering, cleaning, security, transport, etc.).
 - **Audit log**: every entry create / update / delete / approve / reject / reset is recorded in
   `entry_audit_log` and surfaced in the entry's *History* panel. Audit rows are never deleted —
   the FK to `daily_entries` is `ON DELETE SET NULL` so history outlives the entry.
+- **Allow duplicate dates**: per-project `allowDuplicateDates` boolean (admin toggle on the
+  Settings tab, default OFF). When OFF, creating a second entry for the same project+date —
+  or moving an entry onto a taken date — is 409-blocked server-side for everyone, admins
+  included (guards in `entries.ts` POST + PATCH; PATCH check only when the date changes,
+  excluding the entry itself). Existing duplicates are untouched. The entry form's same-date
+  alert turns red ("saving will be rejected") when duplicates are disallowed, amber
+  informational otherwise.
 - **Entry date limits**: per-project `backdatedDays` / `futureDays` (nullable ints, admin-set
   on the Settings tab). They cap how far in the past/future a **non-admin** may date an entry
   (0 = that direction fully blocked, null = no limit). Enforced server-side on entry create
@@ -230,6 +246,16 @@ Shared libs:
   always sink to the bottom). Pivot pages sort by grouped per-service metric sub-columns
   using `svc|<key>|<metric>` sort keys.
 - `/reports` — Aggregate report with date range + project filter + CSV exports
+- **Full breakdown** toggle on Entry-wise (default ON) and Comparison (default OFF)
+  reports: expands each food service's column group with per-meal-type columns
+  (Qty, Mandays) and each group service with per-sub-service columns (Cost /
+  Mandays / Avg, gated by the metric toggles). Backend: optional `components[]`
+  (key, name, kind meal|sub, qty/cost nullable, mandays) on entry-matrix cost
+  cells + serviceTotals and on `aggregate.serviceBreakdown` rows, built by
+  `fetchComponentsByKey` in `reports.ts` (meals merged by lower-cased name, subs
+  by sub-item id). Comparison merges components across projects by (kind, name).
+  Component columns are sortable (`cmp|…` sort keys) and included in both xlsx
+  exports. Button disabled when no service has components.
 - `/reports/entry-wise` — Single-project pivot: services laid out horizontally as
   (Cost / Mandays / Avg) column groups per entry. Per-service and per-metric column
   toggles, footer totals, per-row Entry total + grand total column, frozen

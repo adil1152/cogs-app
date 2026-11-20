@@ -18,6 +18,7 @@ import {
   useListEntryAttachments,
   useCreateEntryAttachment,
   useDeleteEntryAttachment,
+  useListProjectEntries,
   getGetProjectQueryKey,
   getListProjectServicesQueryKey,
   getGetDailyEntryQueryKey,
@@ -56,6 +57,7 @@ import {
   Paperclip,
   Upload,
   FileText,
+  TriangleAlert,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -284,6 +286,32 @@ export default function EntryForm() {
           .filter(Boolean)
           .join(" · ")
       : null;
+  // Duplicate-entry warning: other entries on the same project + date.
+  // Purely informational — saving is never blocked (same-day entries are
+  // legitimate, e.g. different locations).
+  const { data: sameDayEntries } = useListProjectEntries(
+    projectId!,
+    { from: entryDate, to: entryDate },
+    {
+      query: {
+        enabled: !!projectId && !!entryDate,
+        queryKey: getListProjectEntriesQueryKey(projectId!, { from: entryDate, to: entryDate }),
+      },
+    },
+  );
+  const duplicateEntries = useMemo(
+    () =>
+      (sameDayEntries ?? []).filter(
+        (e) => e.entryDate === entryDate && e.id !== entryId,
+      ),
+    [sameDayEntries, entryDate, entryId],
+  );
+  // When the project disallows duplicate dates, the server rejects a save
+  // that would create a second entry on the same date.
+  const duplicatesBlocked =
+    duplicateEntries.length > 0 &&
+    !(project as any)?.allowDuplicateDates;
+
   const [location, setLocation] = useState("");
   const [totalMandaysOverride, setTotalMandaysOverride] = useState(false);
   const [totalMandaysManual, setTotalMandaysManual] = useState("");
@@ -816,6 +844,61 @@ export default function EntryForm() {
                   <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Location</Label>
                   <Input value={location} onChange={(e) => setLocation(e.target.value)} required data-testid="input-entry-location" className="font-medium" />
                 </div>
+                {duplicateEntries.length > 0 && !isLocked && (
+                  <div
+                    className={
+                      duplicatesBlocked
+                        ? "md:col-span-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2.5"
+                        : "md:col-span-2 rounded-md border border-amber-300/60 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/10 px-3 py-2.5"
+                    }
+                    data-testid="alert-duplicate-entry"
+                  >
+                    <div className="flex items-start gap-2">
+                      <TriangleAlert
+                        className={
+                          duplicatesBlocked
+                            ? "h-4 w-4 mt-0.5 shrink-0 text-destructive"
+                            : "h-4 w-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400"
+                        }
+                      />
+                      <div
+                        className={
+                          duplicatesBlocked
+                            ? "text-sm text-destructive space-y-1"
+                            : "text-sm text-amber-800 dark:text-amber-300 space-y-1"
+                        }
+                      >
+                        <p className="font-medium">
+                          {duplicateEntries.length === 1
+                            ? "An entry already exists for this project on this date."
+                            : `${duplicateEntries.length} entries already exist for this project on this date.`}{" "}
+                          {duplicatesBlocked
+                            ? "Duplicate dates are not allowed on this project — saving will be rejected. Edit the existing entry instead, or ask an admin to enable \"Allow duplicate dates\" in the project settings."
+                            : "You can still save — just make sure you're not entering the same costs twice."}
+                        </p>
+                        <ul className="text-xs space-y-0.5">
+                          {duplicateEntries.slice(0, 5).map((e) => (
+                            <li key={e.id}>
+                              <Link
+                                href={`/projects/${projectId}/entries/${e.id}`}
+                                className="underline underline-offset-2 hover:opacity-80"
+                                data-testid={`link-duplicate-entry-${e.id}`}
+                              >
+                                {e.sequenceCode ? `${e.sequenceCode} — ` : ""}
+                                {e.location} · {formatCurrency(e.totalCost)} · {e.status}
+                              </Link>
+                            </li>
+                          ))}
+                          {duplicateEntries.length > 5 && (
+                            <li className="text-muted-foreground">
+                              …and {duplicateEntries.length - 5} more
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="md:col-span-2 space-y-1.5 mt-2">
                   <Label className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Notes</Label>
                   <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} data-testid="input-entry-notes" className="resize-none leading-relaxed" />

@@ -52,6 +52,56 @@ const METRIC_LABEL: Record<Metric, string> = {
   avg: "SAR / manday",
 };
 
+type CompMetric = "qty" | "cost" | "mandays" | "avg";
+
+/** One rendered column inside a service group: a service-level metric or a component (meal / sub-service) value. */
+interface SvcCol {
+  type: "metric" | "comp";
+  metric?: Metric;
+  compKey?: string;
+  compName?: string;
+  compMetric?: CompMetric;
+  label: string;
+  sortKey: string;
+}
+
+interface CellLike {
+  cost: number;
+  mandayContribution: number;
+  costPerManday: number;
+  components?: {
+    key: string;
+    name: string;
+    kind: "meal" | "sub";
+    qty?: number | null;
+    cost?: number | null;
+    mandays: number;
+  }[];
+}
+
+function svcColValue(c: CellLike | undefined, col: SvcCol): number | null {
+  if (!c) return null;
+  if (col.type === "metric") {
+    if (col.metric === "cost") return c.cost;
+    if (col.metric === "mandays") return c.mandayContribution;
+    return c.mandayContribution > 0 ? c.costPerManday : null;
+  }
+  const comp = (c.components ?? []).find((x) => x.key === col.compKey);
+  if (!comp) return null;
+  if (col.compMetric === "qty") return comp.qty ?? null;
+  if (col.compMetric === "cost") return comp.cost ?? null;
+  if (col.compMetric === "mandays") return comp.mandays;
+  return comp.cost != null && comp.mandays > 0 ? comp.cost / comp.mandays : null;
+}
+
+function svcColFormat(v: number | null, col: SvcCol): string {
+  if (v == null) return "—";
+  const metric = col.type === "metric" ? col.metric : col.compMetric;
+  if (metric === "qty") return formatNumber(v, 0);
+  if (metric === "mandays") return formatNumber(v, 2);
+  return formatCurrency(v);
+}
+
 export default function EntryWiseReport() {
   const [, navigate] = useLocation();
   // Hydrate filters from the URL on mount so that "Back to Entry-wise report"
@@ -77,6 +127,7 @@ export default function EntryWiseReport() {
   const [metrics, setMetrics] = useState<Set<Metric>>(
     new Set(["cost", "mandays", "avg"]),
   );
+  const [fullBreakdown, setFullBreakdown] = useState(true);
   const [drilldown, setDrilldown] = useState<ServiceDrilldownTarget | null>(
     null,
   );
@@ -111,6 +162,58 @@ export default function EntryWiseReport() {
     [matrix],
   );
 
+  // Per-service list of rendered columns: the service-level metrics, plus —
+  // when "Full breakdown" is on — one column set per component (meal types
+  // of food services, sub-services of group services). The component list
+  // comes from serviceTotals so every entry row shares the same columns.
+  const colsByService = useMemo(() => {
+    const map = new Map<string, SvcCol[]>();
+    for (const s of visibleServices) {
+      const cols: SvcCol[] = visibleMetrics.map((m) => ({
+        type: "metric" as const,
+        metric: m,
+        label: METRIC_LABEL[m],
+        sortKey: `svc|${s.id}|${m}`,
+      }));
+      if (fullBreakdown) {
+        const comps =
+          matrix?.serviceTotals.find((t) => t.serviceId === s.id)
+            ?.components ?? [];
+        for (const comp of comps) {
+          const push = (cm: CompMetric, label: string) =>
+            cols.push({
+              type: "comp",
+              compKey: comp.key,
+              compName: comp.name,
+              compMetric: cm,
+              label,
+              sortKey: `cmp|${s.id}|${cm}|${comp.key}`,
+            });
+          if (comp.kind === "meal") {
+            push("qty", `${comp.name} · Qty`);
+            if (metrics.has("mandays"))
+              push("mandays", `${comp.name} · Mandays`);
+          } else {
+            if (metrics.has("cost")) push("cost", `${comp.name} · Cost`);
+            if (metrics.has("mandays"))
+              push("mandays", `${comp.name} · Mandays`);
+            if (metrics.has("avg")) push("avg", `${comp.name} · Avg`);
+          }
+        }
+      }
+      map.set(s.id, cols);
+    }
+    return map;
+  }, [visibleServices, visibleMetrics, fullBreakdown, matrix, metrics]);
+
+  const hasComponents = useMemo(
+    () =>
+      (matrix?.serviceTotals ?? []).some(
+        (t) => (t.components ?? []).length > 0,
+      ),
+    [matrix],
+  );
+
   // Sort keys: "seq", "date", "location", "total", or "svc|<serviceId>|<metric>".
   const sorter = useSortState<string>();
   const sortedEntries = useMemo(
@@ -129,6 +232,20 @@ export default function EntryWiseReport() {
           if (metric === "cost") return c.cost;
           if (metric === "mandays") return c.mandayContribution;
           return c.mandayContribution > 0 ? c.costPerManday : null;
+        }
+        if (key.startsWith("cmp|")) {
+          const parts = key.split("|");
+          const serviceId = parts[1];
+          const compMetric = parts[2] as CompMetric;
+          const compKey = parts.slice(3).join("|");
+          const c = e.costs.find((x) => x.serviceId === serviceId);
+          return svcColValue(c, {
+            type: "comp",
+            compKey,
+            compMetric,
+            label: "",
+            sortKey: key,
+          });
         }
         return null;
       }),
@@ -168,7 +285,13 @@ export default function EntryWiseReport() {
     wb.created = new Date();
     const ws = wb.addWorksheet("Entry-wise report");
 
-    const totalCols = 3 + visibleServices.length * visibleMetrics.length + 1;
+    const serviceColStarts: number[] = [];
+    let nextCol = 4;
+    visibleServices.forEach((svc) => {
+      serviceColStarts.push(nextCol);
+      nextCol += (colsByService.get(svc.id) ?? []).length;
+    });
+    const totalCols = nextCol;
     const totalColIdx = totalCols;
 
     // Title block
@@ -195,16 +318,17 @@ export default function EntryWiseReport() {
     ws.mergeCells(headerRow1Idx, 3, headerRow2Idx, 3);
 
     visibleServices.forEach((svc, i) => {
-      const startCol = 4 + i * visibleMetrics.length;
-      const endCol = startCol + visibleMetrics.length - 1;
-      if (visibleMetrics.length > 1) {
+      const cols = colsByService.get(svc.id) ?? [];
+      const startCol = serviceColStarts[i];
+      const endCol = startCol + cols.length - 1;
+      if (cols.length > 1) {
         ws.mergeCells(headerRow1Idx, startCol, headerRow1Idx, endCol);
       }
       const groupCell = ws.getCell(headerRow1Idx, startCol);
       groupCell.value = svc.name;
       groupCell.alignment = { horizontal: "center" };
-      visibleMetrics.forEach((m, j) => {
-        ws.getCell(headerRow2Idx, startCol + j).value = METRIC_LABEL[m];
+      cols.forEach((col, j) => {
+        ws.getCell(headerRow2Idx, startCol + j).value = col.label;
       });
     });
 
@@ -243,22 +367,17 @@ export default function EntryWiseReport() {
       ws.getCell(rowIdx, 2).value = formatDate(entry.entryDate);
       ws.getCell(rowIdx, 3).value = entry.location;
       visibleServices.forEach((svc, i) => {
-        const startCol = 4 + i * visibleMetrics.length;
+        const cols = colsByService.get(svc.id) ?? [];
+        const startCol = serviceColStarts[i];
         const cell = entry.costs.find((c) => c.serviceId === svc.id);
-        visibleMetrics.forEach((m, j) => {
+        cols.forEach((col, j) => {
           const c = ws.getCell(rowIdx, startCol + j);
-          if (!cell) {
-            c.value = null;
-          } else if (m === "cost") {
-            c.value = cell.cost;
-            c.numFmt = '#,##0.00';
-          } else if (m === "mandays") {
-            c.value = cell.mandayContribution;
-            c.numFmt = '#,##0.00';
-          } else {
-            c.value = cell.mandayContribution > 0 ? cell.costPerManday : null;
-            c.numFmt = '#,##0.00';
-          }
+          const v = svcColValue(cell, col);
+          c.value = v;
+          c.numFmt =
+            (col.type === "comp" ? col.compMetric : col.metric) === "qty"
+              ? "#,##0"
+              : "#,##0.00";
         });
       });
       const totalCell = ws.getCell(rowIdx, totalColIdx);
@@ -273,20 +392,24 @@ export default function EntryWiseReport() {
     ws.getCell(totalsRow, 1).value = "Totals";
     ws.mergeCells(totalsRow, 1, totalsRow, 3);
     visibleServices.forEach((svc, i) => {
-      const startCol = 4 + i * visibleMetrics.length;
+      const cols = colsByService.get(svc.id) ?? [];
+      const startCol = serviceColStarts[i];
       const t = matrix.serviceTotals.find((x) => x.serviceId === svc.id);
-      visibleMetrics.forEach((m, j) => {
+      const totalCell: CellLike | undefined = t
+        ? {
+            cost: t.totalCost,
+            mandayContribution: t.totalMandayContribution,
+            costPerManday: t.costPerManday,
+            components: t.components,
+          }
+        : undefined;
+      cols.forEach((col, j) => {
         const c = ws.getCell(totalsRow, startCol + j);
-        if (!t) {
-          c.value = 0;
-        } else if (m === "cost") {
-          c.value = t.totalCost;
-        } else if (m === "mandays") {
-          c.value = t.totalMandayContribution;
-        } else {
-          c.value = t.totalMandayContribution > 0 ? t.costPerManday : null;
-        }
-        c.numFmt = '#,##0.00';
+        c.value = svcColValue(totalCell, col);
+        c.numFmt =
+          (col.type === "comp" ? col.compMetric : col.metric) === "qty"
+            ? "#,##0"
+            : "#,##0.00";
       });
     });
     const grandTotalCell = ws.getCell(totalsRow, totalColIdx);
@@ -483,8 +606,21 @@ export default function EntryWiseReport() {
                   </PopoverContent>
                 </Popover>
                 <Button
+                  variant={fullBreakdown ? "default" : "outline"}
+                  onClick={() => setFullBreakdown((v) => !v)}
+                  disabled={!matrix || !hasComponents}
+                  title="Expand food services into meal types and group services into sub-services"
+                  data-testid="ew-breakdown"
+                >
+                  Full breakdown
+                </Button>
+                <Button
                   onClick={exportXlsx}
-                  disabled={!matrix || matrix.entries.length === 0}
+                  disabled={
+                    !matrix ||
+                    matrix.entries.length === 0 ||
+                    visibleMetrics.length === 0
+                  }
                   data-testid="ew-export"
                 >
                   <Download className="h-4 w-4 mr-2" />
@@ -580,7 +716,7 @@ export default function EntryWiseReport() {
                       {visibleServices.map((s) => (
                         <TableHead
                           key={s.id}
-                          colSpan={visibleMetrics.length}
+                          colSpan={(colsByService.get(s.id) ?? []).length}
                           className="text-center border-l border-border whitespace-nowrap"
                           style={tintBgStyle((s as any).color, 0.18, s.name)}
                         >
@@ -606,19 +742,22 @@ export default function EntryWiseReport() {
                     </TableRow>
                     <TableRow>
                       {visibleServices.map((s) =>
-                        visibleMetrics.map((m, idx) => (
+                        (colsByService.get(s.id) ?? []).map((col, idx) => (
                           <SortableHead
-                            key={`${s.id}-${m}`}
-                            sortKey={`svc|${s.id}|${m}`}
+                            key={`${s.id}-${col.sortKey}`}
+                            sortKey={col.sortKey}
                             sort={sorter.sort}
                             onSort={sorter.toggleSort}
                             align="right"
                             className={
                               "text-right text-[11px] whitespace-nowrap " +
-                              (idx === 0 ? "border-l border-border" : "")
+                              (idx === 0 ? "border-l border-border " : "") +
+                              (col.type === "comp"
+                                ? "text-muted-foreground font-normal"
+                                : "")
                             }
                           >
-                            {METRIC_LABEL[m]}
+                            {col.label}
                           </SortableHead>
                         )),
                       )}
@@ -662,45 +801,53 @@ export default function EntryWiseReport() {
                         </TableCell>
                         {visibleServices.map((s) => {
                           const c = e.costs.find((x) => x.serviceId === s.id);
-                          return visibleMetrics.map((m, idx) => {
-                            const value = !c
-                              ? "—"
-                              : m === "cost"
-                                ? formatCurrency(c.cost)
-                                : m === "mandays"
-                                  ? formatNumber(c.mandayContribution, 2)
-                                  : c.mandayContribution > 0
-                                    ? formatCurrency(c.costPerManday)
-                                    : "—";
-                            return (
-                              <TableCell
-                                key={`${e.entryId}-${s.id}-${m}`}
-                                className={
-                                  "text-right tabular-nums whitespace-nowrap " +
-                                  (idx === 0 ? "border-l border-border " : "") +
-                                  (c
-                                    ? "cursor-pointer hover:bg-muted/50"
-                                    : "text-muted-foreground")
-                                }
-                                style={tintBgStyle((s as any).color, 0.06, s.name)}
-                                onClick={() => {
-                                  if (!c) return;
-                                  setDrilldown({
-                                    serviceId: s.id,
-                                    serviceName: s.name,
-                                    projectId: matrix.project.id,
-                                    projectName: matrix.project.name,
-                                    from: matrix.range.from,
-                                    to: matrix.range.to,
-                                    scopeToProject: true,
-                                    returnTo: returnUrl,
-                                  });
-                                }}
-                              >
-                                {value}
-                              </TableCell>
-                            );
-                          });
+                          return (colsByService.get(s.id) ?? []).map(
+                            (col, idx) => {
+                              const value = svcColFormat(
+                                svcColValue(c, col),
+                                col,
+                              );
+                              return (
+                                <TableCell
+                                  key={`${e.entryId}-${s.id}-${col.sortKey}`}
+                                  className={
+                                    "text-right tabular-nums whitespace-nowrap " +
+                                    (idx === 0
+                                      ? "border-l border-border "
+                                      : "") +
+                                    (col.type === "comp"
+                                      ? "text-muted-foreground "
+                                      : "") +
+                                    (c && col.type === "metric"
+                                      ? "cursor-pointer hover:bg-muted/50"
+                                      : !c
+                                        ? "text-muted-foreground"
+                                        : "")
+                                  }
+                                  style={tintBgStyle(
+                                    (s as any).color,
+                                    col.type === "comp" ? 0.03 : 0.06,
+                                    s.name,
+                                  )}
+                                  onClick={() => {
+                                    if (!c || col.type !== "metric") return;
+                                    setDrilldown({
+                                      serviceId: s.id,
+                                      serviceName: s.name,
+                                      projectId: matrix.project.id,
+                                      projectName: matrix.project.name,
+                                      from: matrix.range.from,
+                                      to: matrix.range.to,
+                                      scopeToProject: true,
+                                      returnTo: returnUrl,
+                                    });
+                                  }}
+                                >
+                                  {value}
+                                </TableCell>
+                              );
+                            },
+                          );
                         })}
                         <TableCell className="text-right tabular-nums font-semibold whitespace-nowrap border-l-2 border-border bg-muted/30">
                           {formatCurrency(e.totalCost)}
@@ -720,29 +867,35 @@ export default function EntryWiseReport() {
                         const t = matrix.serviceTotals.find(
                           (x) => x.serviceId === s.id,
                         );
-                        return visibleMetrics.map((m, idx) => {
-                          const value = !t
-                            ? "—"
-                            : m === "cost"
-                              ? formatCurrency(t.totalCost)
-                              : m === "mandays"
-                                ? formatNumber(t.totalMandayContribution, 2)
-                                : t.totalMandayContribution > 0
-                                  ? formatCurrency(t.costPerManday)
-                                  : "—";
-                          return (
+                        const totalCell: CellLike | undefined = t
+                          ? {
+                              cost: t.totalCost,
+                              mandayContribution: t.totalMandayContribution,
+                              costPerManday: t.costPerManday,
+                              components: t.components,
+                            }
+                          : undefined;
+                        return (colsByService.get(s.id) ?? []).map(
+                          (col, idx) => (
                             <TableCell
-                              key={`tot-${s.id}-${m}`}
+                              key={`tot-${s.id}-${col.sortKey}`}
                               className={
-                                "text-right tabular-nums font-semibold whitespace-nowrap " +
-                                (idx === 0 ? "border-l border-border" : "")
+                                "text-right tabular-nums whitespace-nowrap " +
+                                (idx === 0 ? "border-l border-border " : "") +
+                                (col.type === "comp"
+                                  ? "text-muted-foreground"
+                                  : "font-semibold")
                               }
-                              style={tintBgStyle((s as any).color, 0.12, s.name)}
+                              style={tintBgStyle(
+                                (s as any).color,
+                                col.type === "comp" ? 0.06 : 0.12,
+                                s.name,
+                              )}
                             >
-                              {value}
+                              {svcColFormat(svcColValue(totalCell, col), col)}
                             </TableCell>
-                          );
-                        });
+                          ),
+                        );
                       })}
                       <TableCell className="text-right tabular-nums font-bold whitespace-nowrap border-l-2 border-border bg-muted/50">
                         {formatCurrency(grandTotalCost)}

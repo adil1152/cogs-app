@@ -1,0 +1,838 @@
+Yes — this should be a **separate enhancement prompt** so Replit adds these features to the existing MIS module without rebuilding it.
+
+```text
+ADD THE FOLLOWING ADVANCED FEATURES TO THE EXISTING MIS MODULE
+
+IMPORTANT:
+This is an enhancement to the existing MIS module.
+
+DO NOT:
+- Rebuild the MIS module from scratch.
+- Remove existing MIS functionality.
+- Modify or break the existing COGS application.
+- Delete existing MIS data.
+- Change existing user authentication unnecessarily.
+- Remove existing permissions or reports.
+
+First inspect the current MIS implementation and database structure, then add the following features using the existing architecture and UI conventions.
+
+==================================================
+1. PROJECT-LEVEL SECURITY
+==================================================
+
+Create a dedicated security configuration for each MIS project.
+
+For every project, an authorized administrator must be able to assign users.
+
+Example:
+
+Project: SAR
+
+User              Permission
+--------------------------------
+User A             View
+User B             View + Edit
+User C             Full Access
+
+Required project-level permissions:
+
+- View Project
+- View Entries
+- Create Entries
+- Edit Entries
+- Delete Entries
+- Approve Entries
+- View Reports
+- Export Reports
+- Edit Rates
+
+Users assigned to one project must not automatically access another project unless they have global MIS authority.
+
+Also create a:
+
+"Global MIS Access"
+
+This allows authorized administrators to assign users who can access ALL MIS projects.
+
+Example:
+
+Global MIS Admin
+Global MIS Manager
+Global MIS Viewer
+
+Security hierarchy:
+
+GLOBAL MIS ACCESS
+        ↓
+PROJECT ACCESS
+        ↓
+ENTRY ACCESS
+        ↓
+RATE ACCESS
+
+==================================================
+2. SERVICE RATE MANAGEMENT
+==================================================
+
+Every MIS service must support a default/fixed rate.
+
+Service configuration should contain:
+
+- Service Name
+- Service Code
+- Tab / Type
+- Unit
+- Default Rate
+- Currency
+- Active / Inactive
+- Project
+- Effective From
+- Effective To
+
+Example:
+
+Service:
+Laundry
+
+Default Rate:
+10 SAR
+
+When creating an entry, the configured rate must automatically appear as the default rate.
+
+Example:
+
+Quantity = 500
+Default Rate = 10
+Amount = 5,000 SAR
+
+Calculation:
+
+Amount = Quantity × Rate
+
+==================================================
+3. RATE EDITING SECURITY
+==================================================
+
+Create a separate security permission called:
+
+"Can Edit Service Rate"
+
+This must be independent from normal entry-edit permission.
+
+An administrator must be able to select specific users who are allowed to modify rates during entry creation.
+
+Example:
+
+User A
+- Create Entry = YES
+- Edit Entry = YES
+- Edit Rate = NO
+
+User B
+- Create Entry = YES
+- Edit Entry = YES
+- Edit Rate = YES
+
+If the user does not have Rate Edit permission:
+
+- Rate must be automatically populated.
+- Rate field must be read-only.
+- User cannot change the rate.
+
+If the user has Rate Edit permission:
+
+- Rate can be modified during entry.
+- Modified rate must be recorded in the audit trail.
+
+Audit must record:
+
+Original Rate
+New Rate
+Changed By
+Changed Date/Time
+Reason/Remarks
+
+==================================================
+4. SINGLE-PAGE ENTRY FOR ALL PROJECT SERVICES
+==================================================
+
+Create a single-page MIS entry screen similar to the existing COGS application's entry concept.
+
+The objective is:
+
+ONE PROJECT
++
+ONE PERIOD
+=
+ALL SERVICES AVAILABLE FOR THAT PROJECT ON ONE PAGE
+
+User selects:
+
+Project
+From Date
+To Date
+
+Then the system automatically loads ALL active services assigned to that project.
+
+Group the services in the following order:
+
+1. INCOME
+2. COST
+3. EXPENSE
+4. SALARY
+5. OTHER / CUSTOM TYPES
+
+Example:
+
+PROJECT: ABC
+FROM: 01-Sep-2026
+TO: 30-Sep-2026
+
+--------------------------------------------
+INCOME
+--------------------------------------------
+
+Service             Qty     Rate      Amount
+Catering             100     50        5,000
+Laundry Revenue       20    100        2,000
+
+--------------------------------------------
+COST
+--------------------------------------------
+
+Service             Qty     Rate      Amount
+Food                 100     25        2,500
+Laundry               20     40          800
+
+--------------------------------------------
+EXPENSE
+--------------------------------------------
+
+Direct Expense                         1,500
+Overhead Expense                         500
+
+--------------------------------------------
+SALARIES
+--------------------------------------------
+
+Project Salaries                      20,000
+Staff Salaries                         5,000
+
+--------------------------------------------
+TOTAL
+--------------------------------------------
+
+Income                               7,000
+Cost                                  3,300
+Expenses                              2,000
+Salaries                             25,000
+Net Result                          -23,300
+
+==================================================
+5. ENTER ALL SERVICES FEATURE
+==================================================
+
+Add a button:
+
+"ENTER ALL SERVICES"
+
+When clicked:
+
+1. Select Project.
+2. Select From Date.
+3. Select To Date.
+4. Load all active services for the selected project.
+5. Group services automatically by their Type/Tab.
+6. Allow the user to enter values for every service.
+7. Save all entries for that period in one submission.
+
+The user should NOT need to open each service individually.
+
+Support:
+
+- Quantity
+- Rate
+- Amount
+- Remarks
+- Blank values
+- Zero values
+
+Do not create unnecessary records for completely blank services unless the user specifically saves them.
+
+==================================================
+6. DYNAMIC SERVICE GROUPING
+==================================================
+
+The entry page must be fully dynamic.
+
+Do NOT hard-code only:
+
+Income
+Cost
+Expense
+Salary
+
+These are default types.
+
+If an administrator creates:
+
+Transportation
+Accommodation
+Maintenance
+Utilities
+Laundry
+Equipment
+
+the system must automatically display them according to their configured type/group.
+
+Example:
+
+INCOME
+  Catering
+  Laundry Revenue
+
+COST
+  Food
+  Laundry
+
+EXPENSE
+  Transportation
+  Accommodation
+
+SALARY
+  Project Salaries
+
+OTHER
+  Utilities
+  Maintenance
+
+==================================================
+7. FULL MIS REPORTING DASHBOARD
+==================================================
+
+Create a dedicated:
+
+"MIS Analytics Dashboard"
+
+This must be a separate reporting screen.
+
+Dashboard filters:
+
+- Project
+- Multiple Projects
+- From Date
+- To Date
+- Tab / Type
+- Service
+- Daily / Monthly / Custom Period
+
+Display KPI cards:
+
+TOTAL SALES / INCOME
+TOTAL COST
+TOTAL EXPENSES
+TOTAL SALARIES
+GROSS PROFIT
+NET PROFIT
+PROFIT MARGIN
+
+Calculations:
+
+Gross Profit =
+Total Income - Total Cost
+
+Net Profit =
+Total Income - Total Cost - Total Expenses - Total Salaries
+
+Profit Margin =
+Net Profit / Total Income × 100
+
+Handle zero income safely.
+
+==================================================
+8. GRAPHICAL DASHBOARD
+==================================================
+
+Add graphical analysis.
+
+Required charts:
+
+1. Sales / Income
+2. Cost
+3. Expenses
+4. Salaries
+5. Net Profit
+6. Profit Margin
+
+Show percentage contribution.
+
+Example:
+
+Sales = 1,000,000
+Cost = 500,000
+Expenses = 100,000
+Salaries = 200,000
+
+Display percentages and values.
+
+Use professional charts such as:
+
+- Bar Charts
+- Line Charts
+- Donut/Pie Charts
+- Stacked Charts
+
+Charts must respond dynamically to filters.
+
+==================================================
+9. PROJECT COMPARISON REPORT
+==================================================
+
+Create a separate screen:
+
+"Project Comparison"
+
+Allow selection of multiple projects.
+
+Example:
+
+Project A
+Project B
+Project C
+Project D
+
+Compare:
+
+- Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+- Gross Profit
+- Net Profit
+- Profit Margin
+
+Display both:
+
+TABULAR VIEW
+and
+GRAPHICAL VIEW
+
+Example:
+
+                 Project A   Project B   Project C
+Income            500,000     650,000     450,000
+Cost              250,000     300,000     220,000
+Expenses          100,000     120,000      80,000
+Salaries           80,000      90,000      70,000
+Net Profit         70,000     140,000      80,000
+Margin                14%         22%         18%
+
+==================================================
+10. SERVICE COMPARISON
+==================================================
+
+Create service-level comparison.
+
+Allow users to compare the same service across multiple projects.
+
+Example:
+
+Service: Catering
+
+Project A
+Project B
+Project C
+
+Show:
+
+Quantity
+Rate
+Total Amount
+Percentage
+Period
+
+Also allow comparison of different services.
+
+==================================================
+11. TYPE / CATEGORY COMPARISON
+==================================================
+
+Allow comparison by MIS Type.
+
+Example:
+
+INCOME
+COST
+EXPENSE
+SALARY
+
+The user can select:
+
+Project
+Date Range
+Type
+
+Then compare the values.
+
+The system must support custom types created by administrators.
+
+==================================================
+12. DAILY DATE-WISE COMPARISON
+==================================================
+
+Create a fully dynamic date-wise report.
+
+The report must be able to display each day separately.
+
+Example:
+
+Date        Project     Type        Service          Amount
+------------------------------------------------------------
+01-Sep      Project A   Income      Catering          10,000
+01-Sep      Project A   Cost        Food                5,000
+01-Sep      Project A   Expense     Transport           1,000
+01-Sep      Project A   Salary      Staff               8,000
+
+02-Sep      Project A   Income      Catering          11,000
+02-Sep      Project A   Cost        Food                5,500
+...
+
+The user must be able to filter by:
+
+- Date
+- Project
+- Project Number
+- Type
+- Service
+- Multiple Projects
+
+==================================================
+13. PROJECT NUMBER LINKING
+==================================================
+
+Every MIS project must have a unique:
+
+Project Number / Project Code
+
+All MIS services and entries must be linked to the project number.
+
+Reports must be able to group data by:
+
+Project Number
+Project Name
+Type
+Service
+Date
+
+Example:
+
+Project No: QNC-001
+Project No: QNC-002
+Project No: QNC-003
+
+==================================================
+14. FULLY DYNAMIC GROUP-BY REPORT
+==================================================
+
+Create a dynamic report builder.
+
+Users should be able to choose:
+
+GROUP BY:
+
+- Date
+- Project
+- Project Number
+- Type
+- Service
+- Month
+- Year
+
+Example:
+
+Group by:
+Project → Type → Service
+
+or:
+
+Date → Project → Type → Service
+
+or:
+
+Type → Service → Project
+
+The report must dynamically regroup the data based on the user's selection.
+
+Do NOT create separate hard-coded reports for every combination.
+
+==================================================
+15. DRILL-DOWN REPORTING
+==================================================
+
+Management reports must support drill-down.
+
+Example:
+
+Dashboard:
+Cost = 500,000
+
+User clicks Cost.
+
+Open:
+
+Project → Service → Period → Entry
+
+Example:
+
+Project A
+  Food
+    01-Sep → 10,000
+    02-Sep → 11,000
+
+Users should be able to navigate from:
+
+SUMMARY
+→ TYPE
+→ PROJECT
+→ SERVICE
+→ ENTRY
+
+based on their security permissions.
+
+==================================================
+16. REPORT DATE COMPARISON
+==================================================
+
+Allow users to compare different periods.
+
+Examples:
+
+01-Aug to 31-Aug
+vs
+01-Sep to 30-Sep
+
+or:
+
+01-Sep
+vs
+02-Sep
+vs
+03-Sep
+
+Show:
+
+Current Value
+Previous Value
+Difference
+Percentage Difference
+
+Formula:
+
+Difference =
+Current - Previous
+
+Percentage Difference =
+(Current - Previous) / Previous × 100
+
+Handle division by zero.
+
+==================================================
+17. DAILY / MONTHLY / PERIOD VIEW
+==================================================
+
+Add a report view selector:
+
+Daily
+Weekly
+Monthly
+Custom Period
+
+The system must dynamically aggregate the data.
+
+Example:
+
+Daily:
+01-Sep
+02-Sep
+03-Sep
+
+Monthly:
+September 2026
+October 2026
+
+Custom:
+01-Sep-2026 → 15-Sep-2026
+
+==================================================
+18. EXPORT
+==================================================
+
+All major reports must support:
+
+Excel
+PDF
+CSV
+
+Exports must respect the user's security permissions and current filters.
+
+==================================================
+19. SECURITY IN REPORTS
+==================================================
+
+Reports must respect project-level security.
+
+Example:
+
+User has access only to:
+
+Project A
+Project B
+
+The dashboard, reports, comparison screens, and exports must NOT expose Project C.
+
+The same applies to restricted services and entries.
+
+==================================================
+20. AUDIT TRAIL
+==================================================
+
+Maintain an audit trail for:
+
+- Entry creation
+- Entry editing
+- Entry deletion
+- Rate modification
+- Approval
+- Rejection
+- Security changes
+- Project access changes
+
+Record:
+
+User
+Date/Time
+Action
+Old Value
+New Value
+Remarks
+
+==================================================
+21. PERFORMANCE
+==================================================
+
+Reports may contain a large number of daily entries.
+
+Use:
+
+- Server-side filtering
+- Pagination
+- Database indexes
+- Optimized aggregation queries
+- Lazy loading
+- Cached dashboard calculations where appropriate
+
+Never load all MIS transactions into the browser unnecessarily.
+
+==================================================
+22. DATABASE SAFETY
+==================================================
+
+Before implementation:
+
+1. Inspect current MIS database structure.
+2. Create migrations safely.
+3. Do not modify existing COGS tables unnecessarily.
+4. Do not delete existing MIS records.
+5. Use proper indexes for:
+   - Project
+   - Project Number
+   - Date
+   - Type
+   - Service
+
+==================================================
+23. UI / UX REQUIREMENT
+==================================================
+
+Keep the same professional QNC application design.
+
+The MIS module should have:
+
+MIS Dashboard
+MIS Entry
+Project Security
+Service Rates
+Reports
+Comparison
+
+Use clean cards, tables, filters, charts, and grouped sections.
+
+The single-page entry screen must be easy for users to enter ALL services for a selected project and period.
+
+==================================================
+24. ACCEPTANCE TEST
+==================================================
+
+Before completion, test the following:
+
+1. Create Project A.
+2. Create Project B.
+3. Assign different users to each project.
+4. Confirm Project A users cannot access Project B.
+5. Create services under Income.
+6. Create services under Cost.
+7. Create services under Expenses.
+8. Create services under Salaries.
+9. Create a custom Type.
+10. Add services under the custom Type.
+11. Set default rates.
+12. Create a user who cannot edit rates.
+13. Confirm the user cannot modify rates.
+14. Create a user with Rate Edit permission.
+15. Confirm the user can edit rates.
+16. Create one period entry using "ENTER ALL SERVICES".
+17. Confirm all project services appear on one page.
+18. Confirm amounts calculate correctly.
+19. Confirm dashboard totals calculate correctly.
+20. Confirm percentages calculate correctly.
+21. Compare multiple projects.
+22. Compare multiple services.
+23. Compare Income, Cost, Expense and Salary.
+24. Run daily comparison.
+25. Group by Project.
+26. Group by Type.
+27. Group by Service.
+28. Group by Date → Project → Type → Service.
+29. Drill down from report to individual entry.
+30. Export report to Excel.
+31. Export report to PDF.
+32. Verify project security in reports.
+33. Verify existing COGS functionality is completely unaffected.
+
+==================================================
+FINAL REQUIREMENT
+==================================================
+
+The MIS module must become a fully dynamic Management Information System.
+
+The user should be able to:
+
+CREATE PROJECT
+→ CONFIGURE SECURITY
+→ CREATE TABS/TYPES
+→ ADD SERVICES
+→ SET DEFAULT RATES
+→ ASSIGN RATE EDIT AUTHORITY
+→ ENTER ALL SERVICES FOR A PERIOD ON ONE PAGE
+→ SUBMIT / APPROVE
+→ VIEW DASHBOARD
+→ COMPARE PROJECTS
+→ COMPARE SERVICES
+→ COMPARE TYPES
+→ ANALYZE DAILY DATA
+→ GROUP DATA DYNAMICALLY
+→ DRILL DOWN TO ENTRIES
+→ EXPORT REPORTS
+
+The solution must be configurable by QNC administrators and should NOT require code changes every time a new project, type, service, or rate is added.
+```

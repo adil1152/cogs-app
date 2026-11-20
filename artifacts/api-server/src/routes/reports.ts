@@ -8,6 +8,7 @@ import {
   usersTable,
   subServiceCostEntriesTable,
   serviceSubItemsTable,
+  mealCostEntriesTable,
 } from "@workspace/db";
 import { and, eq, gte, lte, inArray, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
@@ -168,6 +169,110 @@ async function fetchSubBreakdownByKey(
         totalMandayContribution: v.mandays,
         costPerManday: safeDivide(v.cost, v.mandays),
       }));
+    out.set(key, arr);
+  }
+  return out;
+}
+
+interface ComponentCell {
+  key: string;
+  name: string;
+  kind: "meal" | "sub";
+  qty: number | null;
+  cost: number | null;
+  mandays: number;
+}
+
+interface ComponentAcc extends ComponentCell {
+  sortOrder: number;
+}
+
+/**
+ * Full component breakdown for report cells: given a map of
+ * serviceCostEntry-row-id -> bucket key (whatever grain the caller
+ * aggregates at — per entry×service cell, or per project×service total),
+ * returns per-bucket component lists:
+ *  - meal types (kind=meal) from the entry's saved meal snapshots, merged
+ *    by snapshot name: qty summed, mandays = Σ(qty × weight), no cost.
+ *  - group sub-services (kind=sub) merged by sub-item id: cost + mandays
+ *    summed, no qty.
+ * Components are sorted by saved sortOrder (meals) / sub-item sortOrder.
+ */
+async function fetchComponentsByKey(
+  costToKey: Map<string, string>,
+): Promise<Map<string, ComponentCell[]>> {
+  const out = new Map<string, ComponentCell[]>();
+  const allIds = Array.from(costToKey.keys());
+  if (allIds.length === 0) return out;
+
+  const [mealRows, subRows] = await Promise.all([
+    db
+      .select()
+      .from(mealCostEntriesTable)
+      .where(inArray(mealCostEntriesTable.serviceCostEntryId, allIds)),
+    db
+      .select({ sub: subServiceCostEntriesTable, item: serviceSubItemsTable })
+      .from(subServiceCostEntriesTable)
+      .leftJoin(
+        serviceSubItemsTable,
+        eq(serviceSubItemsTable.id, subServiceCostEntriesTable.subItemId),
+      )
+      .where(inArray(subServiceCostEntriesTable.serviceCostEntryId, allIds)),
+  ]);
+
+  const buckets = new Map<string, Map<string, ComponentAcc>>();
+  const bucketFor = (key: string) => {
+    let m = buckets.get(key);
+    if (!m) {
+      m = new Map();
+      buckets.set(key, m);
+    }
+    return m;
+  };
+
+  for (const r of mealRows) {
+    const key = costToKey.get(r.serviceCostEntryId);
+    if (!key) continue;
+    const m = bucketFor(key);
+    const ck = `meal:${r.name.trim().toLowerCase()}`;
+    const prev = m.get(ck) ?? {
+      key: ck,
+      name: r.name,
+      kind: "meal" as const,
+      qty: 0,
+      cost: null,
+      mandays: 0,
+      sortOrder: r.sortOrder,
+    };
+    prev.qty = (prev.qty ?? 0) + Number(r.qty ?? 0);
+    prev.mandays += Number(r.qty ?? 0) * Number(r.weight ?? 0);
+    m.set(ck, prev);
+  }
+
+  for (const r of subRows) {
+    if (!r.item) continue;
+    const key = costToKey.get(r.sub.serviceCostEntryId);
+    if (!key) continue;
+    const m = bucketFor(key);
+    const ck = `sub:${r.sub.subItemId}`;
+    const prev = m.get(ck) ?? {
+      key: ck,
+      name: r.item.name,
+      kind: "sub" as const,
+      qty: null,
+      cost: 0,
+      mandays: 0,
+      sortOrder: r.item.sortOrder,
+    };
+    prev.cost = (prev.cost ?? 0) + Number(r.sub.cost ?? 0);
+    prev.mandays += Number(r.sub.mandays ?? 0);
+    m.set(ck, prev);
+  }
+
+  for (const [key, m] of buckets) {
+    const arr = Array.from(m.values())
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+      .map(({ sortOrder: _s, ...cell }) => cell);
     out.set(key, arr);
   }
   return out;
@@ -598,6 +703,7 @@ router.get(
       }
     >();
     const groupCostRowsByKey = new Map<string, Set<string>>();
+    const componentCostToKey = new Map<string, string>();
     const projectTotals = new Map<
       string,
       {
@@ -644,6 +750,12 @@ router.get(
           }
           s.add(row.cost.id);
         }
+        if (
+          (row.service.kind === "food" || row.service.kind === "group") &&
+          row.cost
+        ) {
+          componentCostToKey.set(row.cost.id, key);
+        }
       }
 
       if (row.project) {
@@ -665,7 +777,10 @@ router.get(
       }
     }
 
-    const subBreakdownByKey = await fetchSubBreakdownByKey(groupCostRowsByKey);
+    const [subBreakdownByKey, componentsByKey] = await Promise.all([
+      fetchSubBreakdownByKey(groupCostRowsByKey),
+      fetchComponentsByKey(componentCostToKey),
+    ]);
 
     res.json({
       range: { from, to },
@@ -681,6 +796,7 @@ router.get(
         totalMandayContribution: s.mandayContribution,
         costPerManday: safeDivide(s.totalCost, s.mandayContribution),
         subBreakdown: subBreakdownByKey.get(key) ?? [],
+        components: componentsByKey.get(key) ?? [],
       })),
       projectBreakdown: Array.from(projectTotals.values())
         .filter((p) => p.totalCost > 0 || p.entryMandays.size > 0 || p.contributedMandays > 0)
@@ -894,6 +1010,10 @@ router.get(
         >;
       }
     >();
+    // Cost-row id -> "entryId::serviceId" cell key, plus a parallel map at
+    // the per-service grain for footer totals.
+    const cellKeyByCostRow = new Map<string, string>();
+    const totalKeyByCostRow = new Map<string, string>();
     for (const r of rows) {
       let bucket = entryMap.get(r.entry.id);
       if (!bucket) {
@@ -908,8 +1028,17 @@ router.get(
         c.cost += Number(r.cost.cost ?? 0);
         c.mandayContribution += rowMandayContribution(r);
         bucket.costs.set(r.service.id, c);
+        if (r.service.kind === "food" || r.service.kind === "group") {
+          cellKeyByCostRow.set(r.cost.id, `${r.entry.id}::${r.service.id}`);
+          totalKeyByCostRow.set(r.cost.id, r.service.id);
+        }
       }
     }
+
+    const [componentsByCell, componentsByService] = await Promise.all([
+      fetchComponentsByKey(cellKeyByCostRow),
+      fetchComponentsByKey(totalKeyByCostRow),
+    ]);
 
     const entries = Array.from(entryMap.values())
       .sort((a, b) =>
@@ -942,6 +1071,8 @@ router.get(
             cost: c.cost,
             mandayContribution: c.mandayContribution,
             costPerManday: safeDivide(c.cost, c.mandayContribution),
+            components:
+              componentsByCell.get(`${entry.id}::${serviceId}`) ?? [],
           })),
         };
       });
@@ -968,6 +1099,7 @@ router.get(
         totalCost: t.cost,
         totalMandayContribution: t.mandayContribution,
         costPerManday: safeDivide(t.cost, t.mandayContribution),
+        components: componentsByService.get(s.id) ?? [],
       };
     });
 

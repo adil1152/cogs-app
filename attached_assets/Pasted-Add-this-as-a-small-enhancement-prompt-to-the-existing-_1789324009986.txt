@@ -1,0 +1,2165 @@
+Add this as a small enhancement prompt to the existing MIS module:
+
+ENHANCE THE EXISTING MIS MODULE WITH THE FOLLOWING CHANGES ONLY.
+
+IMPORTANT:
+- Do NOT rebuild the MIS module.
+- Do NOT change existing COGS functionality.
+- Do NOT remove existing MIS features.
+- Preserve existing security, workflows, database structure, and reports.
+- Implement only the following changes.
+
+==================================================
+1. COST SECTION – AMOUNT AND QUANTITY ONLY
+==================================================
+
+In the MIS BULK ENTRY screen, change the COST section only.
+
+For COST services, do NOT ask the user to enter a Rate.
+
+Show only:
+
+Quantity
+Amount
+
+Example:
+
+Cost Service       Quantity       Amount
+Food                 500          25,000
+Laundry              200          10,000
+
+The system must automatically calculate the Rate as:
+
+Rate = Amount / Quantity
+
+Example:
+
+Amount = 25,000 SAR
+Quantity = 500
+
+Rate = 25,000 / 500
+Rate = 50 SAR
+
+The calculated Rate should be displayed as a calculated/read-only value where appropriate.
+
+IMPORTANT:
+This change applies ONLY to the COST section.
+
+Do NOT change the existing behavior for:
+
+- Income
+- Expenses
+- Salaries
+- Other Types
+
+For Expense and Salary:
+- Continue using direct Amount.
+- Do not introduce Rate calculation.
+
+For Income:
+- Keep the existing configured/default Rate behavior.
+
+Handle Quantity = 0 safely:
+- Do not generate division-by-zero errors.
+- Display Rate as 0 or N/A according to the existing UI convention.
+
+==================================================
+2. BULK ENTRY – SHOW PERCENTAGE BESIDE AMOUNT
+==================================================
+
+In the MIS BULK ENTRY screen, show the percentage next to the total amount for each applicable group.
+
+Example:
+
+INCOME
+Total Income       1,000,000 SAR      100%
+
+COST
+Total Cost           300,000 SAR       30%
+
+EXPENSE
+Total Expenses       100,000 SAR       10%
+
+SALARIES
+Total Salaries       200,000 SAR       20%
+
+The percentage must be calculated against TOTAL INCOME.
+
+Formula:
+
+Percentage =
+Category Total / Total Income × 100
+
+If Total Income = 0:
+- Show 0% or N/A.
+- Do not generate an error.
+
+==================================================
+3. TOTAL TABLE – ADD PERCENTAGE COLUMN
+==================================================
+
+In the BULK ENTRY total/summary table, add a new column:
+
+Percentage of Income
+
+Example:
+
+---------------------------------------------------------
+Category        Total Amount       Percentage of Income
+---------------------------------------------------------
+Income          1,000,000 SAR            100%
+Cost              300,000 SAR             30%
+Expenses          100,000 SAR             10%
+Salaries          200,000 SAR             20%
+---------------------------------------------------------
+
+The percentage column must be dynamically calculated.
+
+The percentage should be shown for:
+
+- Cost
+- Expenses
+- Salaries
+
+Income should show 100%.
+
+If custom Types are configured to calculate percentage against income, include them as well.
+
+==================================================
+4. SERVICE-LEVEL PERCENTAGE
+==================================================
+
+Continue showing the percentage beside individual service totals where the Type configuration allows:
+
+"Calculate % Against Total Income"
+
+Example:
+
+COST
+
+Food
+Amount = 200,000 SAR
+% of Income = 20%
+
+Laundry
+Amount = 100,000 SAR
+% of Income = 10%
+
+Total Cost
+Amount = 300,000 SAR
+% of Income = 30%
+
+Do NOT calculate/display service percentages when the Type configuration has percentage calculation disabled.
+
+==================================================
+5. RENAME NET PROFIT TO CONTRIBUTION MARGIN
+==================================================
+
+In the MIS BULK ENTRY screen, rename:
+
+"Net Profit"
+
+to:
+
+"Contribution Margin"
+
+Do not change the underlying calculation unless specifically required.
+
+For the current calculation:
+
+Contribution Margin =
+Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+
+Example:
+
+Income        1,000,000
+Cost            300,000
+Expenses        100,000
+Salaries        200,000
+-----------------------
+Contribution Margin 400,000
+
+Also update the label consistently wherever this metric appears within the bulk-entry screen.
+
+Use exactly:
+
+CONTRIBUTION MARGIN
+
+Do not display "Net Profit" in the bulk-entry screen.
+
+==================================================
+6. BULK ENTRY SUMMARY DESIGN
+==================================================
+
+The bottom summary should be presented clearly:
+
+-------------------------------------------------------------
+Category             Total Amount       % of Income
+-------------------------------------------------------------
+Income               1,000,000 SAR          100%
+Cost                   300,000 SAR           30%
+Expenses               100,000 SAR           10%
+Salaries               200,000 SAR           20%
+-------------------------------------------------------------
+Contribution Margin    400,000 SAR           40%
+-------------------------------------------------------------
+
+Contribution Margin Percentage:
+
+Contribution Margin / Total Income × 100
+
+Example:
+
+400,000 / 1,000,000 × 100 = 40%
+
+Show the percentage beside the Contribution Margin as well.
+
+==================================================
+7. VISUAL REQUIREMENT
+==================================================
+
+Keep the bulk-entry screen simple and easy to understand.
+
+Recommended columns:
+
+Service
+Quantity
+Rate
+Amount
+% of Income
+
+For COST:
+
+Service
+Quantity
+Calculated Rate
+Amount
+% of Income
+
+For EXPENSE and SALARY:
+
+Service
+Amount
+% of Income
+
+Do not show unnecessary Rate fields for Expense or Salary.
+
+==================================================
+8. VALIDATION
+==================================================
+
+Test:
+
+1. Cost Quantity = 500
+2. Cost Amount = 25,000
+3. Confirm Rate = 50
+
+4. Change Cost Amount to 30,000
+5. Confirm Rate automatically becomes 60
+
+6. Quantity = 0
+7. Confirm no division-by-zero error
+
+8. Total Income = 1,000,000
+9. Cost = 300,000
+10. Confirm Cost % = 30%
+
+11. Expense = 100,000
+12. Confirm Expense % = 10%
+
+13. Salary = 200,000
+14. Confirm Salary % = 20%
+
+15. Confirm Contribution Margin = 400,000
+16. Confirm Contribution Margin % = 40%
+
+17. Confirm "Net Profit" is no longer displayed on the Bulk Entry screen.
+
+18. Confirm Income rate behavior remains unchanged.
+
+19. Confirm Expense and Salary remain amount-based.
+
+20. Confirm existing MIS and COGS functionality remains unaffected.
+Today 9:24 PM
+
+Add this as a small enhancement prompt to the existing MIS module:
+
+ENHANCE THE EXISTING MIS MODULE WITH THE FOLLOWING CHANGES ONLY.
+
+IMPORTANT:
+- Do NOT rebuild the MIS module.
+- Do NOT change existing COGS functionality.
+- Do NOT remove existing MIS features.
+- Preserve existing security, workflows, database structure, and reports.
+- Implement only the following changes.
+
+==================================================
+1. COST SECTION – AMOUNT AND QUANTITY ONLY
+==================================================
+
+In the MIS BULK ENTRY screen, change the COST section only.
+
+For COST services, do NOT ask the user to enter a Rate.
+
+Show only:
+
+Quantity
+Amount
+
+Example:
+
+Cost Service       Quantity       Amount
+Food                 500          25,000
+Laundry              200          10,000
+
+The system must automatically calculate the Rate as:
+
+Rate = Amount / Quantity
+
+Example:
+
+Amount = 25,000 SAR
+Quantity = 500
+
+Rate = 25,000 / 500
+Rate = 50 SAR
+
+The calculated Rate should be displayed as a calculated/read-only value where appropriate.
+
+IMPORTANT:
+This change applies ONLY to the COST section.
+
+Do NOT change the existing behavior for:
+
+- Income
+- Expenses
+- Salaries
+- Other Types
+
+For Expense and Salary:
+- Continue using direct Amount.
+- Do not introduce Rate calculation.
+
+For Income:
+- Keep the existing configured/default Rate behavior.
+
+Handle Quantity = 0 safely:
+- Do not generate division-by-zero errors.
+- Display Rate as 0 or N/A according to the existing UI convention.
+
+==================================================
+2. BULK ENTRY – SHOW PERCENTAGE BESIDE AMOUNT
+==================================================
+
+In the MIS BULK ENTRY screen, show the percentage next to the total amount for each applicable group.
+
+Example:
+
+INCOME
+Total Income       1,000,000 SAR      100%
+
+COST
+Total Cost           300,000 SAR       30%
+
+EXPENSE
+Total Expenses       100,000 SAR       10%
+
+SALARIES
+Total Salaries       200,000 SAR       20%
+
+The percentage must be calculated against TOTAL INCOME.
+
+Formula:
+
+Percentage =
+Category Total / Total Income × 100
+
+If Total Income = 0:
+- Show 0% or N/A.
+- Do not generate an error.
+
+==================================================
+3. TOTAL TABLE – ADD PERCENTAGE COLUMN
+==================================================
+
+In the BULK ENTRY total/summary table, add a new column:
+
+Percentage of Income
+
+Example:
+
+---------------------------------------------------------
+Category        Total Amount       Percentage of Income
+---------------------------------------------------------
+Income          1,000,000 SAR            100%
+Cost              300,000 SAR             30%
+Expenses          100,000 SAR             10%
+Salaries          200,000 SAR             20%
+---------------------------------------------------------
+
+The percentage column must be dynamically calculated.
+
+The percentage should be shown for:
+
+- Cost
+- Expenses
+- Salaries
+
+Income should show 100%.
+
+If custom Types are configured to calculate percentage against income, include them as well.
+
+==================================================
+4. SERVICE-LEVEL PERCENTAGE
+==================================================
+
+Continue showing the percentage beside individual service totals where the Type configuration allows:
+
+"Calculate % Against Total Income"
+
+Example:
+
+COST
+
+Food
+Amount = 200,000 SAR
+% of Income = 20%
+
+Laundry
+Amount = 100,000 SAR
+% of Income = 10%
+
+Total Cost
+Amount = 300,000 SAR
+% of Income = 30%
+
+Do NOT calculate/display service percentages when the Type configuration has percentage calculation disabled.
+
+==================================================
+5. RENAME NET PROFIT TO CONTRIBUTION MARGIN
+==================================================
+
+In the MIS BULK ENTRY screen, rename:
+
+"Net Profit"
+
+to:
+
+"Contribution Margin"
+
+Do not change the underlying calculation unless specifically required.
+
+For the current calculation:
+
+Contribution Margin =
+Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+
+Example:
+
+Income        1,000,000
+Cost            300,000
+Expenses        100,000
+Salaries        200,000
+-----------------------
+Contribution Margin 400,000
+
+Also update the label consistently wherever this metric appears within the bulk-entry screen.
+
+Use exactly:
+
+CONTRIBUTION MARGIN
+
+Do not display "Net Profit" in the bulk-entry screen.
+
+==================================================
+6. BULK ENTRY SUMMARY DESIGN
+==================================================
+
+The bottom summary should be presented clearly:
+
+-------------------------------------------------------------
+Category             Total Amount       % of Income
+-------------------------------------------------------------
+Income               1,000,000 SAR          100%
+Cost                   300,000 SAR           30%
+Expenses               100,000 SAR           10%
+Salaries               200,000 SAR           20%
+-------------------------------------------------------------
+Contribution Margin    400,000 SAR           40%
+-------------------------------------------------------------
+
+Contribution Margin Percentage:
+
+Contribution Margin / Total Income × 100
+
+Example:
+
+400,000 / 1,000,000 × 100 = 40%
+
+Show the percentage beside the Contribution Margin as well.
+
+==================================================
+7. VISUAL REQUIREMENT
+==================================================
+
+Keep the bulk-entry screen simple and easy to understand.
+
+Recommended columns:
+
+Service
+Quantity
+Rate
+Amount
+% of Income
+
+For COST:
+
+Service
+Quantity
+Calculated Rate
+Amount
+% of Income
+
+For EXPENSE and SALARY:
+
+Service
+Amount
+% of Income
+
+Do not show unnecessary Rate fields for Expense or Salary.
+
+==================================================
+8. VALIDATION
+==================================================
+
+Test:
+
+1. Cost Quantity = 500
+2. Cost Amount = 25,000
+3. Confirm Rate = 50
+
+4. Change Cost Amount to 30,000
+5. Confirm Rate automatically becomes 60
+
+6. Quantity = 0
+7. Confirm no division-by-zero error
+
+8. Total Income = 1,000,000
+9. Cost = 300,000
+10. Confirm Cost % = 30%
+
+11. Expense = 100,000
+12. Confirm Expense % = 10%
+
+13. Salary = 200,000
+14. Confirm Salary % = 20%
+
+15. Confirm Contribution Margin = 400,000
+16. Confirm Contribution Margin % = 40%
+
+17. Confirm "Net Profit" is no longer displayed on the Bulk Entry screen.
+
+18. Confirm Income rate behavior remains unchanged.
+
+19. Confirm Expense and Salary remain amount-based.
+
+20. Confirm existing MIS and COGS functionality remains unaffected."
+
+
+
+make amount editable in cost enpense and slary
+
+Yes. Add this clarification to the prompt so that Amount is editable for Cost, Expense, and Salary, while the special Cost rate calculation remains automatic.
+
+ADD THE FOLLOWING CHANGE TO THE EXISTING MIS BULK ENTRY REQUIREMENTS.
+
+==================================================
+9. AMOUNT MUST BE EDITABLE FOR COST, EXPENSE & SALARY
+==================================================
+
+In the MIS BULK ENTRY screen, the AMOUNT field must be directly editable by the user for:
+
+- COST
+- EXPENSE
+- SALARY
+
+The user should enter or modify the Amount directly.
+
+--------------------------------------------------
+COST
+--------------------------------------------------
+
+For COST services, display:
+
+Service
+Quantity
+Amount
+Calculated Rate
+% of Income
+
+The user enters:
+
+Quantity
+Amount
+
+The system automatically calculates:
+
+Rate = Amount / Quantity
+
+Example:
+
+Quantity = 500
+Amount = 25,000 SAR
+
+Calculated Rate = 50 SAR
+
+The Rate must remain read-only/calculated.
+
+If the user changes the Amount:
+
+Amount = 30,000 SAR
+
+The system must immediately recalculate:
+
+Rate = 30,000 / 500 = 60 SAR
+
+If the user changes Quantity:
+
+Quantity = 600
+Amount = 30,000 SAR
+
+Rate = 30,000 / 600 = 50 SAR
+
+Do NOT allow the user to manually edit the calculated Cost Rate.
+
+If Quantity = 0:
+- Do not generate a division-by-zero error.
+- Show Rate as 0 or N/A.
+
+--------------------------------------------------
+EXPENSE
+--------------------------------------------------
+
+For EXPENSE services:
+
+Service
+Amount
+% of Income
+
+The Amount must be directly editable.
+
+Do NOT display a Rate field.
+
+Do NOT calculate:
+
+Quantity × Rate
+
+Expense is an amount-based entry.
+
+Example:
+
+Transport Expense
+Amount = 50,000 SAR
+
+User can directly change:
+
+50,000 → 55,000 SAR
+
+The percentage against Total Income must update automatically.
+
+--------------------------------------------------
+SALARY
+--------------------------------------------------
+
+For SALARY services:
+
+Service
+Amount
+% of Income
+
+The Amount must be directly editable.
+
+Do NOT display a Rate field.
+
+Do NOT calculate Quantity × Rate.
+
+Salary is an amount-based entry.
+
+Example:
+
+Project Salaries
+Amount = 200,000 SAR
+
+User can directly change:
+
+200,000 → 220,000 SAR
+
+The percentage against Total Income must update automatically.
+
+==================================================
+10. REAL-TIME RECALCULATION
+==================================================
+
+When the user changes any editable Amount or Quantity in the bulk-entry screen, immediately recalculate:
+
+- Service Amount
+- Cost Rate where applicable
+- Service % of Income
+- Group Total
+- Group % of Income
+- Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+- Contribution Margin
+- Contribution Margin %
+
+No page refresh should be required.
+
+==================================================
+11. FINAL BULK ENTRY FIELD RULES
+==================================================
+
+INCOME:
+
+Service
+Quantity
+Rate
+Amount
+% of Income
+
+Use existing configured/default rate behavior.
+
+--------------------------------------------------
+
+COST:
+
+Service
+Quantity
+Amount
+Calculated Rate
+% of Income
+
+Amount = EDITABLE
+Quantity = EDITABLE
+Rate = CALCULATED / READ-ONLY
+
+Formula:
+
+Rate = Amount / Quantity
+
+--------------------------------------------------
+
+EXPENSE:
+
+Service
+Amount
+% of Income
+
+Amount = EDITABLE
+Rate = NOT USED
+
+--------------------------------------------------
+
+SALARY:
+
+Service
+Amount
+% of Income
+
+Amount = EDITABLE
+Rate = NOT USED
+
+--------------------------------------------------
+
+OTHER / CUSTOM TYPES:
+
+Follow the Type configuration.
+
+If the Type is configured as:
+- Quantity + Rate → use quantity/rate calculation.
+- Direct Amount → allow direct Amount entry.
+
+==================================================
+12. PERCENTAGE RECALCULATION
+==================================================
+
+Whenever Cost, Expense, or Salary Amount changes:
+
+Percentage =
+Amount / Total Income × 100
+
+Example:
+
+Total Income = 1,000,000 SAR
+
+Cost = 300,000
+Percentage = 30%
+
+Expense = 100,000
+Percentage = 10%
+
+Salary = 200,000
+Percentage = 20%
+
+If Total Income changes, all applicable percentages must automatically recalculate.
+
+==================================================
+13. CONTRIBUTION MARGIN
+==================================================
+
+Keep the Bulk Entry summary label:
+
+CONTRIBUTION MARGIN
+
+Formula:
+
+Contribution Margin =
+Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+
+Contribution Margin %:
+
+Contribution Margin / Total Income × 100
+
+Update these values immediately whenever the user changes Amount or Quantity.
+
+==================================================
+14. IMPORTANT VALIDATION
+==================================================
+
+Test the following:
+
+COST:
+Quantity = 500
+Amount = 25,000
+Rate = 50
+
+Change Amount:
+30,000
+Rate = 60
+
+Change Quantity:
+600
+Rate = 50
+
+EXPENSE:
+Amount = 100,000
+User changes to 120,000
+Summary and percentage update immediately.
+
+SALARY:
+Amount = 200,000
+User changes to 220,000
+Summary and percentage update immediately.
+
+Confirm:
+- Cost Rate is never manually editable.
+- Expense has no Rate.
+- Salary has no Rate.
+- Cost Amount is editable.
+- Expense Amount is editable.
+- Salary Amount is editable.
+- All totals and percentages recalculate immediately.
+
+The key logic becomes:
+
+Cost: User enters Quantity + Amount → System calculates Rate
+
+Expense: User enters Amount
+
+Salary: User enters Amount
+
+Income: Keep the existing Rate/Quantity/Amount logic.
+
+Add this as a small enhancement prompt to the existing MIS module:
+
+ENHANCE THE EXISTING MIS MODULE WITH THE FOLLOWING CHANGES ONLY.
+
+IMPORTANT:
+- Do NOT rebuild the MIS module.
+- Do NOT change existing COGS functionality.
+- Do NOT remove existing MIS features.
+- Preserve existing security, workflows, database structure, and reports.
+- Implement only the following changes.
+
+==================================================
+1. COST SECTION – AMOUNT AND QUANTITY ONLY
+==================================================
+
+In the MIS BULK ENTRY screen, change the COST section only.
+
+For COST services, do NOT ask the user to enter a Rate.
+
+Show only:
+
+Quantity
+Amount
+
+Example:
+
+Cost Service       Quantity       Amount
+Food                 500          25,000
+Laundry              200          10,000
+
+The system must automatically calculate the Rate as:
+
+Rate = Amount / Quantity
+
+Example:
+
+Amount = 25,000 SAR
+Quantity = 500
+
+Rate = 25,000 / 500
+Rate = 50 SAR
+
+The calculated Rate should be displayed as a calculated/read-only value where appropriate.
+
+IMPORTANT:
+This change applies ONLY to the COST section.
+
+Do NOT change the existing behavior for:
+
+- Income
+- Expenses
+- Salaries
+- Other Types
+
+For Expense and Salary:
+- Continue using direct Amount.
+- Do not introduce Rate calculation.
+
+For Income:
+- Keep the existing configured/default Rate behavior.
+
+Handle Quantity = 0 safely:
+- Do not generate division-by-zero errors.
+- Display Rate as 0 or N/A according to the existing UI convention.
+
+==================================================
+2. BULK ENTRY – SHOW PERCENTAGE BESIDE AMOUNT
+==================================================
+
+In the MIS BULK ENTRY screen, show the percentage next to the total amount for each applicable group.
+
+Example:
+
+INCOME
+Total Income       1,000,000 SAR      100%
+
+COST
+Total Cost           300,000 SAR       30%
+
+EXPENSE
+Total Expenses       100,000 SAR       10%
+
+SALARIES
+Total Salaries       200,000 SAR       20%
+
+The percentage must be calculated against TOTAL INCOME.
+
+Formula:
+
+Percentage =
+Category Total / Total Income × 100
+
+If Total Income = 0:
+- Show 0% or N/A.
+- Do not generate an error.
+
+==================================================
+3. TOTAL TABLE – ADD PERCENTAGE COLUMN
+==================================================
+
+In the BULK ENTRY total/summary table, add a new column:
+
+Percentage of Income
+
+Example:
+
+---------------------------------------------------------
+Category        Total Amount       Percentage of Income
+---------------------------------------------------------
+Income          1,000,000 SAR            100%
+Cost              300,000 SAR             30%
+Expenses          100,000 SAR             10%
+Salaries          200,000 SAR             20%
+---------------------------------------------------------
+
+The percentage column must be dynamically calculated.
+
+The percentage should be shown for:
+
+- Cost
+- Expenses
+- Salaries
+
+Income should show 100%.
+
+If custom Types are configured to calculate percentage against income, include them as well.
+
+==================================================
+4. SERVICE-LEVEL PERCENTAGE
+==================================================
+
+Continue showing the percentage beside individual service totals where the Type configuration allows:
+
+"Calculate % Against Total Income"
+
+Example:
+
+COST
+
+Food
+Amount = 200,000 SAR
+% of Income = 20%
+
+Laundry
+Amount = 100,000 SAR
+% of Income = 10%
+
+Total Cost
+Amount = 300,000 SAR
+% of Income = 30%
+
+Do NOT calculate/display service percentages when the Type configuration has percentage calculation disabled.
+
+==================================================
+5. RENAME NET PROFIT TO CONTRIBUTION MARGIN
+==================================================
+
+In the MIS BULK ENTRY screen, rename:
+
+"Net Profit"
+
+to:
+
+"Contribution Margin"
+
+Do not change the underlying calculation unless specifically required.
+
+For the current calculation:
+
+Contribution Margin =
+Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+
+Example:
+
+Income        1,000,000
+Cost            300,000
+Expenses        100,000
+Salaries        200,000
+-----------------------
+Contribution Margin 400,000
+
+Also update the label consistently wherever this metric appears within the bulk-entry screen.
+
+Use exactly:
+
+CONTRIBUTION MARGIN
+
+Do not display "Net Profit" in the bulk-entry screen.
+
+==================================================
+6. BULK ENTRY SUMMARY DESIGN
+==================================================
+
+The bottom summary should be presented clearly:
+
+-------------------------------------------------------------
+Category             Total Amount       % of Income
+-------------------------------------------------------------
+Income               1,000,000 SAR          100%
+Cost                   300,000 SAR           30%
+Expenses               100,000 SAR           10%
+Salaries               200,000 SAR           20%
+-------------------------------------------------------------
+Contribution Margin    400,000 SAR           40%
+-------------------------------------------------------------
+
+Contribution Margin Percentage:
+
+Contribution Margin / Total Income × 100
+
+Example:
+
+400,000 / 1,000,000 × 100 = 40%
+
+Show the percentage beside the Contribution Margin as well.
+
+==================================================
+7. VISUAL REQUIREMENT
+==================================================
+
+Keep the bulk-entry screen simple and easy to understand.
+
+Recommended columns:
+
+Service
+Quantity
+Rate
+Amount
+% of Income
+
+For COST:
+
+Service
+Quantity
+Calculated Rate
+Amount
+% of Income
+
+For EXPENSE and SALARY:
+
+Service
+Amount
+% of Income
+
+Do not show unnecessary Rate fields for Expense or Salary.
+
+==================================================
+8. VALIDATION
+==================================================
+
+Test:
+
+1. Cost Quantity = 500
+2. Cost Amount = 25,000
+3. Confirm Rate = 50
+
+4. Change Cost Amount to 30,000
+5. Confirm Rate automatically becomes 60
+
+6. Quantity = 0
+7. Confirm no division-by-zero error
+
+8. Total Income = 1,000,000
+9. Cost = 300,000
+10. Confirm Cost % = 30%
+
+11. Expense = 100,000
+12. Confirm Expense % = 10%
+
+13. Salary = 200,000
+14. Confirm Salary % = 20%
+
+15. Confirm Contribution Margin = 400,000
+16. Confirm Contribution Margin % = 40%
+
+17. Confirm "Net Profit" is no longer displayed on the Bulk Entry screen.
+
+18. Confirm Income rate behavior remains unchanged.
+
+19. Confirm Expense and Salary remain amount-based.
+
+20. Confirm existing MIS and COGS functionality remains unaffected.
+
+
+ADD THE FOLLOWING CHANGE TO THE EXISTING MIS BULK ENTRY REQUIREMENTS.
+
+==================================================
+9. AMOUNT MUST BE EDITABLE FOR COST, EXPENSE & SALARY
+==================================================
+
+In the MIS BULK ENTRY screen, the AMOUNT field must be directly editable by the user for:
+
+- COST
+- EXPENSE
+- SALARY
+
+The user should enter or modify the Amount directly.
+
+--------------------------------------------------
+COST
+--------------------------------------------------
+
+For COST services, display:
+
+Service
+Quantity
+Amount
+Calculated Rate
+% of Income
+
+The user enters:
+
+Quantity
+Amount
+
+The system automatically calculates:
+
+Rate = Amount / Quantity
+
+Example:
+
+Quantity = 500
+Amount = 25,000 SAR
+
+Calculated Rate = 50 SAR
+
+The Rate must remain read-only/calculated.
+
+If the user changes the Amount:
+
+Amount = 30,000 SAR
+
+The system must immediately recalculate:
+
+Rate = 30,000 / 500 = 60 SAR
+
+If the user changes Quantity:
+
+Quantity = 600
+Amount = 30,000 SAR
+
+Rate = 30,000 / 600 = 50 SAR
+
+Do NOT allow the user to manually edit the calculated Cost Rate.
+
+If Quantity = 0:
+- Do not generate a division-by-zero error.
+- Show Rate as 0 or N/A.
+
+--------------------------------------------------
+EXPENSE
+--------------------------------------------------
+
+For EXPENSE services:
+
+Service
+Amount
+% of Income
+
+The Amount must be directly editable.
+
+Do NOT display a Rate field.
+
+Do NOT calculate:
+
+Quantity × Rate
+
+Expense is an amount-based entry.
+
+Example:
+
+Transport Expense
+Amount = 50,000 SAR
+
+User can directly change:
+
+50,000 → 55,000 SAR
+
+The percentage against Total Income must update automatically.
+
+--------------------------------------------------
+SALARY
+--------------------------------------------------
+
+For SALARY services:
+
+Service
+Amount
+% of Income
+
+The Amount must be directly editable.
+
+Do NOT display a Rate field.
+
+Do NOT calculate Quantity × Rate.
+
+Salary is an amount-based entry.
+
+Example:
+
+Project Salaries
+Amount = 200,000 SAR
+
+User can directly change:
+
+200,000 → 220,000 SAR
+
+The percentage against Total Income must update automatically.
+
+==================================================
+10. REAL-TIME RECALCULATION
+==================================================
+
+When the user changes any editable Amount or Quantity in the bulk-entry screen, immediately recalculate:
+
+- Service Amount
+- Cost Rate where applicable
+- Service % of Income
+- Group Total
+- Group % of Income
+- Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+- Contribution Margin
+- Contribution Margin %
+
+No page refresh should be required.
+
+==================================================
+11. FINAL BULK ENTRY FIELD RULES
+==================================================
+
+INCOME:
+
+Service
+Quantity
+Rate
+Amount
+% of Income
+
+Use existing configured/default rate behavior.
+
+--------------------------------------------------
+
+COST:
+
+Service
+Quantity
+Amount
+Calculated Rate
+% of Income
+
+Amount = EDITABLE
+Quantity = EDITABLE
+Rate = CALCULATED / READ-ONLY
+
+Formula:
+
+Rate = Amount / Quantity
+
+--------------------------------------------------
+
+EXPENSE:
+
+Service
+Amount
+% of Income
+
+Amount = EDITABLE
+Rate = NOT USED
+
+--------------------------------------------------
+
+SALARY:
+
+Service
+Amount
+% of Income
+
+Amount = EDITABLE
+Rate = NOT USED
+
+--------------------------------------------------
+
+OTHER / CUSTOM TYPES:
+
+Follow the Type configuration.
+
+If the Type is configured as:
+- Quantity + Rate → use quantity/rate calculation.
+- Direct Amount → allow direct Amount entry.
+
+==================================================
+12. PERCENTAGE RECALCULATION
+==================================================
+
+Whenever Cost, Expense, or Salary Amount changes:
+
+Percentage =
+Amount / Total Income × 100
+
+Example:
+
+Total Income = 1,000,000 SAR
+
+Cost = 300,000
+Percentage = 30%
+
+Expense = 100,000
+Percentage = 10%
+
+Salary = 200,000
+Percentage = 20%
+
+If Total Income changes, all applicable percentages must automatically recalculate.
+
+==================================================
+13. CONTRIBUTION MARGIN
+==================================================
+
+Keep the Bulk Entry summary label:
+
+CONTRIBUTION MARGIN
+
+Formula:
+
+Contribution Margin =
+Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+
+Contribution Margin %:
+
+Contribution Margin / Total Income × 100
+
+Update these values immediately whenever the user changes Amount or Quantity.
+
+==================================================
+14. IMPORTANT VALIDATION
+==================================================
+
+Test the following:
+
+COST:
+Quantity = 500
+Amount = 25,000
+Rate = 50
+
+Change Amount:
+30,000
+Rate = 60
+
+Change Quantity:
+600
+Rate = 50
+
+EXPENSE:
+Amount = 100,000
+User changes to 120,000
+Summary and percentage update immediately.
+
+SALARY:
+Amount = 200,000
+User changes to 220,000
+Summary and percentage update immediately.
+
+Confirm:
+- Cost Rate is never manually editable.
+- Expense has no Rate.
+- Salary has no Rate.
+- Cost Amount is editable.
+- Expense Amount is editable.
+- Salary Amount is editable.
+- All totals and percentages recalculate immediately.
+
+
+
+
+combine this prompt
+
+Absolutely. Here is the combined and cleaned-up prompt with all the requirements consolidated into one prompt, removing duplicates and contradictions.
+
+ENHANCE THE EXISTING MIS MODULE WITH THE FOLLOWING CHANGES ONLY.
+
+IMPORTANT:
+- Do NOT rebuild the MIS module.
+- Do NOT change or break the existing COGS application.
+- Do NOT remove existing MIS features.
+- Preserve existing data, database structure, security, workflows, reports, and calculations unless a change below specifically requires an update.
+- First inspect the current MIS implementation and integrate these enhancements into the existing architecture.
+- Do not duplicate functionality that already exists.
+- Keep the UI simple, clean, and consistent with the current COGS/MIS design.
+
+==================================================
+1. COST SECTION – AMOUNT + QUANTITY ONLY
+==================================================
+
+Change the MIS BULK ENTRY screen for the COST section only.
+
+For COST services, the user must enter:
+
+- Quantity
+- Amount
+
+Do NOT ask the user to enter the Cost Rate.
+
+The system must automatically calculate:
+
+Rate = Amount / Quantity
+
+Example:
+
+Quantity = 500
+Amount = 25,000 SAR
+
+Calculated Rate = 50 SAR
+
+The calculated Cost Rate must be:
+
+- Read-only
+- Automatically updated
+- Never manually editable
+
+If the user changes Amount:
+
+Quantity = 500
+Amount = 30,000
+
+Rate automatically becomes:
+
+30,000 / 500 = 60 SAR
+
+If the user changes Quantity:
+
+Quantity = 600
+Amount = 30,000
+
+Rate automatically becomes:
+
+30,000 / 600 = 50 SAR
+
+Handle Quantity = 0 safely.
+
+Do not generate division-by-zero errors.
+Display Rate as 0 or N/A according to the current UI convention.
+
+IMPORTANT:
+
+This special Amount + Quantity + calculated Rate logic applies ONLY to COST.
+
+Do NOT change the existing behavior for Income, Expense, Salary, or other types unless explicitly stated below.
+
+==================================================
+2. EXPENSE – DIRECT AMOUNT
+==================================================
+
+For EXPENSE services:
+
+Show:
+
+Service
+Amount
+% of Income
+
+Amount must be directly editable.
+
+Do NOT show a Rate field.
+
+Do NOT use:
+
+Quantity × Rate
+
+Expense is an amount-based entry.
+
+Example:
+
+Transport Expense
+Amount = 50,000 SAR
+
+The user can directly change the amount to:
+
+55,000 SAR
+
+All related totals and percentages must recalculate immediately.
+
+==================================================
+3. SALARY – DIRECT AMOUNT
+==================================================
+
+For SALARY services:
+
+Show:
+
+Service
+Amount
+% of Income
+
+Amount must be directly editable.
+
+Do NOT show a Rate field.
+
+Do NOT use:
+
+Quantity × Rate
+
+Salary is an amount-based entry.
+
+Example:
+
+Project Salaries
+Amount = 200,000 SAR
+
+The user can directly change:
+
+200,000 → 220,000 SAR
+
+All related totals and percentages must recalculate immediately.
+
+==================================================
+4. INCOME – KEEP EXISTING RATE LOGIC
+==================================================
+
+Do NOT change the existing Income behavior.
+
+Continue using the current configured/default Rate and Quantity logic for Income.
+
+Configured/default Income rates should continue to work as they currently do.
+
+==================================================
+5. BULK ENTRY – ALL SERVICES ON ONE PAGE
+==================================================
+
+Keep the existing bulk-entry concept.
+
+The user selects:
+
+Project
+From Date
+To Date
+
+Then all active services configured for that project must appear on one page.
+
+Group them in this order:
+
+1. INCOME
+2. COST
+3. EXPENSE
+4. SALARY
+5. OTHER / CUSTOM TYPES
+
+The user should be able to enter all services for the selected period without opening each service separately.
+
+==================================================
+6. BULK ENTRY FIELD STRUCTURE
+==================================================
+
+INCOME:
+
+Service
+Quantity
+Rate
+Amount
+% of Income
+
+Use the existing Income rate/default-rate behavior.
+
+--------------------------------------------------
+
+COST:
+
+Service
+Quantity
+Amount
+Calculated Rate
+% of Income
+
+Rules:
+
+Quantity = Editable
+Amount = Editable
+Rate = Automatically Calculated / Read-only
+
+Formula:
+
+Rate = Amount / Quantity
+
+--------------------------------------------------
+
+EXPENSE:
+
+Service
+Amount
+% of Income
+
+Amount = Editable
+Rate = Not Used
+
+--------------------------------------------------
+
+SALARY:
+
+Service
+Amount
+% of Income
+
+Amount = Editable
+Rate = Not Used
+
+--------------------------------------------------
+
+OTHER / CUSTOM TYPES:
+
+Follow the Type configuration.
+
+If configured as:
+
+Quantity + Rate
+→ use Quantity × Rate = Amount
+
+If configured as:
+
+Direct Amount
+→ allow direct Amount entry
+
+==================================================
+7. PERCENTAGE AGAINST TOTAL INCOME
+==================================================
+
+Show percentage against TOTAL INCOME for applicable services and groups.
+
+Formula:
+
+Percentage =
+Amount / Total Income × 100
+
+Example:
+
+Total Income = 1,000,000 SAR
+
+Cost = 300,000
+Percentage = 30%
+
+Expense = 100,000
+Percentage = 10%
+
+Salary = 200,000
+Percentage = 20%
+
+If Total Income = 0:
+
+- Do not generate an error.
+- Show 0% or N/A.
+
+==================================================
+8. CONFIGURABLE PERCENTAGE BY TYPE
+==================================================
+
+Keep/use the existing Type configuration:
+
+"Calculate % Against Total Income"
+
+Options:
+
+YES
+NO
+
+This must be configurable by Type and, where supported by the existing MIS structure, by Project.
+
+If YES:
+
+Show percentage for the services and group totals.
+
+If NO:
+
+Do not calculate/display the percentage.
+
+Example:
+
+COST
+Calculate % = YES
+
+SALARY
+Calculate % = YES
+
+EXPENSE
+Calculate % = YES
+
+CUSTOM TYPE
+Calculate % = NO
+
+The system must follow the configuration dynamically.
+
+==================================================
+9. BULK ENTRY – SERVICE PERCENTAGE
+==================================================
+
+In the bulk-entry screen, show the percentage beside the amount for applicable services.
+
+Example:
+
+COST
+
+Food
+Amount = 200,000 SAR
+% of Income = 20%
+
+Laundry
+Amount = 100,000 SAR
+% of Income = 10%
+
+Total Cost
+Amount = 300,000 SAR
+% of Income = 30%
+
+The percentage must update immediately when:
+
+- Amount changes
+- Quantity changes
+- Income changes
+
+==================================================
+10. TOTAL / SUMMARY TABLE
+==================================================
+
+In the Bulk Entry summary table, add:
+
+Category
+Total Amount
+Percentage of Income
+
+Example:
+
+------------------------------------------------------------
+Category                Total Amount      % of Income
+------------------------------------------------------------
+Income                  1,000,000 SAR         100%
+Cost                      300,000 SAR          30%
+Expenses                  100,000 SAR          10%
+Salaries                 200,000 SAR          20%
+------------------------------------------------------------
+Contribution Margin       400,000 SAR          40%
+------------------------------------------------------------
+
+For each category:
+
+Percentage =
+Category Total / Total Income × 100
+
+Income should display 100%.
+
+Applicable custom Types should also display their percentage when configured.
+
+==================================================
+11. TOTAL PERCENTAGE BY GROUP
+==================================================
+
+Show the total percentage for each applicable group.
+
+Example:
+
+TOTAL INCOME
+1,000,000 SAR
+100%
+
+TOTAL COST
+300,000 SAR
+30%
+
+TOTAL EXPENSES
+100,000 SAR
+10%
+
+TOTAL SALARIES
+200,000 SAR
+20%
+
+This must be dynamically calculated.
+
+==================================================
+12. CONTRIBUTION MARGIN
+==================================================
+
+In the Bulk Entry screen, rename:
+
+"Net Profit"
+
+to:
+
+"Contribution Margin"
+
+Do not display "Net Profit" on the Bulk Entry screen.
+
+Use:
+
+Contribution Margin =
+Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+
+Example:
+
+Income        1,000,000
+Cost            300,000
+Expenses        100,000
+Salaries        200,000
+-----------------------
+Contribution Margin = 400,000
+
+Contribution Margin %:
+
+Contribution Margin / Total Income × 100
+
+Example:
+
+400,000 / 1,000,000 × 100 = 40%
+
+Show:
+
+Contribution Margin
+400,000 SAR
+40%
+
+==================================================
+13. REAL-TIME CALCULATION
+==================================================
+
+When the user changes any editable Quantity or Amount, immediately recalculate:
+
+- Service Amount
+- Calculated Cost Rate
+- Service % of Income
+- Group Total
+- Group % of Income
+- Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+- Contribution Margin
+- Contribution Margin %
+
+No page refresh should be required.
+
+==================================================
+14. COST RATE CALCULATION – IMPORTANT
+==================================================
+
+The Cost Rate must NEVER become a manual input.
+
+For Cost:
+
+Amount = User Input
+Quantity = User Input
+Rate = System Calculation
+
+Formula:
+
+Rate = Amount / Quantity
+
+The calculated rate may be displayed for reference and reporting, but must remain read-only.
+
+Do not change the amount based on the rate.
+
+The Amount is the source value.
+
+Example:
+
+Quantity = 500
+Amount = 25,000
+Rate = 50
+
+If the user changes Rate indirectly through Amount or Quantity, recalculate it automatically.
+
+==================================================
+15. RATE SECURITY
+==================================================
+
+Preserve the existing Rate Editing Security for services where Rate is used.
+
+For Income and other rate-based Types:
+
+Users with Rate Edit Permission can modify the applicable rate.
+
+Users without Rate Edit Permission cannot modify it.
+
+For COST:
+
+The Rate is calculated from Amount ÷ Quantity and must NOT be manually edited even by a normal rate-edit user.
+
+Do not allow Rate Editing Security to override the calculated/read-only Cost Rate.
+
+==================================================
+16. BULK ENTRY SUMMARY LAYOUT
+==================================================
+
+Make the bottom summary clean and management-friendly.
+
+Example:
+
+--------------------------------------------------------------
+Category              Total Amount       % of Income
+--------------------------------------------------------------
+Income                1,000,000 SAR          100%
+Cost                    300,000 SAR           30%
+Expenses                100,000 SAR           10%
+Salaries                200,000 SAR           20%
+--------------------------------------------------------------
+Contribution Margin     400,000 SAR           40%
+--------------------------------------------------------------
+
+Keep the summary visible while entering data where possible.
+
+==================================================
+17. FIELD VISIBILITY RULES
+==================================================
+
+Cost:
+- Quantity = Visible
+- Amount = Editable
+- Rate = Calculated / Read-only
+- % of Income = Based on Type configuration
+
+Expense:
+- Amount = Editable
+- Rate = Hidden
+- % of Income = Based on Type configuration
+
+Salary:
+- Amount = Editable
+- Rate = Hidden
+- % of Income = Based on Type configuration
+
+Income:
+- Keep existing Quantity / Rate / Amount behavior.
+
+Other Types:
+- Follow their existing Type configuration.
+
+==================================================
+18. VALIDATION AND ERROR HANDLING
+==================================================
+
+Test:
+
+COST:
+
+Quantity = 500
+Amount = 25,000
+Expected Rate = 50
+
+Change Amount to 30,000
+Expected Rate = 60
+
+Change Quantity to 600
+Expected Rate = 50
+
+Quantity = 0
+Expected:
+No error
+Rate = 0 or N/A
+
+EXPENSE:
+
+Amount = 100,000
+Change to 120,000
+Expected:
+Amount updates
+Expense total updates
+Percentage updates
+Contribution Margin updates
+
+SALARY:
+
+Amount = 200,000
+Change to 220,000
+Expected:
+Amount updates
+Salary total updates
+Percentage updates
+Contribution Margin updates
+
+INCOME:
+
+Confirm existing Income rate behavior is unchanged.
+
+==================================================
+19. EXAMPLE FULL CALCULATION
+==================================================
+
+Use this example during testing:
+
+Total Income = 1,000,000 SAR
+
+COST:
+Quantity = 500
+Amount = 300,000
+Calculated Rate = 600
+
+Cost % = 30%
+
+EXPENSE:
+Amount = 100,000
+
+Expense % = 10%
+
+SALARY:
+Amount = 200,000
+
+Salary % = 20%
+
+Contribution Margin:
+
+1,000,000
+- 300,000
+- 100,000
+- 200,000
+= 400,000 SAR
+
+Contribution Margin %:
+
+400,000 / 1,000,000 × 100
+= 40%
+
+Expected Summary:
+
+Income              1,000,000 SAR    100%
+Cost                  300,000 SAR     30%
+Expenses              100,000 SAR     10%
+Salaries              200,000 SAR     20%
+Contribution Margin   400,000 SAR     40%
+
+==================================================
+20. DO NOT BREAK EXISTING FUNCTIONALITY
+==================================================
+
+After implementation verify:
+
+- Existing MIS dashboard works.
+- Existing MIS reports work.
+- Existing bulk entry works.
+- Existing project security works.
+- Existing service security works.
+- Existing rate permissions work.
+- Existing approval workflow works.
+- Existing audit trail works.
+- Existing Excel export works.
+- Existing PDF export works.
+- Existing project-period controls work.
+- Existing COGS functionality remains completely unaffected.
+
+==================================================
+21. FINAL ACCEPTANCE CRITERIA
+==================================================
+
+The enhancement is complete only when:
+
+1. Cost uses Quantity + Amount only.
+2. Cost Rate is automatically calculated as Amount / Quantity.
+3. Cost Rate is read-only.
+4. Cost Amount is editable.
+5. Cost Quantity is editable.
+6. Expense Amount is editable.
+7. Salary Amount is editable.
+8. Expense has no Rate.
+9. Salary has no Rate.
+10. Income behavior remains unchanged.
+11. Service percentage can be shown against Total Income.
+12. Group percentage is shown in the summary table.
+13. Percentage follows the Type configuration.
+14. Contribution Margin replaces Net Profit on the Bulk Entry screen.
+15. Contribution Margin % is displayed.
+16. All totals update in real time.
+17. No division-by-zero errors occur.
+18. Existing security remains functional.
+19. Existing reports remain functional.
+20. Existing COGS functionality remains completely unaffected.
+
+Implement only these enhancements and keep the existing MIS application stable.

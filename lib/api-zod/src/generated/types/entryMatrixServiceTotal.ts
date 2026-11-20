@@ -5,10 +5,15 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { ReportComponentCell } from "./reportComponentCell";
 
 export interface EntryMatrixServiceTotal {
   serviceId: string;
   totalCost: number;
   totalMandayContribution: number;
   costPerManday: number;
+  /** Per-component totals across the range, in display order. Also
+serves as the union of component columns for the UI.
+ */
+  components?: ReportComponentCell[];
 }

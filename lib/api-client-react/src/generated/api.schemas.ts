@@ -5,6 +5,157 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+export type MisAnalyticsEnvelopeFilters = { [key: string]: unknown };
+
+export type MisAnalyticsEnvelopeDateBasis =
+  (typeof MisAnalyticsEnvelopeDateBasis)[keyof typeof MisAnalyticsEnvelopeDateBasis];
+
+export const MisAnalyticsEnvelopeDateBasis = {
+  period_start: "period_start",
+} as const;
+
+export interface MisAnalyticsMetricSet {
+  totalIncome: number;
+  totalCost: number;
+  totalExpenses: number;
+  totalSalaries: number;
+  grossProfit: number;
+  netProfit: number;
+  profitMargin: number;
+  totalAmount: number;
+  quantity: number;
+  weightedRate: number | null;
+  rateMin: number | null;
+  rateMax: number | null;
+  rateVaried: boolean;
+  units: string[];
+  unitVaried: boolean;
+  entryCount: number;
+  contributionPercent?: number;
+  incomeContributionPercent?: number;
+  costContributionPercent?: number;
+  expensesContributionPercent?: number;
+  salariesContributionPercent?: number;
+  /** Amount divided by the period/currency total income when the effective category/service configuration enables it; null when disabled.
+   */
+  percentageAgainstIncome?: number | null;
+}
+
+export type MisAnalyticsCurrencyTotalsDifference = {
+  [key: string]: unknown;
+} | null;
+
+export type MisAnalyticsCurrencyTotalsPercentageDifference = {
+  [key: string]: unknown;
+} | null;
+
+export interface MisAnalyticsCurrencyTotals {
+  currency: string;
+  current: MisAnalyticsMetricSet;
+  previous: MisAnalyticsMetricSet | null;
+  difference: MisAnalyticsCurrencyTotalsDifference;
+  percentageDifference: MisAnalyticsCurrencyTotalsPercentageDifference;
+}
+
+export type MisAnalyticsDrilldownFiltersStatusesItem =
+  (typeof MisAnalyticsDrilldownFiltersStatusesItem)[keyof typeof MisAnalyticsDrilldownFiltersStatusesItem];
+
+export const MisAnalyticsDrilldownFiltersStatusesItem = {
+  draft: "draft",
+  submitted: "submitted",
+  approved: "approved",
+  rejected: "rejected",
+  returned: "returned",
+  cancelled: "cancelled",
+} as const;
+
+/**
+ * Safe filters for the Entries screen. from/to preserve the complete report range; startFrom/startTo constrain from_date to the displayed period-start bucket. Disabled project-tab assignments are never represented by aggregate rows.
+
+ */
+export interface MisAnalyticsDrilldownFilters {
+  projectIds: string[];
+  tabIds: string[];
+  serviceIds: string[];
+  entryType: string | null;
+  status: string;
+  statuses: MisAnalyticsDrilldownFiltersStatusesItem[];
+  currency: string;
+  from: string | null;
+  to: string | null;
+  startFrom: string | null;
+  startTo: string | null;
+}
+
+export type MisAnalyticsRowDifference = { [key: string]: unknown } | null;
+
+export type MisAnalyticsRowPercentageDifference = {
+  [key: string]: unknown;
+} | null;
+
+export interface MisAnalyticsRow {
+  currency: string;
+  projectId?: string | null;
+  projectIds?: string[];
+  projectName?: string | null;
+  projectCode?: string | null;
+  tabId?: string | null;
+  tabIds?: string[];
+  /** Configured tab label; type groups are separated by tab ID. */
+  tabName?: string | null;
+  type?: string | null;
+  serviceId?: string | null;
+  serviceIds?: string[];
+  serviceCode?: string | null;
+  serviceName?: string | null;
+  serviceOrder?: number | null;
+  calculatePercentAgainstIncome?: boolean | null;
+  periodId?: string | null;
+  periodLabel?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  current: MisAnalyticsMetricSet;
+  previous: MisAnalyticsMetricSet | null;
+  difference: MisAnalyticsRowDifference;
+  percentageDifference: MisAnalyticsRowPercentageDifference;
+  drilldownFilters: MisAnalyticsDrilldownFilters;
+  previousDrilldownFilters?: MisAnalyticsDrilldownFilters | null;
+}
+
+export interface MisAnalyticsPagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  pageCount: number;
+}
+
+export interface MisAnalyticsPeriod {
+  id: string;
+  label: string;
+  from: string;
+  to: string;
+}
+
+export interface MisAnalyticsPeriodResult {
+  period: MisAnalyticsPeriod;
+  totalsByCurrency: MisAnalyticsCurrencyTotals[];
+  rows: MisAnalyticsRow[];
+  trend: MisAnalyticsRow[];
+  pagination: MisAnalyticsPagination;
+}
+
+export interface MisAnalyticsEnvelope {
+  filters: MisAnalyticsEnvelopeFilters;
+  dateBasis: MisAnalyticsEnvelopeDateBasis;
+  totalsByCurrency: MisAnalyticsCurrencyTotals[];
+  rows: MisAnalyticsRow[];
+  trend: MisAnalyticsRow[];
+  pagination: MisAnalyticsPagination;
+  /** Additive multi-period results. Each item is a period descriptor and the exact non-recursive analytics result fields for that period.
+   */
+  periods?: MisAnalyticsPeriodResult[];
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -375,6 +526,8 @@ export interface Project {
   pdfRequired: boolean;
   /** When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it. */
   disabled: boolean;
+  /** When true, multiple daily entries may share the same date on this project. When false (default), creating a second entry for a date is rejected. */
+  allowDuplicateDates?: boolean;
   /**
    * How many days in the past a non-admin may date an entry. 0 blocks backdated entries entirely; null means no limit.
    * @minimum 0
@@ -468,6 +621,7 @@ export interface CreateProjectBody {
   contractEnd: string;
   notes?: string;
   pdfRequired?: boolean;
+  allowDuplicateDates?: boolean;
   /**
    * @minimum 0
    * @nullable
@@ -495,6 +649,7 @@ export interface UpdateProjectBody {
   notes?: string;
   pdfRequired?: boolean;
   disabled?: boolean;
+  allowDuplicateDates?: boolean;
   /**
    * @minimum 0
    * @nullable
@@ -1074,6 +1229,33 @@ export const ProjectServiceTotalKind = {
   group: "group",
 } as const;
 
+export type ReportComponentCellKind =
+  (typeof ReportComponentCellKind)[keyof typeof ReportComponentCellKind];
+
+export const ReportComponentCellKind = {
+  meal: "meal",
+  sub: "sub",
+} as const;
+
+/**
+ * One sub-component of a service inside a report cell: a meal type
+(kind=meal, from the entry's saved meal snapshots — qty + mandays,
+no per-meal cost) or a group sub-service (kind=sub — cost + mandays,
+no qty). `key` is stable across rows ("meal:<name>" / "sub:<id>")
+so the UI can align columns.
+
+ */
+export interface ReportComponentCell {
+  key: string;
+  name: string;
+  kind: ReportComponentCellKind;
+  /** @nullable */
+  qty?: number | null;
+  /** @nullable */
+  cost?: number | null;
+  mandays: number;
+}
+
 /**
  * Per-project, per-service totals for the selected date range. The same
 service NAME in different projects is reported as separate rows
@@ -1094,6 +1276,12 @@ export interface ProjectServiceTotal {
 expand the row inline. Empty / omitted for non-group services.
  */
   subBreakdown?: SubServiceTotal[];
+  /** Full breakdown of this service for the range: meal types
+(kind=meal, qty + mandays) for food services, sub-services
+(kind=sub, cost + mandays) for group services. Empty for
+standard services.
+ */
+  components?: ReportComponentCell[];
 }
 
 export type ServiceEntryRowKind =
@@ -1134,6 +1322,8 @@ export interface EntryMatrixCostCell {
   cost: number;
   mandayContribution: number;
   costPerManday: number;
+  /** Meal-type / sub-service breakdown for this cell (empty for standard services). */
+  components?: ReportComponentCell[];
 }
 
 export interface EntryMatrixRow {
@@ -1158,6 +1348,10 @@ export interface EntryMatrixServiceTotal {
   totalCost: number;
   totalMandayContribution: number;
   costPerManday: number;
+  /** Per-component totals across the range, in display order. Also
+serves as the union of component columns for the UI.
+ */
+  components?: ReportComponentCell[];
 }
 
 export type EntryMatrixReportRange = {
@@ -1178,6 +1372,926 @@ export interface EntryMatrixReport {
   services: ProjectService[];
   entries: EntryMatrixRow[];
   serviceTotals: EntryMatrixServiceTotal[];
+}
+
+export type MisRole = (typeof MisRole)[keyof typeof MisRole];
+
+export const MisRole = {
+  mis_admin: "mis_admin",
+  mis_manager: "mis_manager",
+  project_manager: "project_manager",
+  finance: "finance",
+  data_entry: "data_entry",
+  viewer: "viewer",
+  custom: "custom",
+} as const;
+
+/**
+ * A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.
+ */
+export type MisPermission = (typeof MisPermission)[keyof typeof MisPermission];
+
+export const MisPermission = {
+  authorities: "authorities",
+  projects: "projects",
+  configuration: "configuration",
+  project_config: "project_config",
+  tabs: "tabs",
+  services: "services",
+  entries: "entries",
+  submit: "submit",
+  approve: "approve",
+  reports: "reports",
+  export: "export",
+  financial: "financial",
+  history: "history",
+  reset: "reset",
+  rate_override: "rate_override",
+  delete_approved: "delete_approved",
+  edit_approved: "edit_approved",
+  view_project: "view_project",
+  view_entries: "view_entries",
+  create_entries: "create_entries",
+  edit_entries: "edit_entries",
+  delete_entries: "delete_entries",
+  overhead: "overhead",
+  op_expense: "op_expense",
+} as const;
+
+export type MisProjectStatus =
+  (typeof MisProjectStatus)[keyof typeof MisProjectStatus];
+
+export const MisProjectStatus = {
+  active: "active",
+  inactive: "inactive",
+} as const;
+
+export type MisTabType = (typeof MisTabType)[keyof typeof MisTabType];
+
+export const MisTabType = {
+  income: "income",
+  cost: "cost",
+  expense: "expense",
+  salary: "salary",
+  other: "other",
+} as const;
+
+/**
+ * How the tab contributes to financial totals; excluded has no profit impact.
+ */
+export type MisFinancialClass =
+  (typeof MisFinancialClass)[keyof typeof MisFinancialClass];
+
+export const MisFinancialClass = {
+  income: "income",
+  cost: "cost",
+  expense: "expense",
+  salary: "salary",
+  excluded: "excluded",
+} as const;
+
+export type MisEntryStatus =
+  (typeof MisEntryStatus)[keyof typeof MisEntryStatus];
+
+export const MisEntryStatus = {
+  draft: "draft",
+  submitted: "submitted",
+  approved: "approved",
+  rejected: "rejected",
+  returned: "returned",
+  cancelled: "cancelled",
+} as const;
+
+export type MisEntryAction =
+  (typeof MisEntryAction)[keyof typeof MisEntryAction];
+
+export const MisEntryAction = {
+  submit: "submit",
+  approve: "approve",
+  reject: "reject",
+  return: "return",
+  reset: "reset",
+  cancel: "cancel",
+} as const;
+
+export type MisReportType = (typeof MisReportType)[keyof typeof MisReportType];
+
+export const MisReportType = {
+  income: "income",
+  cost: "cost",
+  expense: "expense",
+  salary: "salary",
+  summary: "summary",
+  "project-profitability": "project-profitability",
+  "project-comparison": "project-comparison",
+  "period-comparison": "period-comparison",
+  "service-tab-comparison": "service-tab-comparison",
+} as const;
+
+export type MisExportFormat =
+  (typeof MisExportFormat)[keyof typeof MisExportFormat];
+
+export const MisExportFormat = {
+  xlsx: "xlsx",
+  pdf: "pdf",
+  csv: "csv",
+} as const;
+
+export interface MisProjectPermissionGrant {
+  projectId: string;
+  permissions: MisPermission[];
+}
+
+/**
+ * The current user's MIS membership. A caller has no MIS access when
+hasAccess is false. `projectPermissions` is the effective grant per
+project and is the source of truth for project-scoped UI gates.
+
+ */
+export interface MisMe {
+  hasAccess: boolean;
+  roles: MisRole[];
+  permissions: MisPermission[];
+  projectIds: string[];
+  globalAccess: boolean;
+  /** Empty for a global-only membership without project-specific grants. */
+  projectPermissions: MisProjectPermissionGrant[];
+}
+
+export interface MisUserPickerItem {
+  id: string;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  firstName: string | null;
+  /** @nullable */
+  lastName: string | null;
+  displayName: string;
+}
+
+export interface MisUserPickerPage {
+  items: MisUserPickerItem[];
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 1 */
+  page: number;
+  /** @minimum 1 */
+  pageSize: number;
+}
+
+/**
+ * A full authority grant. projectId null grants the role globally.
+ */
+export interface MisAuthorityInput {
+  userId: string;
+  /** @nullable */
+  projectId: string | null;
+  role: MisRole;
+  /** Explicit permissions added to, never subtracted from, the role's standard permissions. */
+  extraPermissions: MisPermission[];
+}
+
+export type MisAuthority = MisAuthorityInput & {
+  id: string;
+  user: MisUserPickerItem;
+  /** @nullable */
+  projectName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export interface MisAuthorityPage {
+  items: MisAuthority[];
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 1 */
+  page: number;
+  /** @minimum 1 */
+  pageSize: number;
+}
+
+/**
+ * Period policy when multiple MIS entries are enabled.
+ */
+export type MisReportingSettingsOverlapPolicy =
+  (typeof MisReportingSettingsOverlapPolicy)[keyof typeof MisReportingSettingsOverlapPolicy];
+
+export const MisReportingSettingsOverlapPolicy = {
+  nonoverlap: "nonoverlap",
+  overlap: "overlap",
+  unlimited: "unlimited",
+} as const;
+
+/**
+ * Explicit, small project reporting controls; no untyped settings blob is used.
+ */
+export interface MisReportingSettings {
+  /** Default status filter for project reporting; entries still begin as draft. */
+  defaultEntryStatus: MisEntryStatus;
+  /** Reject overlapping entries for the same project, tab, and service when true. */
+  preventDuplicatePeriods: boolean;
+  /** Permit more than one MIS parent in a project period. */
+  allowMultipleEntries?: boolean;
+  /** Period policy when multiple MIS entries are enabled. */
+  overlapPolicy?: MisReportingSettingsOverlapPolicy;
+  /**
+   * Optional maximum number of entries that may cover a period.
+   * @minimum 1
+   * @nullable
+   */
+  maxEntriesPerPeriod?: number | null;
+}
+
+/**
+ * Full writable MIS project values accepted by both create and PATCH.
+ */
+export interface MisProjectInput {
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  name: string;
+  /**
+   * @minLength 1
+   * @maxLength 32
+   */
+  code: string;
+  /** @nullable */
+  managerId: string | null;
+  status: MisProjectStatus;
+  /** @nullable */
+  startDate: string | null;
+  /** @nullable */
+  endDate: string | null;
+  /**
+   * ISO 4217 currency code.
+   * @minLength 3
+   * @maxLength 3
+   */
+  currency: string;
+  reportingSettings: MisReportingSettings;
+}
+
+export type MisProject = MisProjectInput & {
+  id: string;
+  manager: MisUserPickerItem | null;
+  /** Current caller's effective permissions for this project. */
+  effectivePermissions: MisPermission[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export interface MisProjectPage {
+  items: MisProject[];
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 1 */
+  page: number;
+  /** @minimum 1 */
+  pageSize: number;
+}
+
+/**
+ * Full writable MIS tab/category master values accepted by both create and PATCH.
+ */
+export interface MisTabInput {
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  name: string;
+  /**
+   * @minLength 1
+   * @maxLength 32
+   */
+  code: string;
+  /**
+   * @maxLength 1000
+   * @nullable
+   */
+  description: string | null;
+  type: MisTabType;
+  financialClass: MisFinancialClass;
+  /** Whether new custom-type entries use quantity × rate. */
+  rateEnabled?: boolean;
+  /** Type default for percentage against total income. */
+  calculatePercentAgainstIncome?: boolean;
+  /** @minimum 0 */
+  sequence: number;
+  active: boolean;
+  allowEntry: boolean;
+  allowReporting: boolean;
+}
+
+export type MisTab = MisTabInput & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export interface MisProjectTabAssignmentInput {
+  tabId: string;
+  enabled: boolean;
+  /** @minimum 0 */
+  sequence: number;
+  /**
+   * Optional project-tab override; null inherits the type default.
+   * @nullable
+   */
+  calculatePercentAgainstIncome?: boolean | null;
+}
+
+export interface MisProjectTabAssignmentsInput {
+  assignments: MisProjectTabAssignmentInput[];
+}
+
+export type MisProjectTabAssignment = MisProjectTabAssignmentInput & {
+  projectId: string;
+  tab: MisTab;
+};
+
+/**
+ * Full writable project-local service values accepted by both create and PATCH.
+ */
+export interface MisServiceInput {
+  tabId: string;
+  /**
+   * Optional same-project Income service whose quantity defaults into this Cost service. Null removes the link.
+   * @nullable
+   */
+  quantitySourceServiceId?: string | null;
+  /**
+   * Project-local service code. Omit on create to generate a safe code.
+   * @minLength 1
+   * @maxLength 32
+   */
+  code?: string;
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  name: string;
+  /**
+   * @maxLength 1000
+   * @nullable
+   */
+  description: string | null;
+  /**
+   * @minLength 1
+   * @maxLength 40
+   */
+  unit: string;
+  /**
+   * API number; persisted as an exact database decimal.
+   * @minimum 0
+   */
+  defaultRate: number;
+  /**
+   * ISO 4217 service currency. Defaults to the project currency.
+   * @minLength 3
+   * @maxLength 3
+   */
+  currency?: string;
+  active: boolean;
+  /** @minimum 0 */
+  sequence: number;
+  /** @nullable */
+  effectiveFrom: string | null;
+  /** @nullable */
+  effectiveTo: string | null;
+}
+
+/**
+ * Effective mode for a new entry.
+ */
+export type MisServiceCalculationMode =
+  (typeof MisServiceCalculationMode)[keyof typeof MisServiceCalculationMode];
+
+export const MisServiceCalculationMode = {
+  quantity_rate: "quantity_rate",
+  amount: "amount",
+} as const;
+
+export type MisService = MisServiceInput & {
+  id: string;
+  projectId: string;
+  code: string;
+  currency: string;
+  tabName: string;
+  tabType: MisTabType;
+  financialClass: MisFinancialClass;
+  /** Effective rate behavior for new entries. */
+  rateEnabled: boolean;
+  /** Effective percentage behavior for new entries. */
+  calculatePercentAgainstIncome: boolean;
+  /** Effective mode for a new entry. */
+  calculationMode: MisServiceCalculationMode;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Optional explicit mode for an intentional legacy Salary/Expense transition.
+ */
+export type MisEntryInputCalculationMode =
+  (typeof MisEntryInputCalculationMode)[keyof typeof MisEntryInputCalculationMode];
+
+export const MisEntryInputCalculationMode = {
+  quantity_rate: "quantity_rate",
+  amount: "amount",
+} as const;
+
+/**
+ * Full writable transaction values. amount and all snapshot fields are server-owned.
+ */
+export interface MisEntryInput {
+  projectId: string;
+  tabId: string;
+  serviceId: string;
+  fromDate: string;
+  toDate: string;
+  /**
+   * Required for quantity_rate mode; explicit zero is valid.
+   * @minimum 0
+   * @nullable
+   */
+  quantity?: number | null;
+  /**
+   * Required for quantity_rate mode; authorization-gated for overrides.
+   * @minimum 0
+   * @nullable
+   */
+  rate?: number | null;
+  /**
+   * Required for amount mode; actual amount
+   * @minimum 0
+   * @nullable
+   */
+  amount?: number | null;
+  /** Optional explicit mode for an intentional legacy Salary/Expense transition. */
+  calculationMode?: MisEntryInputCalculationMode;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  remarks: string | null;
+  /**
+   * Required for a rate override; retained only in the audit trail.
+   * @maxLength 1000
+   * @nullable
+   */
+  rateReason?: string | null;
+}
+
+export type MisBulkEntryLineCalculationMode =
+  (typeof MisBulkEntryLineCalculationMode)[keyof typeof MisBulkEntryLineCalculationMode];
+
+export const MisBulkEntryLineCalculationMode = {
+  quantity_rate: "quantity_rate",
+  amount: "amount",
+} as const;
+
+export interface MisBulkEntryLine {
+  /** Existing child ID when replacing a parent line; required to preserve line identity during edits. */
+  id?: string;
+  serviceId: string;
+  /**
+   * Omit or null to skip a blank client line; zero is explicit and is saved.
+   * @minimum 0
+   * @nullable
+   */
+  quantity?: number | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  rate?: number | null;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  amount?: number | null;
+  calculationMode?: MisBulkEntryLineCalculationMode;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  remarks?: string | null;
+  /**
+   * @maxLength 1000
+   * @nullable
+   */
+  rateReason?: string | null;
+  /** @nullable */
+  fromDate?: string | null;
+  /** @nullable */
+  toDate?: string | null;
+}
+
+export type MisBulkEntriesInputAction =
+  (typeof MisBulkEntriesInputAction)[keyof typeof MisBulkEntriesInputAction];
+
+export const MisBulkEntriesInputAction = {
+  draft: "draft",
+  submit: "submit",
+} as const;
+
+export interface MisBulkEntriesInput {
+  projectId: string;
+  fromDate: string;
+  toDate: string;
+  /** @maxItems 1000 */
+  lines: MisBulkEntryLine[];
+  action: MisBulkEntriesInputAction;
+}
+
+export type MisParentEntryType =
+  (typeof MisParentEntryType)[keyof typeof MisParentEntryType];
+
+export const MisParentEntryType = {
+  bulk: "bulk",
+} as const;
+
+export interface MisParent {
+  id: string;
+  bulkNumber: string;
+  projectId: string;
+  projectName: string;
+  projectNumber: string;
+  fromDate: string;
+  toDate: string;
+  status: MisEntryStatus;
+  entryType: MisParentEntryType;
+  createdById: string;
+  /** @nullable */
+  createdByName?: string | null;
+  /** @minimum 0 */
+  childCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MisEntryCalculationMode =
+  (typeof MisEntryCalculationMode)[keyof typeof MisEntryCalculationMode];
+
+export const MisEntryCalculationMode = {
+  quantity_rate: "quantity_rate",
+  amount: "amount",
+} as const;
+
+export type MisEntry = MisEntryInput & {
+  id: string;
+  /**
+   * Parent bulk transaction ID; null for legacy standalone entries.
+   * @nullable
+   */
+  parentId: string | null;
+  /**
+   * Immutable MIS-BULK number; null for legacy standalone entries.
+   * @nullable
+   */
+  bulkNumber: string | null;
+  /** Server-computed or direct actual amount; persisted as an exact database decimal. */
+  amount: number;
+  calculationMode: MisEntryCalculationMode;
+  rateEnabled: boolean;
+  calculatePercentAgainstIncome: boolean;
+  projectName: string;
+  tabName: string;
+  serviceName: string;
+  type: MisTabType;
+  financialClass: MisFinancialClass;
+  unit: string;
+  currency: string;
+  status: MisEntryStatus;
+  createdById: string;
+  /** @nullable */
+  createdByName?: string | null;
+  /** @nullable */
+  updatedById?: string | null;
+  /** @nullable */
+  updatedByName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export interface MisBulkEntriesResponse {
+  parent: MisParent;
+  items: MisEntry[];
+}
+
+export interface MisEntryPage {
+  items: MisEntry[];
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 1 */
+  page: number;
+  /** @minimum 1 */
+  pageSize: number;
+}
+
+export interface MisServiceReorderInput {
+  /** Complete permutation of every service ID in the project. */
+  serviceIds: string[];
+}
+
+export interface MisEntryActionInput {
+  action: MisEntryAction;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  remarks: string | null;
+}
+
+/**
+ * Audit-only untyped prior-value snapshot.
+ * @nullable
+ */
+export type MisEntryHistoryItemOldValues = { [key: string]: unknown } | null;
+
+/**
+ * Audit-only untyped resulting-value snapshot.
+ * @nullable
+ */
+export type MisEntryHistoryItemNewValues = { [key: string]: unknown } | null;
+
+export interface MisEntryHistoryItem {
+  id: string;
+  entryId: string;
+  /** CREATE */
+  action: string;
+  /** @nullable */
+  actorId: string | null;
+  /** @nullable */
+  actorName?: string | null;
+  /** @nullable */
+  remarks?: string | null;
+  /**
+   * Audit-only untyped prior-value snapshot.
+   * @nullable
+   */
+  oldValues?: MisEntryHistoryItemOldValues;
+  /**
+   * Audit-only untyped resulting-value snapshot.
+   * @nullable
+   */
+  newValues?: MisEntryHistoryItemNewValues;
+  occurredAt: string;
+}
+
+export type MisParentStatus = MisEntryStatus;
+
+export interface MisParentDetail {
+  parent: MisParent;
+  items: MisEntry[];
+}
+
+export interface MisParentPage {
+  items: MisParent[];
+  /** @minimum 0 */
+  total: number;
+  /** @minimum 1 */
+  page: number;
+  /** @minimum 1 */
+  pageSize: number;
+}
+
+/**
+ * Optional status transition; omitted preserves the current parent status.
+ */
+export type MisParentEditInputAction =
+  (typeof MisParentEditInputAction)[keyof typeof MisParentEditInputAction];
+
+export const MisParentEditInputAction = {
+  draft: "draft",
+  submit: "submit",
+} as const;
+
+export interface MisParentEditInput {
+  /** Optional; the path parent project is used when omitted. */
+  projectId?: string;
+  fromDate: string;
+  toDate: string;
+  /** @maxItems 1000 */
+  lines: MisBulkEntryLine[];
+  /** Optional status transition; omitted preserves the current parent status. */
+  action?: MisParentEditInputAction;
+  /**
+   * Required when editing an approved parent.
+   * @maxLength 2000
+   * @nullable
+   */
+  reason?: string | null;
+}
+
+export type MisParentActionInputAction =
+  (typeof MisParentActionInputAction)[keyof typeof MisParentActionInputAction];
+
+export const MisParentActionInputAction = {
+  submit: "submit",
+  approve: "approve",
+  reject: "reject",
+  return: "return",
+  reset: "reset",
+  cancel: "cancel",
+} as const;
+
+export interface MisParentActionInput {
+  action: MisParentActionInputAction;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  remarks: string | null;
+}
+
+export type MisParentMutationResponse = MisParentDetail;
+
+export interface MisParentDeleteResponse {
+  success: boolean;
+  parentId: string;
+  bulkNumber: string;
+}
+
+export type MisParentHistoryItem = MisEntryHistoryItem & {
+  parentId: string;
+  bulkNumber: string;
+};
+
+/**
+ * Totals are always scoped to one currency group and never sum currencies together.
+ */
+export interface MisFinancialTotals {
+  income: number;
+  cost: number;
+  expenses: number;
+  salaries: number;
+  /** Sum of all entry amounts in this aggregate */
+  totalAmount: number;
+  /** Income minus cost. */
+  grossProfit: number;
+  /** Income minus cost */
+  netProfit: number;
+  /** Net profit ÷ income × 100; 0 when income is zero. */
+  profitMargin: number;
+  /** @minimum 0 */
+  entryCount: number;
+}
+
+/**
+ * A report grouping row. Identity fields vary with reportType; null means that dimension is not grouped.
+ */
+export interface MisReportGroupRow {
+  /** @nullable */
+  projectId: string | null;
+  /** @nullable */
+  projectName: string | null;
+  /** @nullable */
+  projectCode?: string | null;
+  /** @nullable */
+  tabId: string | null;
+  /** @nullable */
+  tabName: string | null;
+  /** @nullable */
+  type?: string | null;
+  /** @nullable */
+  serviceId: string | null;
+  /** @nullable */
+  serviceCode?: string | null;
+  /** @nullable */
+  serviceName: string | null;
+  /**
+   * Persisted service sequence used for stable ordering.
+   * @nullable
+   */
+  serviceOrder?: number | null;
+  /**
+   * Effective entry snapshot configuration. Null means this aggregate mixes enabled and disabled rows.
+   * @nullable
+   */
+  calculatePercentAgainstIncome?: boolean | null;
+  /** @nullable */
+  periodStart: string | null;
+  /** @nullable */
+  periodEnd: string | null;
+  currentTotals: MisFinancialTotals;
+  comparisonTotals: MisFinancialTotals | null;
+}
+
+export interface MisCurrencyReportGroup {
+  currency: string;
+  currentTotals: MisFinancialTotals;
+  comparisonTotals: MisFinancialTotals | null;
+  groups: MisReportGroupRow[];
+}
+
+export interface MisReport {
+  reportType: MisReportType;
+  /** One group per currency, preventing invalid cross-currency totals. */
+  currencyGroups: MisCurrencyReportGroup[];
+}
+
+export interface MisDashboardProjectRow {
+  projectId: string;
+  projectName: string;
+  totals: MisFinancialTotals;
+}
+
+export interface MisDashboardTabRow {
+  tabId: string;
+  tabName: string;
+  type: MisTabType;
+  financialClass: MisFinancialClass;
+  totals: MisFinancialTotals;
+}
+
+export interface MisDashboardPeriodRow {
+  fromDate: string;
+  toDate: string;
+  totals: MisFinancialTotals;
+}
+
+export interface MisDashboardServiceRow {
+  serviceId: string;
+  serviceName: string;
+  tabId: string;
+  tabName: string;
+  financialClass: MisFinancialClass;
+  totals: MisFinancialTotals;
+}
+
+export interface MisDashboardCurrencyGroup {
+  currency: string;
+  byService?: MisDashboardServiceRow[];
+  /** Net profit after combined selected-project percentage charges. Omitted unless both charge permissions cover every selected project. */
+  adjustedNetProfit?: number;
+  totals: MisFinancialTotals;
+  byProject: MisDashboardProjectRow[];
+  byTab: MisDashboardTabRow[];
+  byPeriod: MisDashboardPeriodRow[];
+}
+
+export type MisPercentageKind =
+  (typeof MisPercentageKind)[keyof typeof MisPercentageKind];
+
+export const MisPercentageKind = {
+  overhead: "overhead",
+  op_expense: "op_expense",
+} as const;
+
+export interface MisPercentageServiceInput {
+  kind: MisPercentageKind;
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  percentage: number;
+  active: boolean;
+}
+
+export type MisPercentageService = MisPercentageServiceInput & {
+  id: string;
+  projectId: string;
+};
+
+export interface MisPercentageCharge {
+  id: string;
+  name: string;
+  percentage: number;
+  amount: number;
+}
+
+export interface MisPercentageSection {
+  total: number;
+  services: MisPercentageCharge[];
+}
+
+/**
+ * Charges configured by this project applied to combined selected-project income for this currency and period/statuses. Restricted sections are omitted. Legacy adjustedProfit is not emitted.
+ */
+export interface MisDashboardAdjustment {
+  projectId: string;
+  projectName: string;
+  currency: string;
+  income: number;
+  baseProfit: number;
+  overhead?: MisPercentageSection;
+  opExpense?: MisPercentageSection;
+  adjustedProfit?: number;
+}
+
+export interface MisDashboard {
+  percentageAdjustments?: MisDashboardAdjustment[];
+  /** Currency-separated totals and breakdown rows; values must not be aggregated across groups. */
+  currencyGroups: MisDashboardCurrencyGroup[];
+  /** Recent entries limited to records the current user may access. */
+  recentEntries: MisEntry[];
 }
 
 export interface ProjectTotal {
@@ -1252,9 +2366,251 @@ export interface TrendsReport {
 }
 
 /**
+ * Request validation failed.
+ */
+export type BadRequestResponse = ErrorEnvelope;
+
+/**
+ * The caller is not allowed to view the requested analytics scope.
+ */
+export type ForbiddenResponse = ErrorEnvelope;
+
+/**
+ * Authentication, authorization, validation, conflict, or not-found error.
+ */
+export type MisErrorResponse = ErrorEnvelope;
+
+/**
  * Opaque session token — `Bearer <sid>`.
  */
 export type AuthorizationSessionHeaderParameter = string;
+
+export type MisProjectIdQueryParameter = string;
+
+/**
+ * Comma-separated MIS project identifiers.
+ */
+export type MisProjectIdsQueryParameter = string;
+
+export type MisTabIdQueryParameter = string;
+
+export type MisServiceIdQueryParameter = string;
+
+export type MisFromQueryParameter = string;
+
+export type MisToQueryParameter = string;
+
+/**
+ * Inclusive lower bound for the entry period start date. Unlike `from`, this does not require full period containment.
+ */
+export type MisStartFromQueryParameter = string;
+
+/**
+ * Inclusive upper bound for the entry period start date. Unlike `to`, this does not require full period containment.
+ */
+export type MisStartToQueryParameter = string;
+
+export type MisCompareFromQueryParameter = string;
+
+export type MisCompareToQueryParameter = string;
+
+export type MisSearchQueryParameter = string;
+
+export type MisPageQueryParameter = number;
+
+export type MisPageSizeQueryParameter = number;
+
+export type MisActiveQueryParameter = boolean;
+
+export type MisProjectStatusQueryParameter = MisProjectStatus;
+
+export type MisEntryStatusQueryParameter = MisEntryStatus;
+
+/**
+ * Comma-separated exact subset of entry statuses. Takes precedence over the scalar status filter when supplied.
+ */
+export type MisEntryStatusesQueryParameter = string;
+
+export type MisEntryStatusDefaultApprovedQueryParameter = MisEntryStatus;
+
+export type MisEntryTypeQueryParameter = MisTabType;
+
+export type MisReportTypeQueryParameter = MisReportType;
+
+/**
+ * Optional ISO 4217 currency. Omit to receive separate currency groups.
+ */
+export type MisCurrencyQueryParameter = string;
+
+/**
+ * Optional ISO 4217 currency filter for entry snapshots.
+ */
+export type MisEntryCurrencyQueryParameter = string;
+
+export type MisExportFormatQueryParameter = MisExportFormat;
+
+export type MisAnalyticsProjectIdsParameter = string;
+
+export type MisAnalyticsProjectCodeParameter = string;
+
+export type MisAnalyticsTabIdsParameter = string;
+
+export type MisAnalyticsServiceIdsParameter = string;
+
+export type MisAnalyticsServiceCodesParameter = string;
+
+export type MisAnalyticsTypesParameter = string;
+
+export type MisAnalyticsReportTypeParameter =
+  (typeof MisAnalyticsReportTypeParameter)[keyof typeof MisAnalyticsReportTypeParameter];
+
+export const MisAnalyticsReportTypeParameter = {
+  income: "income",
+  cost: "cost",
+  expense: "expense",
+  salary: "salary",
+  summary: "summary",
+  "project-profitability": "project-profitability",
+  "project-comparison": "project-comparison",
+  "period-comparison": "period-comparison",
+  "service-tab-comparison": "service-tab-comparison",
+} as const;
+
+/**
+ * Case-insensitive search over scoped project, tab, service, and entry snapshot text.
+ */
+export type MisAnalyticsSearchParameter = string;
+
+/**
+ * Optional ISO 4217 currency filter. Omit to retain separate currency groups.
+ */
+export type MisAnalyticsCurrencyParameter = string;
+
+export type MisAnalyticsFromParameter = string;
+
+export type MisAnalyticsToParameter = string;
+
+export type MisAnalyticsStatusParameter =
+  (typeof MisAnalyticsStatusParameter)[keyof typeof MisAnalyticsStatusParameter];
+
+export const MisAnalyticsStatusParameter = {
+  draft: "draft",
+  submitted: "submitted",
+  approved: "approved",
+  rejected: "rejected",
+  returned: "returned",
+  cancelled: "cancelled",
+  all: "all",
+} as const;
+
+export type MisAnalyticsCompareFromParameter = string;
+
+export type MisAnalyticsCompareToParameter = string;
+
+/**
+ * Ordered comma-separated date, project, projectCode, type, service, month, or year.
+ */
+export type MisAnalyticsGroupByParameter = string;
+
+export type MisAnalyticsViewParameter =
+  (typeof MisAnalyticsViewParameter)[keyof typeof MisAnalyticsViewParameter];
+
+export const MisAnalyticsViewParameter = {
+  daily: "daily",
+  weekly: "weekly",
+  monthly: "monthly",
+  custom: "custom",
+} as const;
+
+export type MisAnalyticsModeParameter =
+  (typeof MisAnalyticsModeParameter)[keyof typeof MisAnalyticsModeParameter];
+
+export const MisAnalyticsModeParameter = {
+  analytics: "analytics",
+  project: "project",
+  service: "service",
+  type: "type",
+  dynamic: "dynamic",
+} as const;
+
+export type MisAnalyticsPageParameter = number;
+
+export type MisAnalyticsPageSizeParameter = number;
+
+/**
+ * Enable additive comparison of three or more selected periods.
+ */
+export type MisAnalyticsPeriodComparisonParameter = boolean;
+
+/**
+ * JSON array of {id,label?,from,to} period objects. Required when periodComparison=true; minimum 3 and maximum 24 periods.
+
+ */
+export type MisAnalyticsPeriodsParameter = string;
+
+export type ListSystemAuditLogParams = {
+  /**
+   * @minimum 1
+   */
+  page?: number;
+  search?: string;
+  module?: ListSystemAuditLogModule;
+  action?: ListSystemAuditLogAction;
+  from?: string;
+  to?: string;
+};
+
+export type ListSystemAuditLogModule =
+  (typeof ListSystemAuditLogModule)[keyof typeof ListSystemAuditLogModule];
+
+export const ListSystemAuditLogModule = {
+  COGS: "COGS",
+  MIS: "MIS",
+  System: "System",
+} as const;
+
+export type ListSystemAuditLogAction =
+  (typeof ListSystemAuditLogAction)[keyof typeof ListSystemAuditLogAction];
+
+export const ListSystemAuditLogAction = {
+  INSERT: "INSERT",
+  UPDATE: "UPDATE",
+  DELETE: "DELETE",
+} as const;
+
+export type ListSystemAuditLog200ItemsItemOldValues = {
+  [key: string]: unknown;
+} | null;
+
+export type ListSystemAuditLog200ItemsItemNewValues = {
+  [key: string]: unknown;
+} | null;
+
+export type ListSystemAuditLog200ItemsItem = {
+  id: string;
+  occurredAt: string;
+  module: string;
+  actorId?: string | null;
+  actorName: string;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  entityName?: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
+  requestId?: string | null;
+  path?: string | null;
+  changedFields: string[];
+  oldValues?: ListSystemAuditLog200ItemsItemOldValues;
+  newValues?: ListSystemAuditLog200ItemsItemNewValues;
+};
+
+export type ListSystemAuditLog200 = {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: ListSystemAuditLog200ItemsItem[];
+};
 
 export type ListProjectEntriesParams = {
   from?: string;
@@ -1344,3 +2700,432 @@ export type ListVisibleServicesParams = {
    */
   projectIds?: string;
 };
+
+export type MisListUsersParams = {
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+  /**
+   * @minimum 1
+   */
+  page?: MisPageQueryParameter;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  pageSize?: MisPageSizeQueryParameter;
+};
+
+export type MisListAuthoritiesParams = {
+  projectId?: MisProjectIdQueryParameter;
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+  /**
+   * @minimum 1
+   */
+  page?: MisPageQueryParameter;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  pageSize?: MisPageSizeQueryParameter;
+};
+
+export type MisListProjectsParams = {
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+  status?: MisProjectStatusQueryParameter;
+  /**
+   * @minimum 1
+   */
+  page?: MisPageQueryParameter;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  pageSize?: MisPageSizeQueryParameter;
+};
+
+export type MisListTabsParams = {
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+  active?: MisActiveQueryParameter;
+};
+
+export type MisListProjectServicesParams = {
+  tabId?: MisTabIdQueryParameter;
+  active?: MisActiveQueryParameter;
+};
+
+export type MisListEntryServicesParams = {
+  from?: MisFromQueryParameter;
+  to?: MisToQueryParameter;
+};
+
+export type MisListEntriesParams = {
+  /**
+   * Comma-separated MIS project identifiers.
+   */
+  projectIds?: MisProjectIdsQueryParameter;
+  tabId?: MisTabIdQueryParameter;
+  serviceId?: MisServiceIdQueryParameter;
+  from?: MisFromQueryParameter;
+  to?: MisToQueryParameter;
+  /**
+   * Inclusive lower bound for the entry period start date. Unlike `from`, this does not require full period containment.
+   */
+  startFrom?: MisStartFromQueryParameter;
+  /**
+   * Inclusive upper bound for the entry period start date. Unlike `to`, this does not require full period containment.
+   */
+  startTo?: MisStartToQueryParameter;
+  /**
+   * Optional ISO 4217 currency filter for entry snapshots.
+   * @minLength 3
+   * @maxLength 3
+   */
+  currency?: MisEntryCurrencyQueryParameter;
+  status?: MisEntryStatusQueryParameter;
+  /**
+   * Comma-separated exact subset of entry statuses. Takes precedence over the scalar status filter when supplied.
+   * @pattern ^(draft|submitted|approved|rejected|returned|cancelled)(,(draft|submitted|approved|rejected|returned|cancelled))*$
+   */
+  statuses?: MisEntryStatusesQueryParameter;
+  entryType?: MisEntryTypeQueryParameter;
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+  /**
+   * @minimum 1
+   */
+  page?: MisPageQueryParameter;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  pageSize?: MisPageSizeQueryParameter;
+};
+
+export type MisListEntryCreatorsParams = {
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+  /**
+   * @minimum 1
+   */
+  page?: MisPageQueryParameter;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  pageSize?: MisPageSizeQueryParameter;
+};
+
+export type MisListEntryParentsParams = {
+  /**
+   * @maxLength 32
+   */
+  bulkNumber?: string;
+  projectId?: string;
+  /**
+   * @maxLength 32
+   */
+  projectNumber?: string;
+  fromDate?: string;
+  toDate?: string;
+  createdById?: string;
+  status?: MisEntryStatusQueryParameter;
+  entryType?: MisListEntryParentsEntryType;
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+  /**
+   * @minimum 1
+   */
+  page?: MisPageQueryParameter;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  pageSize?: MisPageSizeQueryParameter;
+};
+
+export type MisListEntryParentsEntryType =
+  (typeof MisListEntryParentsEntryType)[keyof typeof MisListEntryParentsEntryType];
+
+export const MisListEntryParentsEntryType = {
+  bulk: "bulk",
+} as const;
+
+export type MisGetReportParams = {
+  /**
+   * Comma-separated MIS project identifiers.
+   */
+  projectIds?: MisProjectIdsQueryParameter;
+  tabId?: MisTabIdQueryParameter;
+  serviceId?: MisServiceIdQueryParameter;
+  from?: MisFromQueryParameter;
+  to?: MisToQueryParameter;
+  /**
+   * Entry status filter. Defaults to approved for report and dashboard aggregates.
+   */
+  status?: MisEntryStatusDefaultApprovedQueryParameter;
+  entryType?: MisEntryTypeQueryParameter;
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+  reportType: MisReportTypeQueryParameter;
+  compareFrom?: MisCompareFromQueryParameter;
+  compareTo?: MisCompareToQueryParameter;
+  /**
+   * Optional ISO 4217 currency. Omit to receive separate currency groups.
+   * @minLength 3
+   * @maxLength 3
+   */
+  currency?: MisCurrencyQueryParameter;
+};
+
+export type MisExportReportParams = {
+  /**
+   * Comma-separated MIS project identifiers.
+   */
+  projectIds?: MisProjectIdsQueryParameter;
+  tabId?: MisTabIdQueryParameter;
+  serviceId?: MisServiceIdQueryParameter;
+  from?: MisFromQueryParameter;
+  to?: MisToQueryParameter;
+  /**
+   * Entry status filter. Defaults to approved for report and dashboard aggregates.
+   */
+  status?: MisEntryStatusDefaultApprovedQueryParameter;
+  entryType?: MisEntryTypeQueryParameter;
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+  reportType: MisReportTypeQueryParameter;
+  compareFrom?: MisCompareFromQueryParameter;
+  compareTo?: MisCompareToQueryParameter;
+  /**
+   * Optional ISO 4217 currency. Omit to receive separate currency groups.
+   * @minLength 3
+   * @maxLength 3
+   */
+  currency?: MisCurrencyQueryParameter;
+  format: MisExportFormatQueryParameter;
+};
+
+export type MisExportDashboardParams = {
+  format: MisExportDashboardFormat;
+  view: MisExportDashboardView;
+  /**
+   * Comma-separated MIS project identifiers.
+   */
+  projectIds?: MisProjectIdsQueryParameter;
+  tabId?: MisTabIdQueryParameter;
+  serviceId?: MisServiceIdQueryParameter;
+  from?: MisFromQueryParameter;
+  to?: MisToQueryParameter;
+  status?: MisExportDashboardStatus;
+};
+
+export type MisExportDashboardFormat =
+  (typeof MisExportDashboardFormat)[keyof typeof MisExportDashboardFormat];
+
+export const MisExportDashboardFormat = {
+  pdf: "pdf",
+  xlsx: "xlsx",
+} as const;
+
+export type MisExportDashboardView =
+  (typeof MisExportDashboardView)[keyof typeof MisExportDashboardView];
+
+export const MisExportDashboardView = {
+  dashboard: "dashboard",
+  overview: "overview",
+} as const;
+
+export type MisExportDashboardStatus =
+  (typeof MisExportDashboardStatus)[keyof typeof MisExportDashboardStatus];
+
+export const MisExportDashboardStatus = {
+  all: "all",
+  draft: "draft",
+  submitted: "submitted",
+  approved: "approved",
+  rejected: "rejected",
+  returned: "returned",
+  cancelled: "cancelled",
+} as const;
+
+export type MisListPercentageServicesParams = {
+  kind: MisPercentageKind;
+};
+
+export type MisGetDashboardParams = {
+  /**
+   * Include service-level financial breakdowns for the separate overview report.
+   */
+  includeServices?: MisGetDashboardIncludeServices;
+  /**
+   * Comma-separated MIS project identifiers.
+   */
+  projectIds?: MisProjectIdsQueryParameter;
+  tabId?: MisTabIdQueryParameter;
+  serviceId?: MisServiceIdQueryParameter;
+  from?: MisFromQueryParameter;
+  to?: MisToQueryParameter;
+  status?: MisGetDashboardStatus;
+  entryType?: MisEntryTypeQueryParameter;
+  /**
+   * @maxLength 200
+   */
+  search?: MisSearchQueryParameter;
+};
+
+export type MisGetDashboardIncludeServices =
+  (typeof MisGetDashboardIncludeServices)[keyof typeof MisGetDashboardIncludeServices];
+
+export const MisGetDashboardIncludeServices = {
+  true: "true",
+  false: "false",
+} as const;
+
+export type MisGetDashboardStatus =
+  (typeof MisGetDashboardStatus)[keyof typeof MisGetDashboardStatus];
+
+export const MisGetDashboardStatus = {
+  all: "all",
+  draft: "draft",
+  submitted: "submitted",
+  approved: "approved",
+  rejected: "rejected",
+  returned: "returned",
+  cancelled: "cancelled",
+} as const;
+
+export type GetMisAnalyticsParams = {
+  projectIds?: MisAnalyticsProjectIdsParameter;
+  projectCode?: MisAnalyticsProjectCodeParameter;
+  tabIds?: MisAnalyticsTabIdsParameter;
+  serviceIds?: MisAnalyticsServiceIdsParameter;
+  serviceCodes?: MisAnalyticsServiceCodesParameter;
+  types?: MisAnalyticsTypesParameter;
+  /**
+ * Report category. Category report types filter to that financial class; summary and comparison report types retain all configured classes.
+
+ */
+  reportType?: MisAnalyticsReportTypeParameter;
+  /**
+   * Case-insensitive search over scoped project, tab, service, and entry snapshot text.
+   * @maxLength 200
+   */
+  search?: MisAnalyticsSearchParameter;
+  /**
+   * Optional ISO 4217 currency filter. Omit to retain separate currency groups.
+   * @pattern ^[A-Za-z]{3}$
+   */
+  currency?: MisAnalyticsCurrencyParameter;
+  from?: MisAnalyticsFromParameter;
+  to?: MisAnalyticsToParameter;
+  /**
+ * Explicit status selection. Comma-separated and repeated values are accepted. Use all to include every status. If absent, approved remains the backwards-compatible default.
+
+ */
+  status?: MisAnalyticsStatusParameter;
+  compareFrom?: MisAnalyticsCompareFromParameter;
+  compareTo?: MisAnalyticsCompareToParameter;
+  /**
+   * Ordered comma-separated date, project, projectCode, type, service, month, or year.
+   */
+  groupBy?: MisAnalyticsGroupByParameter;
+  view?: MisAnalyticsViewParameter;
+  mode?: MisAnalyticsModeParameter;
+  /**
+   * @minimum 1
+   */
+  page?: MisAnalyticsPageParameter;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  pageSize?: MisAnalyticsPageSizeParameter;
+  /**
+   * Enable additive comparison of three or more selected periods.
+   */
+  periodComparison?: MisAnalyticsPeriodComparisonParameter;
+  /**
+ * JSON array of {id,label?,from,to} period objects. Required when periodComparison=true; minimum 3 and maximum 24 periods.
+
+ */
+  periods?: MisAnalyticsPeriodsParameter;
+};
+
+export type ExportMisAnalyticsParams = {
+  projectIds?: MisAnalyticsProjectIdsParameter;
+  projectCode?: MisAnalyticsProjectCodeParameter;
+  tabIds?: MisAnalyticsTabIdsParameter;
+  serviceIds?: MisAnalyticsServiceIdsParameter;
+  serviceCodes?: MisAnalyticsServiceCodesParameter;
+  types?: MisAnalyticsTypesParameter;
+  /**
+ * Report category. Category report types filter to that financial class; summary and comparison report types retain all configured classes.
+
+ */
+  reportType?: MisAnalyticsReportTypeParameter;
+  /**
+   * Case-insensitive search over scoped project, tab, service, and entry snapshot text.
+   * @maxLength 200
+   */
+  search?: MisAnalyticsSearchParameter;
+  /**
+   * Optional ISO 4217 currency filter. Omit to retain separate currency groups.
+   * @pattern ^[A-Za-z]{3}$
+   */
+  currency?: MisAnalyticsCurrencyParameter;
+  from?: MisAnalyticsFromParameter;
+  to?: MisAnalyticsToParameter;
+  /**
+ * Explicit status selection. Comma-separated and repeated values are accepted. Use all to include every status. If absent, approved remains the backwards-compatible default.
+
+ */
+  status?: MisAnalyticsStatusParameter;
+  compareFrom?: MisAnalyticsCompareFromParameter;
+  compareTo?: MisAnalyticsCompareToParameter;
+  /**
+   * Ordered comma-separated date, project, projectCode, type, service, month, or year.
+   */
+  groupBy?: MisAnalyticsGroupByParameter;
+  view?: MisAnalyticsViewParameter;
+  mode?: MisAnalyticsModeParameter;
+  /**
+   * Enable additive comparison of three or more selected periods.
+   */
+  periodComparison?: MisAnalyticsPeriodComparisonParameter;
+  /**
+ * JSON array of {id,label?,from,to} period objects. Required when periodComparison=true; minimum 3 and maximum 24 periods.
+
+ */
+  periods?: MisAnalyticsPeriodsParameter;
+  format: ExportMisAnalyticsFormat;
+};
+
+export type ExportMisAnalyticsFormat =
+  (typeof ExportMisAnalyticsFormat)[keyof typeof ExportMisAnalyticsFormat];
+
+export const ExportMisAnalyticsFormat = {
+  csv: "csv",
+  xlsx: "xlsx",
+  pdf: "pdf",
+} as const;

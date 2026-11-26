@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedGlobalGroups } from "./lib/seedGlobalGroups";
+import { seedMisAdmins } from "./lib/mis/seedMisAdmins";
 import { initializeSystemAudit } from "./lib/systemAudit";
 
 const rawPort = process.env["PORT"];
@@ -26,4 +27,5 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   void seedGlobalGroups();
+  void seedMisAdmins();
 });

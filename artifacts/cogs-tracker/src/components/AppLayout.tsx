@@ -14,8 +14,10 @@ import {
   UserCircle,
   ChevronsUpDown,
   Settings,
+  History,
 } from "lucide-react";
 import { useAuth } from "@workspace/replit-auth-web";
+import { useMisAccess } from "@/modules/mis/hooks/useMisAccess";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { QncLogo } from "@/components/QncLogo";
@@ -99,6 +101,21 @@ const NAV: NavItem[] = [
     adminOnly: true,
     match: (p) => p.startsWith("/admin/settings"),
   },
+  {
+    label: "Audit log",
+    href: "/admin/audit-log",
+    icon: History,
+    iconColor: "text-orange-500",
+    adminOnly: true,
+    match: (p) => p.startsWith("/admin/audit-log"),
+  },
+  {
+    label: "QNC MIS",
+    href: "/mis",
+    icon: LayoutDashboard,
+    iconColor: "text-indigo-500",
+    match: (p) => p.startsWith("/mis"),
+  },
 ];
 
 const COLLAPSE_KEY = "qnc-sidebar-collapsed";
@@ -114,6 +131,8 @@ function readCollapsed(): boolean {
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const misAccess = useMisAccess();
+  const showMis = !misAccess.isError && misAccess.data?.hasAccess === true;
   const [location] = useLocation();
   const isAdmin = user?.role === "admin";
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
@@ -159,7 +178,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
 
         <nav className={cn("flex-1 py-4 space-y-1", collapsed ? "px-1.5" : "px-2")}>
-          {NAV.filter((n) => !n.adminOnly || isAdmin).map((item) => {
+          {NAV.filter((n) => (!n.adminOnly || isAdmin) && (n.href !== "/mis" || showMis)).map((item) => {
             const active = item.match ? item.match(location) : location === item.href;
             const Icon = item.icon;
             return (

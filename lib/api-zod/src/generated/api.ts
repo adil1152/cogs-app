@@ -8,6 +8,46 @@
 import * as zod from "zod";
 
 /**
+ * @summary Administrator-only system change history
+ */
+export const listSystemAuditLogQueryPageDefault = 1;
+
+export const ListSystemAuditLogQueryParams = zod.object({
+  page: zod.coerce.number().min(1).default(listSystemAuditLogQueryPageDefault),
+  search: zod.coerce.string().optional(),
+  module: zod.enum(["COGS", "MIS", "System"]).optional(),
+  action: zod.enum(["INSERT", "UPDATE", "DELETE"]).optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+});
+
+export const ListSystemAuditLogResponse = zod.object({
+  total: zod.number(),
+  page: zod.number(),
+  pageSize: zod.number(),
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      occurredAt: zod.string(),
+      module: zod.string(),
+      actorId: zod.string().nullish(),
+      actorName: zod.string(),
+      action: zod.string(),
+      entityType: zod.string(),
+      entityId: zod.string().nullish(),
+      entityName: zod.string().nullish(),
+      projectId: zod.string().nullish(),
+      projectName: zod.string().nullish(),
+      requestId: zod.string().nullish(),
+      path: zod.string().nullish(),
+      changedFields: zod.array(zod.string()),
+      oldValues: zod.record(zod.string(), zod.unknown()).nullish(),
+      newValues: zod.record(zod.string(), zod.unknown()).nullish(),
+    }),
+  ),
+});
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -505,6 +545,12 @@ export const ListProjectsResponseItem = zod.object({
     .describe(
       "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
     ),
+  allowDuplicateDates: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, multiple daily entries may share the same date on this project. When false (default), creating a second entry for a date is rejected.",
+    ),
   backdatedDays: zod
     .number()
     .min(listProjectsResponseBackdatedDaysMin)
@@ -570,6 +616,7 @@ export const CreateProjectBody = zod.object({
   contractEnd: zod.coerce.date(),
   notes: zod.string().optional(),
   pdfRequired: zod.boolean().optional(),
+  allowDuplicateDates: zod.boolean().optional(),
   backdatedDays: zod.number().min(createProjectBodyBackdatedDaysMin).nullish(),
   futureDays: zod.number().min(createProjectBodyFutureDaysMin).nullish(),
 });
@@ -604,6 +651,12 @@ export const GetProjectResponse = zod
       .boolean()
       .describe(
         "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+      ),
+    allowDuplicateDates: zod
+      .boolean()
+      .optional()
+      .describe(
+        "When true, multiple daily entries may share the same date on this project. When false (default), creating a second entry for a date is rejected.",
       ),
     backdatedDays: zod
       .number()
@@ -726,6 +779,7 @@ export const UpdateProjectBody = zod.object({
   notes: zod.string().optional(),
   pdfRequired: zod.boolean().optional(),
   disabled: zod.boolean().optional(),
+  allowDuplicateDates: zod.boolean().optional(),
   backdatedDays: zod.number().min(updateProjectBodyBackdatedDaysMin).nullish(),
   futureDays: zod.number().min(updateProjectBodyFutureDaysMin).nullish(),
 });
@@ -753,6 +807,12 @@ export const UpdateProjectResponse = zod.object({
     .boolean()
     .describe(
       "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
+    ),
+  allowDuplicateDates: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, multiple daily entries may share the same date on this project. When false (default), creating a second entry for a date is rejected.",
     ),
   backdatedDays: zod
     .number()
@@ -2715,6 +2775,12 @@ export const GetProjectEntryMatrixResponse = zod
         .describe(
           "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
         ),
+      allowDuplicateDates: zod
+        .boolean()
+        .optional()
+        .describe(
+          "When true, multiple daily entries may share the same date on this project. When false (default), creating a second entry for a date is rejected.",
+        ),
       backdatedDays: zod
         .number()
         .min(getProjectEntryMatrixResponseProjectBackdatedDaysMin)
@@ -2842,6 +2908,25 @@ export const GetProjectEntryMatrixResponse = zod
               cost: zod.number(),
               mandayContribution: zod.number(),
               costPerManday: zod.number(),
+              components: zod
+                .array(
+                  zod
+                    .object({
+                      key: zod.string(),
+                      name: zod.string(),
+                      kind: zod.enum(["meal", "sub"]),
+                      qty: zod.number().nullish(),
+                      cost: zod.number().nullish(),
+                      mandays: zod.number(),
+                    })
+                    .describe(
+                      'One sub-component of a service inside a report cell: a meal type\n(kind=meal, from the entry\'s saved meal snapshots — qty + mandays,\nno per-meal cost) or a group sub-service (kind=sub — cost + mandays,\nno qty). `key` is stable across rows (\"meal:<name>\" \/ \"sub:<id>\")\nso the UI can align columns.\n',
+                    ),
+                )
+                .optional()
+                .describe(
+                  "Meal-type \/ sub-service breakdown for this cell (empty for standard services).",
+                ),
             })
             .describe("One service's cost contribution on a given entry."),
         ),
@@ -2853,6 +2938,25 @@ export const GetProjectEntryMatrixResponse = zod
         totalCost: zod.number(),
         totalMandayContribution: zod.number(),
         costPerManday: zod.number(),
+        components: zod
+          .array(
+            zod
+              .object({
+                key: zod.string(),
+                name: zod.string(),
+                kind: zod.enum(["meal", "sub"]),
+                qty: zod.number().nullish(),
+                cost: zod.number().nullish(),
+                mandays: zod.number(),
+              })
+              .describe(
+                'One sub-component of a service inside a report cell: a meal type\n(kind=meal, from the entry\'s saved meal snapshots — qty + mandays,\nno per-meal cost) or a group sub-service (kind=sub — cost + mandays,\nno qty). `key` is stable across rows (\"meal:<name>\" \/ \"sub:<id>\")\nso the UI can align columns.\n',
+              ),
+          )
+          .optional()
+          .describe(
+            "Per-component totals across the range, in display order. Also\nserves as the union of component columns for the UI.\n",
+          ),
       }),
     ),
   })
@@ -2973,6 +3077,12 @@ export const GetProjectSummaryResponse = zod.object({
       .describe(
         "When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.",
       ),
+    allowDuplicateDates: zod
+      .boolean()
+      .optional()
+      .describe(
+        "When true, multiple daily entries may share the same date on this project. When false (default), creating a second entry for a date is rejected.",
+      ),
     backdatedDays: zod
       .number()
       .min(getProjectSummaryResponseProjectBackdatedDaysMin)
@@ -3052,6 +3162,25 @@ export const GetProjectSummaryResponse = zod.object({
           .optional()
           .describe(
             'For kind=\"group\" services: per-sub-service totals so the UI can\nexpand the row inline. Empty \/ omitted for non-group services.\n',
+          ),
+        components: zod
+          .array(
+            zod
+              .object({
+                key: zod.string(),
+                name: zod.string(),
+                kind: zod.enum(["meal", "sub"]),
+                qty: zod.number().nullish(),
+                cost: zod.number().nullish(),
+                mandays: zod.number(),
+              })
+              .describe(
+                'One sub-component of a service inside a report cell: a meal type\n(kind=meal, from the entry\'s saved meal snapshots — qty + mandays,\nno per-meal cost) or a group sub-service (kind=sub — cost + mandays,\nno qty). `key` is stable across rows (\"meal:<name>\" \/ \"sub:<id>\")\nso the UI can align columns.\n',
+              ),
+          )
+          .optional()
+          .describe(
+            "Full breakdown of this service for the range: meal types\n(kind=meal, qty + mandays) for food services, sub-services\n(kind=sub, cost + mandays) for group services. Empty for\nstandard services.\n",
           ),
       })
       .describe(
@@ -3157,6 +3286,25 @@ export const GetAggregateReportResponse = zod.object({
           .optional()
           .describe(
             'For kind=\"group\" services: per-sub-service totals so the UI can\nexpand the row inline. Empty \/ omitted for non-group services.\n',
+          ),
+        components: zod
+          .array(
+            zod
+              .object({
+                key: zod.string(),
+                name: zod.string(),
+                kind: zod.enum(["meal", "sub"]),
+                qty: zod.number().nullish(),
+                cost: zod.number().nullish(),
+                mandays: zod.number(),
+              })
+              .describe(
+                'One sub-component of a service inside a report cell: a meal type\n(kind=meal, from the entry\'s saved meal snapshots — qty + mandays,\nno per-meal cost) or a group sub-service (kind=sub — cost + mandays,\nno qty). `key` is stable across rows (\"meal:<name>\" \/ \"sub:<id>\")\nso the UI can align columns.\n',
+              ),
+          )
+          .optional()
+          .describe(
+            "Full breakdown of this service for the range: meal types\n(kind=meal, qty + mandays) for food services, sub-services\n(kind=sub, cost + mandays) for group services. Empty for\nstandard services.\n",
           ),
       })
       .describe(
@@ -3354,3 +3502,5052 @@ export const SetProjectApprovalChainResponseItem = zod.object({
 export const SetProjectApprovalChainResponse = zod.array(
   SetProjectApprovalChainResponseItem,
 );
+
+/**
+ * @summary Get current user's effective MIS access and project grants
+ */
+export const MisGetCurrentAccessResponse = zod
+  .object({
+    hasAccess: zod.boolean(),
+    roles: zod.array(
+      zod.enum([
+        "mis_admin",
+        "mis_manager",
+        "project_manager",
+        "finance",
+        "data_entry",
+        "viewer",
+        "custom",
+      ]),
+    ),
+    permissions: zod.array(
+      zod
+        .enum([
+          "authorities",
+          "projects",
+          "configuration",
+          "project_config",
+          "tabs",
+          "services",
+          "entries",
+          "submit",
+          "approve",
+          "reports",
+          "export",
+          "financial",
+          "history",
+          "reset",
+          "rate_override",
+          "delete_approved",
+          "edit_approved",
+          "view_project",
+          "view_entries",
+          "create_entries",
+          "edit_entries",
+          "delete_entries",
+          "overhead",
+          "op_expense",
+        ])
+        .describe(
+          "A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.",
+        ),
+    ),
+    projectIds: zod.array(zod.string()),
+    globalAccess: zod.boolean(),
+    projectPermissions: zod
+      .array(
+        zod.object({
+          projectId: zod.string(),
+          permissions: zod.array(
+            zod
+              .enum([
+                "authorities",
+                "projects",
+                "configuration",
+                "project_config",
+                "tabs",
+                "services",
+                "entries",
+                "submit",
+                "approve",
+                "reports",
+                "export",
+                "financial",
+                "history",
+                "reset",
+                "rate_override",
+                "delete_approved",
+                "edit_approved",
+                "view_project",
+                "view_entries",
+                "create_entries",
+                "edit_entries",
+                "delete_entries",
+                "overhead",
+                "op_expense",
+              ])
+              .describe(
+                "A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.",
+              ),
+          ),
+        }),
+      )
+      .describe(
+        "Empty for a global-only membership without project-specific grants.",
+      ),
+  })
+  .describe(
+    "The current user's MIS membership. A caller has no MIS access when\nhasAccess is false. `projectPermissions` is the effective grant per\nproject and is the source of truth for project-scoped UI gates.\n",
+  );
+
+/**
+ * @summary List users available to an MIS administrator authority picker
+ */
+export const misListUsersQuerySearchMax = 200;
+
+export const misListUsersQueryPageDefault = 1;
+
+export const misListUsersQueryPageSizeDefault = 25;
+export const misListUsersQueryPageSizeMax = 100;
+
+export const MisListUsersQueryParams = zod.object({
+  search: zod.coerce.string().max(misListUsersQuerySearchMax).optional(),
+  page: zod.coerce.number().min(1).default(misListUsersQueryPageDefault),
+  pageSize: zod.coerce
+    .number()
+    .min(1)
+    .max(misListUsersQueryPageSizeMax)
+    .default(misListUsersQueryPageSizeDefault),
+});
+
+export const misListUsersResponseTotalMin = 0;
+
+export const MisListUsersResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      email: zod.string().email().nullable(),
+      firstName: zod.string().nullable(),
+      lastName: zod.string().nullable(),
+      displayName: zod.string(),
+    }),
+  ),
+  total: zod.number().min(misListUsersResponseTotalMin),
+  page: zod.number().min(1),
+  pageSize: zod.number().min(1),
+});
+
+/**
+ * @summary List MIS authority grants
+ */
+export const misListAuthoritiesQuerySearchMax = 200;
+
+export const misListAuthoritiesQueryPageDefault = 1;
+
+export const misListAuthoritiesQueryPageSizeDefault = 25;
+export const misListAuthoritiesQueryPageSizeMax = 100;
+
+export const MisListAuthoritiesQueryParams = zod.object({
+  projectId: zod.coerce.string().optional(),
+  search: zod.coerce.string().max(misListAuthoritiesQuerySearchMax).optional(),
+  page: zod.coerce.number().min(1).default(misListAuthoritiesQueryPageDefault),
+  pageSize: zod.coerce
+    .number()
+    .min(1)
+    .max(misListAuthoritiesQueryPageSizeMax)
+    .default(misListAuthoritiesQueryPageSizeDefault),
+});
+
+export const misListAuthoritiesResponseTotalMin = 0;
+
+export const MisListAuthoritiesResponse = zod.object({
+  items: zod.array(
+    zod
+      .object({
+        userId: zod.string(),
+        projectId: zod.string().nullable(),
+        role: zod.enum([
+          "mis_admin",
+          "mis_manager",
+          "project_manager",
+          "finance",
+          "data_entry",
+          "viewer",
+          "custom",
+        ]),
+        extraPermissions: zod
+          .array(
+            zod
+              .enum([
+                "authorities",
+                "projects",
+                "configuration",
+                "project_config",
+                "tabs",
+                "services",
+                "entries",
+                "submit",
+                "approve",
+                "reports",
+                "export",
+                "financial",
+                "history",
+                "reset",
+                "rate_override",
+                "delete_approved",
+                "edit_approved",
+                "view_project",
+                "view_entries",
+                "create_entries",
+                "edit_entries",
+                "delete_entries",
+                "overhead",
+                "op_expense",
+              ])
+              .describe(
+                "A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.",
+              ),
+          )
+          .describe(
+            "Explicit permissions added to, never subtracted from, the role's standard permissions.",
+          ),
+      })
+      .describe(
+        "A full authority grant. projectId null grants the role globally.",
+      )
+      .and(
+        zod.object({
+          id: zod.string(),
+          user: zod.object({
+            id: zod.string(),
+            email: zod.string().email().nullable(),
+            firstName: zod.string().nullable(),
+            lastName: zod.string().nullable(),
+            displayName: zod.string(),
+          }),
+          projectName: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      ),
+  ),
+  total: zod.number().min(misListAuthoritiesResponseTotalMin),
+  page: zod.number().min(1),
+  pageSize: zod.number().min(1),
+});
+
+/**
+ * @summary Grant an MIS role globally or for one project
+ */
+export const MisCreateAuthorityBody = zod
+  .object({
+    userId: zod.string(),
+    projectId: zod.string().nullable(),
+    role: zod.enum([
+      "mis_admin",
+      "mis_manager",
+      "project_manager",
+      "finance",
+      "data_entry",
+      "viewer",
+      "custom",
+    ]),
+    extraPermissions: zod
+      .array(
+        zod
+          .enum([
+            "authorities",
+            "projects",
+            "configuration",
+            "project_config",
+            "tabs",
+            "services",
+            "entries",
+            "submit",
+            "approve",
+            "reports",
+            "export",
+            "financial",
+            "history",
+            "reset",
+            "rate_override",
+            "delete_approved",
+            "edit_approved",
+            "view_project",
+            "view_entries",
+            "create_entries",
+            "edit_entries",
+            "delete_entries",
+            "overhead",
+            "op_expense",
+          ])
+          .describe(
+            "A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.",
+          ),
+      )
+      .describe(
+        "Explicit permissions added to, never subtracted from, the role's standard permissions.",
+      ),
+  })
+  .describe("A full authority grant. projectId null grants the role globally.");
+
+/**
+ * @summary Replace the writable values of an MIS authority grant
+ */
+export const MisUpdateAuthorityParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const MisUpdateAuthorityBody = zod
+  .object({
+    userId: zod.string(),
+    projectId: zod.string().nullable(),
+    role: zod.enum([
+      "mis_admin",
+      "mis_manager",
+      "project_manager",
+      "finance",
+      "data_entry",
+      "viewer",
+      "custom",
+    ]),
+    extraPermissions: zod
+      .array(
+        zod
+          .enum([
+            "authorities",
+            "projects",
+            "configuration",
+            "project_config",
+            "tabs",
+            "services",
+            "entries",
+            "submit",
+            "approve",
+            "reports",
+            "export",
+            "financial",
+            "history",
+            "reset",
+            "rate_override",
+            "delete_approved",
+            "edit_approved",
+            "view_project",
+            "view_entries",
+            "create_entries",
+            "edit_entries",
+            "delete_entries",
+            "overhead",
+            "op_expense",
+          ])
+          .describe(
+            "A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.",
+          ),
+      )
+      .describe(
+        "Explicit permissions added to, never subtracted from, the role's standard permissions.",
+      ),
+  })
+  .describe("A full authority grant. projectId null grants the role globally.");
+
+export const MisUpdateAuthorityResponse = zod
+  .object({
+    userId: zod.string(),
+    projectId: zod.string().nullable(),
+    role: zod.enum([
+      "mis_admin",
+      "mis_manager",
+      "project_manager",
+      "finance",
+      "data_entry",
+      "viewer",
+      "custom",
+    ]),
+    extraPermissions: zod
+      .array(
+        zod
+          .enum([
+            "authorities",
+            "projects",
+            "configuration",
+            "project_config",
+            "tabs",
+            "services",
+            "entries",
+            "submit",
+            "approve",
+            "reports",
+            "export",
+            "financial",
+            "history",
+            "reset",
+            "rate_override",
+            "delete_approved",
+            "edit_approved",
+            "view_project",
+            "view_entries",
+            "create_entries",
+            "edit_entries",
+            "delete_entries",
+            "overhead",
+            "op_expense",
+          ])
+          .describe(
+            "A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.",
+          ),
+      )
+      .describe(
+        "Explicit permissions added to, never subtracted from, the role's standard permissions.",
+      ),
+  })
+  .describe("A full authority grant. projectId null grants the role globally.")
+  .and(
+    zod.object({
+      id: zod.string(),
+      user: zod.object({
+        id: zod.string(),
+        email: zod.string().email().nullable(),
+        firstName: zod.string().nullable(),
+        lastName: zod.string().nullable(),
+        displayName: zod.string(),
+      }),
+      projectName: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+
+/**
+ * @summary Revoke an MIS authority grant
+ */
+export const MisDeleteAuthorityParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const MisDeleteAuthorityResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary List MIS projects visible to the current user
+ */
+export const misListProjectsQuerySearchMax = 200;
+
+export const misListProjectsQueryPageDefault = 1;
+
+export const misListProjectsQueryPageSizeDefault = 25;
+export const misListProjectsQueryPageSizeMax = 100;
+
+export const MisListProjectsQueryParams = zod.object({
+  search: zod.coerce.string().max(misListProjectsQuerySearchMax).optional(),
+  status: zod.enum(["active", "inactive"]).optional(),
+  page: zod.coerce.number().min(1).default(misListProjectsQueryPageDefault),
+  pageSize: zod.coerce
+    .number()
+    .min(1)
+    .max(misListProjectsQueryPageSizeMax)
+    .default(misListProjectsQueryPageSizeDefault),
+});
+
+export const misListProjectsResponseItemsItemOneNameMax = 160;
+
+export const misListProjectsResponseItemsItemOneCodeMax = 32;
+
+export const misListProjectsResponseItemsItemOneCurrencyMin = 3;
+export const misListProjectsResponseItemsItemOneCurrencyMax = 3;
+
+export const misListProjectsResponseItemsItemOneReportingSettingsDefaultEntryStatusDefault = `approved`;
+export const misListProjectsResponseItemsItemOneReportingSettingsAllowMultipleEntriesDefault = false;
+export const misListProjectsResponseItemsItemOneReportingSettingsOverlapPolicyDefault = `nonoverlap`;
+export const misListProjectsResponseTotalMin = 0;
+
+export const MisListProjectsResponse = zod.object({
+  items: zod.array(
+    zod
+      .object({
+        name: zod
+          .string()
+          .min(1)
+          .max(misListProjectsResponseItemsItemOneNameMax),
+        code: zod
+          .string()
+          .min(1)
+          .max(misListProjectsResponseItemsItemOneCodeMax),
+        managerId: zod.string().nullable(),
+        status: zod.enum(["active", "inactive"]),
+        startDate: zod.coerce.date().nullable(),
+        endDate: zod.coerce.date().nullable(),
+        currency: zod
+          .string()
+          .min(misListProjectsResponseItemsItemOneCurrencyMin)
+          .max(misListProjectsResponseItemsItemOneCurrencyMax)
+          .describe("ISO 4217 currency code."),
+        reportingSettings: zod
+          .object({
+            defaultEntryStatus: zod
+              .enum([
+                "draft",
+                "submitted",
+                "approved",
+                "rejected",
+                "returned",
+                "cancelled",
+              ])
+              .default(
+                misListProjectsResponseItemsItemOneReportingSettingsDefaultEntryStatusDefault,
+              )
+              .describe(
+                "Default status filter for project reporting; entries still begin as draft.",
+              ),
+            preventDuplicatePeriods: zod
+              .boolean()
+              .describe(
+                "Reject overlapping entries for the same project, tab, and service when true.",
+              ),
+            allowMultipleEntries: zod
+              .boolean()
+              .default(
+                misListProjectsResponseItemsItemOneReportingSettingsAllowMultipleEntriesDefault,
+              )
+              .describe("Permit more than one MIS parent in a project period."),
+            overlapPolicy: zod
+              .enum(["nonoverlap", "overlap", "unlimited"])
+              .default(
+                misListProjectsResponseItemsItemOneReportingSettingsOverlapPolicyDefault,
+              )
+              .describe("Period policy when multiple MIS entries are enabled."),
+            maxEntriesPerPeriod: zod
+              .number()
+              .min(1)
+              .nullish()
+              .describe(
+                "Optional maximum number of entries that may cover a period.",
+              ),
+          })
+          .describe(
+            "Explicit, small project reporting controls; no untyped settings blob is used.",
+          ),
+      })
+      .describe(
+        "Full writable MIS project values accepted by both create and PATCH.",
+      )
+      .and(
+        zod.object({
+          id: zod.string(),
+          manager: zod.union([
+            zod.object({
+              id: zod.string(),
+              email: zod.string().email().nullable(),
+              firstName: zod.string().nullable(),
+              lastName: zod.string().nullable(),
+              displayName: zod.string(),
+            }),
+            zod.null(),
+          ]),
+          effectivePermissions: zod
+            .array(
+              zod
+                .enum([
+                  "authorities",
+                  "projects",
+                  "configuration",
+                  "project_config",
+                  "tabs",
+                  "services",
+                  "entries",
+                  "submit",
+                  "approve",
+                  "reports",
+                  "export",
+                  "financial",
+                  "history",
+                  "reset",
+                  "rate_override",
+                  "delete_approved",
+                  "edit_approved",
+                  "view_project",
+                  "view_entries",
+                  "create_entries",
+                  "edit_entries",
+                  "delete_entries",
+                  "overhead",
+                  "op_expense",
+                ])
+                .describe(
+                  "A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.",
+                ),
+            )
+            .describe(
+              "Current caller's effective permissions for this project.",
+            ),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      ),
+  ),
+  total: zod.number().min(misListProjectsResponseTotalMin),
+  page: zod.number().min(1),
+  pageSize: zod.number().min(1),
+});
+
+/**
+ * @summary Create an MIS project
+ */
+export const misCreateProjectBodyNameMax = 160;
+
+export const misCreateProjectBodyCodeMax = 32;
+
+export const misCreateProjectBodyCurrencyMin = 3;
+export const misCreateProjectBodyCurrencyMax = 3;
+
+export const misCreateProjectBodyReportingSettingsDefaultEntryStatusDefault = `approved`;
+export const misCreateProjectBodyReportingSettingsAllowMultipleEntriesDefault = false;
+export const misCreateProjectBodyReportingSettingsOverlapPolicyDefault = `nonoverlap`;
+
+export const MisCreateProjectBody = zod
+  .object({
+    name: zod.string().min(1).max(misCreateProjectBodyNameMax),
+    code: zod.string().min(1).max(misCreateProjectBodyCodeMax),
+    managerId: zod.string().nullable(),
+    status: zod.enum(["active", "inactive"]),
+    startDate: zod.coerce.date().nullable(),
+    endDate: zod.coerce.date().nullable(),
+    currency: zod
+      .string()
+      .min(misCreateProjectBodyCurrencyMin)
+      .max(misCreateProjectBodyCurrencyMax)
+      .describe("ISO 4217 currency code."),
+    reportingSettings: zod
+      .object({
+        defaultEntryStatus: zod
+          .enum([
+            "draft",
+            "submitted",
+            "approved",
+            "rejected",
+            "returned",
+            "cancelled",
+          ])
+          .default(
+            misCreateProjectBodyReportingSettingsDefaultEntryStatusDefault,
+          )
+          .describe(
+            "Default status filter for project reporting; entries still begin as draft.",
+          ),
+        preventDuplicatePeriods: zod
+          .boolean()
+          .describe(
+            "Reject overlapping entries for the same project, tab, and service when true.",
+          ),
+        allowMultipleEntries: zod
+          .boolean()
+          .default(
+            misCreateProjectBodyReportingSettingsAllowMultipleEntriesDefault,
+          )
+          .describe("Permit more than one MIS parent in a project period."),
+        overlapPolicy: zod
+          .enum(["nonoverlap", "overlap", "unlimited"])
+          .default(misCreateProjectBodyReportingSettingsOverlapPolicyDefault)
+          .describe("Period policy when multiple MIS entries are enabled."),
+        maxEntriesPerPeriod: zod
+          .number()
+          .min(1)
+          .nullish()
+          .describe(
+            "Optional maximum number of entries that may cover a period.",
+          ),
+      })
+      .describe(
+        "Explicit, small project reporting controls; no untyped settings blob is used.",
+      ),
+  })
+  .describe(
+    "Full writable MIS project values accepted by both create and PATCH.",
+  );
+
+/**
+ * @summary Get a permitted MIS project with effective project permissions
+ */
+export const MisGetProjectParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misGetProjectResponseOneNameMax = 160;
+
+export const misGetProjectResponseOneCodeMax = 32;
+
+export const misGetProjectResponseOneCurrencyMin = 3;
+export const misGetProjectResponseOneCurrencyMax = 3;
+
+export const misGetProjectResponseOneReportingSettingsDefaultEntryStatusDefault = `approved`;
+export const misGetProjectResponseOneReportingSettingsAllowMultipleEntriesDefault = false;
+export const misGetProjectResponseOneReportingSettingsOverlapPolicyDefault = `nonoverlap`;
+
+export const MisGetProjectResponse = zod
+  .object({
+    name: zod.string().min(1).max(misGetProjectResponseOneNameMax),
+    code: zod.string().min(1).max(misGetProjectResponseOneCodeMax),
+    managerId: zod.string().nullable(),
+    status: zod.enum(["active", "inactive"]),
+    startDate: zod.coerce.date().nullable(),
+    endDate: zod.coerce.date().nullable(),
+    currency: zod
+      .string()
+      .min(misGetProjectResponseOneCurrencyMin)
+      .max(misGetProjectResponseOneCurrencyMax)
+      .describe("ISO 4217 currency code."),
+    reportingSettings: zod
+      .object({
+        defaultEntryStatus: zod
+          .enum([
+            "draft",
+            "submitted",
+            "approved",
+            "rejected",
+            "returned",
+            "cancelled",
+          ])
+          .default(
+            misGetProjectResponseOneReportingSettingsDefaultEntryStatusDefault,
+          )
+          .describe(
+            "Default status filter for project reporting; entries still begin as draft.",
+          ),
+        preventDuplicatePeriods: zod
+          .boolean()
+          .describe(
+            "Reject overlapping entries for the same project, tab, and service when true.",
+          ),
+        allowMultipleEntries: zod
+          .boolean()
+          .default(
+            misGetProjectResponseOneReportingSettingsAllowMultipleEntriesDefault,
+          )
+          .describe("Permit more than one MIS parent in a project period."),
+        overlapPolicy: zod
+          .enum(["nonoverlap", "overlap", "unlimited"])
+          .default(
+            misGetProjectResponseOneReportingSettingsOverlapPolicyDefault,
+          )
+          .describe("Period policy when multiple MIS entries are enabled."),
+        maxEntriesPerPeriod: zod
+          .number()
+          .min(1)
+          .nullish()
+          .describe(
+            "Optional maximum number of entries that may cover a period.",
+          ),
+      })
+      .describe(
+        "Explicit, small project reporting controls; no untyped settings blob is used.",
+      ),
+  })
+  .describe(
+    "Full writable MIS project values accepted by both create and PATCH.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      manager: zod.union([
+        zod.object({
+          id: zod.string(),
+          email: zod.string().email().nullable(),
+          firstName: zod.string().nullable(),
+          lastName: zod.string().nullable(),
+          displayName: zod.string(),
+        }),
+        zod.null(),
+      ]),
+      effectivePermissions: zod
+        .array(
+          zod
+            .enum([
+              "authorities",
+              "projects",
+              "configuration",
+              "project_config",
+              "tabs",
+              "services",
+              "entries",
+              "submit",
+              "approve",
+              "reports",
+              "export",
+              "financial",
+              "history",
+              "reset",
+              "rate_override",
+              "delete_approved",
+              "edit_approved",
+              "view_project",
+              "view_entries",
+              "create_entries",
+              "edit_entries",
+              "delete_entries",
+              "overhead",
+              "op_expense",
+            ])
+            .describe(
+              "A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.",
+            ),
+        )
+        .describe("Current caller's effective permissions for this project."),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+
+/**
+ * @summary Replace writable MIS project values
+ */
+export const MisUpdateProjectParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misUpdateProjectBodyNameMax = 160;
+
+export const misUpdateProjectBodyCodeMax = 32;
+
+export const misUpdateProjectBodyCurrencyMin = 3;
+export const misUpdateProjectBodyCurrencyMax = 3;
+
+export const misUpdateProjectBodyReportingSettingsDefaultEntryStatusDefault = `approved`;
+export const misUpdateProjectBodyReportingSettingsAllowMultipleEntriesDefault = false;
+export const misUpdateProjectBodyReportingSettingsOverlapPolicyDefault = `nonoverlap`;
+
+export const MisUpdateProjectBody = zod
+  .object({
+    name: zod.string().min(1).max(misUpdateProjectBodyNameMax),
+    code: zod.string().min(1).max(misUpdateProjectBodyCodeMax),
+    managerId: zod.string().nullable(),
+    status: zod.enum(["active", "inactive"]),
+    startDate: zod.coerce.date().nullable(),
+    endDate: zod.coerce.date().nullable(),
+    currency: zod
+      .string()
+      .min(misUpdateProjectBodyCurrencyMin)
+      .max(misUpdateProjectBodyCurrencyMax)
+      .describe("ISO 4217 currency code."),
+    reportingSettings: zod
+      .object({
+        defaultEntryStatus: zod
+          .enum([
+            "draft",
+            "submitted",
+            "approved",
+            "rejected",
+            "returned",
+            "cancelled",
+          ])
+          .default(
+            misUpdateProjectBodyReportingSettingsDefaultEntryStatusDefault,
+          )
+          .describe(
+            "Default status filter for project reporting; entries still begin as draft.",
+          ),
+        preventDuplicatePeriods: zod
+          .boolean()
+          .describe(
+            "Reject overlapping entries for the same project, tab, and service when true.",
+          ),
+        allowMultipleEntries: zod
+          .boolean()
+          .default(
+            misUpdateProjectBodyReportingSettingsAllowMultipleEntriesDefault,
+          )
+          .describe("Permit more than one MIS parent in a project period."),
+        overlapPolicy: zod
+          .enum(["nonoverlap", "overlap", "unlimited"])
+          .default(misUpdateProjectBodyReportingSettingsOverlapPolicyDefault)
+          .describe("Period policy when multiple MIS entries are enabled."),
+        maxEntriesPerPeriod: zod
+          .number()
+          .min(1)
+          .nullish()
+          .describe(
+            "Optional maximum number of entries that may cover a period.",
+          ),
+      })
+      .describe(
+        "Explicit, small project reporting controls; no untyped settings blob is used.",
+      ),
+  })
+  .describe(
+    "Full writable MIS project values accepted by both create and PATCH.",
+  );
+
+export const misUpdateProjectResponseOneNameMax = 160;
+
+export const misUpdateProjectResponseOneCodeMax = 32;
+
+export const misUpdateProjectResponseOneCurrencyMin = 3;
+export const misUpdateProjectResponseOneCurrencyMax = 3;
+
+export const misUpdateProjectResponseOneReportingSettingsDefaultEntryStatusDefault = `approved`;
+export const misUpdateProjectResponseOneReportingSettingsAllowMultipleEntriesDefault = false;
+export const misUpdateProjectResponseOneReportingSettingsOverlapPolicyDefault = `nonoverlap`;
+
+export const MisUpdateProjectResponse = zod
+  .object({
+    name: zod.string().min(1).max(misUpdateProjectResponseOneNameMax),
+    code: zod.string().min(1).max(misUpdateProjectResponseOneCodeMax),
+    managerId: zod.string().nullable(),
+    status: zod.enum(["active", "inactive"]),
+    startDate: zod.coerce.date().nullable(),
+    endDate: zod.coerce.date().nullable(),
+    currency: zod
+      .string()
+      .min(misUpdateProjectResponseOneCurrencyMin)
+      .max(misUpdateProjectResponseOneCurrencyMax)
+      .describe("ISO 4217 currency code."),
+    reportingSettings: zod
+      .object({
+        defaultEntryStatus: zod
+          .enum([
+            "draft",
+            "submitted",
+            "approved",
+            "rejected",
+            "returned",
+            "cancelled",
+          ])
+          .default(
+            misUpdateProjectResponseOneReportingSettingsDefaultEntryStatusDefault,
+          )
+          .describe(
+            "Default status filter for project reporting; entries still begin as draft.",
+          ),
+        preventDuplicatePeriods: zod
+          .boolean()
+          .describe(
+            "Reject overlapping entries for the same project, tab, and service when true.",
+          ),
+        allowMultipleEntries: zod
+          .boolean()
+          .default(
+            misUpdateProjectResponseOneReportingSettingsAllowMultipleEntriesDefault,
+          )
+          .describe("Permit more than one MIS parent in a project period."),
+        overlapPolicy: zod
+          .enum(["nonoverlap", "overlap", "unlimited"])
+          .default(
+            misUpdateProjectResponseOneReportingSettingsOverlapPolicyDefault,
+          )
+          .describe("Period policy when multiple MIS entries are enabled."),
+        maxEntriesPerPeriod: zod
+          .number()
+          .min(1)
+          .nullish()
+          .describe(
+            "Optional maximum number of entries that may cover a period.",
+          ),
+      })
+      .describe(
+        "Explicit, small project reporting controls; no untyped settings blob is used.",
+      ),
+  })
+  .describe(
+    "Full writable MIS project values accepted by both create and PATCH.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      manager: zod.union([
+        zod.object({
+          id: zod.string(),
+          email: zod.string().email().nullable(),
+          firstName: zod.string().nullable(),
+          lastName: zod.string().nullable(),
+          displayName: zod.string(),
+        }),
+        zod.null(),
+      ]),
+      effectivePermissions: zod
+        .array(
+          zod
+            .enum([
+              "authorities",
+              "projects",
+              "configuration",
+              "project_config",
+              "tabs",
+              "services",
+              "entries",
+              "submit",
+              "approve",
+              "reports",
+              "export",
+              "financial",
+              "history",
+              "reset",
+              "rate_override",
+              "delete_approved",
+              "edit_approved",
+              "view_project",
+              "view_entries",
+              "create_entries",
+              "edit_entries",
+              "delete_entries",
+              "overhead",
+              "op_expense",
+            ])
+            .describe(
+              "A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.",
+            ),
+        )
+        .describe("Current caller's effective permissions for this project."),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+
+/**
+ * @summary List MIS tab/category master records
+ */
+export const misListTabsQuerySearchMax = 200;
+
+export const MisListTabsQueryParams = zod.object({
+  search: zod.coerce.string().max(misListTabsQuerySearchMax).optional(),
+  active: zod.coerce.boolean().optional(),
+});
+
+export const misListTabsResponseOneNameMax = 120;
+
+export const misListTabsResponseOneCodeMax = 32;
+
+export const misListTabsResponseOneDescriptionMax = 1000;
+
+export const misListTabsResponseOneRateEnabledDefault = true;
+export const misListTabsResponseOneCalculatePercentAgainstIncomeDefault = false;
+export const misListTabsResponseOneSequenceMin = 0;
+
+export const MisListTabsResponseItem = zod
+  .object({
+    name: zod.string().min(1).max(misListTabsResponseOneNameMax),
+    code: zod.string().min(1).max(misListTabsResponseOneCodeMax),
+    description: zod
+      .string()
+      .max(misListTabsResponseOneDescriptionMax)
+      .nullable(),
+    type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+    financialClass: zod
+      .enum(["income", "cost", "expense", "salary", "excluded"])
+      .describe(
+        "How the tab contributes to financial totals; excluded has no profit impact.",
+      ),
+    rateEnabled: zod
+      .boolean()
+      .default(misListTabsResponseOneRateEnabledDefault)
+      .describe("Whether new custom-type entries use quantity × rate."),
+    calculatePercentAgainstIncome: zod
+      .boolean()
+      .default(misListTabsResponseOneCalculatePercentAgainstIncomeDefault)
+      .describe("Type default for percentage against total income."),
+    sequence: zod.number().min(misListTabsResponseOneSequenceMin),
+    active: zod.boolean(),
+    allowEntry: zod.boolean(),
+    allowReporting: zod.boolean(),
+  })
+  .describe(
+    "Full writable MIS tab\/category master values accepted by both create and PATCH.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+export const MisListTabsResponse = zod.array(MisListTabsResponseItem);
+
+/**
+ * @summary Create an MIS tab/category master record
+ */
+export const misCreateTabBodyNameMax = 120;
+
+export const misCreateTabBodyCodeMax = 32;
+
+export const misCreateTabBodyDescriptionMax = 1000;
+
+export const misCreateTabBodyRateEnabledDefault = true;
+export const misCreateTabBodyCalculatePercentAgainstIncomeDefault = false;
+export const misCreateTabBodySequenceMin = 0;
+
+export const MisCreateTabBody = zod
+  .object({
+    name: zod.string().min(1).max(misCreateTabBodyNameMax),
+    code: zod.string().min(1).max(misCreateTabBodyCodeMax),
+    description: zod.string().max(misCreateTabBodyDescriptionMax).nullable(),
+    type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+    financialClass: zod
+      .enum(["income", "cost", "expense", "salary", "excluded"])
+      .describe(
+        "How the tab contributes to financial totals; excluded has no profit impact.",
+      ),
+    rateEnabled: zod
+      .boolean()
+      .default(misCreateTabBodyRateEnabledDefault)
+      .describe("Whether new custom-type entries use quantity × rate."),
+    calculatePercentAgainstIncome: zod
+      .boolean()
+      .default(misCreateTabBodyCalculatePercentAgainstIncomeDefault)
+      .describe("Type default for percentage against total income."),
+    sequence: zod.number().min(misCreateTabBodySequenceMin),
+    active: zod.boolean(),
+    allowEntry: zod.boolean(),
+    allowReporting: zod.boolean(),
+  })
+  .describe(
+    "Full writable MIS tab\/category master values accepted by both create and PATCH.",
+  );
+
+/**
+ * @summary Replace writable MIS tab/category master values
+ */
+export const MisUpdateTabParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misUpdateTabBodyNameMax = 120;
+
+export const misUpdateTabBodyCodeMax = 32;
+
+export const misUpdateTabBodyDescriptionMax = 1000;
+
+export const misUpdateTabBodyRateEnabledDefault = true;
+export const misUpdateTabBodyCalculatePercentAgainstIncomeDefault = false;
+export const misUpdateTabBodySequenceMin = 0;
+
+export const MisUpdateTabBody = zod
+  .object({
+    name: zod.string().min(1).max(misUpdateTabBodyNameMax),
+    code: zod.string().min(1).max(misUpdateTabBodyCodeMax),
+    description: zod.string().max(misUpdateTabBodyDescriptionMax).nullable(),
+    type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+    financialClass: zod
+      .enum(["income", "cost", "expense", "salary", "excluded"])
+      .describe(
+        "How the tab contributes to financial totals; excluded has no profit impact.",
+      ),
+    rateEnabled: zod
+      .boolean()
+      .default(misUpdateTabBodyRateEnabledDefault)
+      .describe("Whether new custom-type entries use quantity × rate."),
+    calculatePercentAgainstIncome: zod
+      .boolean()
+      .default(misUpdateTabBodyCalculatePercentAgainstIncomeDefault)
+      .describe("Type default for percentage against total income."),
+    sequence: zod.number().min(misUpdateTabBodySequenceMin),
+    active: zod.boolean(),
+    allowEntry: zod.boolean(),
+    allowReporting: zod.boolean(),
+  })
+  .describe(
+    "Full writable MIS tab\/category master values accepted by both create and PATCH.",
+  );
+
+export const misUpdateTabResponseOneNameMax = 120;
+
+export const misUpdateTabResponseOneCodeMax = 32;
+
+export const misUpdateTabResponseOneDescriptionMax = 1000;
+
+export const misUpdateTabResponseOneRateEnabledDefault = true;
+export const misUpdateTabResponseOneCalculatePercentAgainstIncomeDefault = false;
+export const misUpdateTabResponseOneSequenceMin = 0;
+
+export const MisUpdateTabResponse = zod
+  .object({
+    name: zod.string().min(1).max(misUpdateTabResponseOneNameMax),
+    code: zod.string().min(1).max(misUpdateTabResponseOneCodeMax),
+    description: zod
+      .string()
+      .max(misUpdateTabResponseOneDescriptionMax)
+      .nullable(),
+    type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+    financialClass: zod
+      .enum(["income", "cost", "expense", "salary", "excluded"])
+      .describe(
+        "How the tab contributes to financial totals; excluded has no profit impact.",
+      ),
+    rateEnabled: zod
+      .boolean()
+      .default(misUpdateTabResponseOneRateEnabledDefault)
+      .describe("Whether new custom-type entries use quantity × rate."),
+    calculatePercentAgainstIncome: zod
+      .boolean()
+      .default(misUpdateTabResponseOneCalculatePercentAgainstIncomeDefault)
+      .describe("Type default for percentage against total income."),
+    sequence: zod.number().min(misUpdateTabResponseOneSequenceMin),
+    active: zod.boolean(),
+    allowEntry: zod.boolean(),
+    allowReporting: zod.boolean(),
+  })
+  .describe(
+    "Full writable MIS tab\/category master values accepted by both create and PATCH.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+
+/**
+ * @summary List master tabs and their assignments for a project
+ */
+export const MisListProjectTabsParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misListProjectTabsResponseOneSequenceMin = 0;
+
+export const misListProjectTabsResponseTwoTabOneNameMax = 120;
+
+export const misListProjectTabsResponseTwoTabOneCodeMax = 32;
+
+export const misListProjectTabsResponseTwoTabOneDescriptionMax = 1000;
+
+export const misListProjectTabsResponseTwoTabOneRateEnabledDefault = true;
+export const misListProjectTabsResponseTwoTabOneCalculatePercentAgainstIncomeDefault = false;
+export const misListProjectTabsResponseTwoTabOneSequenceMin = 0;
+
+export const MisListProjectTabsResponseItem = zod
+  .object({
+    tabId: zod.string(),
+    enabled: zod.boolean(),
+    sequence: zod.number().min(misListProjectTabsResponseOneSequenceMin),
+    calculatePercentAgainstIncome: zod
+      .boolean()
+      .nullish()
+      .describe(
+        "Optional project-tab override; null inherits the type default.",
+      ),
+  })
+  .and(
+    zod.object({
+      projectId: zod.string(),
+      tab: zod
+        .object({
+          name: zod
+            .string()
+            .min(1)
+            .max(misListProjectTabsResponseTwoTabOneNameMax),
+          code: zod
+            .string()
+            .min(1)
+            .max(misListProjectTabsResponseTwoTabOneCodeMax),
+          description: zod
+            .string()
+            .max(misListProjectTabsResponseTwoTabOneDescriptionMax)
+            .nullable(),
+          type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+          financialClass: zod
+            .enum(["income", "cost", "expense", "salary", "excluded"])
+            .describe(
+              "How the tab contributes to financial totals; excluded has no profit impact.",
+            ),
+          rateEnabled: zod
+            .boolean()
+            .default(misListProjectTabsResponseTwoTabOneRateEnabledDefault)
+            .describe("Whether new custom-type entries use quantity × rate."),
+          calculatePercentAgainstIncome: zod
+            .boolean()
+            .default(
+              misListProjectTabsResponseTwoTabOneCalculatePercentAgainstIncomeDefault,
+            )
+            .describe("Type default for percentage against total income."),
+          sequence: zod
+            .number()
+            .min(misListProjectTabsResponseTwoTabOneSequenceMin),
+          active: zod.boolean(),
+          allowEntry: zod.boolean(),
+          allowReporting: zod.boolean(),
+        })
+        .describe(
+          "Full writable MIS tab\/category master values accepted by both create and PATCH.",
+        )
+        .and(
+          zod.object({
+            id: zod.string(),
+            createdAt: zod.coerce.date(),
+            updatedAt: zod.coerce.date(),
+          }),
+        ),
+    }),
+  );
+export const MisListProjectTabsResponse = zod.array(
+  MisListProjectTabsResponseItem,
+);
+
+/**
+ * @summary Replace a project's tab assignment set and display sequence
+ */
+export const MisReplaceProjectTabsParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misReplaceProjectTabsBodyAssignmentsItemSequenceMin = 0;
+
+export const MisReplaceProjectTabsBody = zod.object({
+  assignments: zod.array(
+    zod.object({
+      tabId: zod.string(),
+      enabled: zod.boolean(),
+      sequence: zod
+        .number()
+        .min(misReplaceProjectTabsBodyAssignmentsItemSequenceMin),
+      calculatePercentAgainstIncome: zod
+        .boolean()
+        .nullish()
+        .describe(
+          "Optional project-tab override; null inherits the type default.",
+        ),
+    }),
+  ),
+});
+
+export const misReplaceProjectTabsResponseOneSequenceMin = 0;
+
+export const misReplaceProjectTabsResponseTwoTabOneNameMax = 120;
+
+export const misReplaceProjectTabsResponseTwoTabOneCodeMax = 32;
+
+export const misReplaceProjectTabsResponseTwoTabOneDescriptionMax = 1000;
+
+export const misReplaceProjectTabsResponseTwoTabOneRateEnabledDefault = true;
+export const misReplaceProjectTabsResponseTwoTabOneCalculatePercentAgainstIncomeDefault = false;
+export const misReplaceProjectTabsResponseTwoTabOneSequenceMin = 0;
+
+export const MisReplaceProjectTabsResponseItem = zod
+  .object({
+    tabId: zod.string(),
+    enabled: zod.boolean(),
+    sequence: zod.number().min(misReplaceProjectTabsResponseOneSequenceMin),
+    calculatePercentAgainstIncome: zod
+      .boolean()
+      .nullish()
+      .describe(
+        "Optional project-tab override; null inherits the type default.",
+      ),
+  })
+  .and(
+    zod.object({
+      projectId: zod.string(),
+      tab: zod
+        .object({
+          name: zod
+            .string()
+            .min(1)
+            .max(misReplaceProjectTabsResponseTwoTabOneNameMax),
+          code: zod
+            .string()
+            .min(1)
+            .max(misReplaceProjectTabsResponseTwoTabOneCodeMax),
+          description: zod
+            .string()
+            .max(misReplaceProjectTabsResponseTwoTabOneDescriptionMax)
+            .nullable(),
+          type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+          financialClass: zod
+            .enum(["income", "cost", "expense", "salary", "excluded"])
+            .describe(
+              "How the tab contributes to financial totals; excluded has no profit impact.",
+            ),
+          rateEnabled: zod
+            .boolean()
+            .default(misReplaceProjectTabsResponseTwoTabOneRateEnabledDefault)
+            .describe("Whether new custom-type entries use quantity × rate."),
+          calculatePercentAgainstIncome: zod
+            .boolean()
+            .default(
+              misReplaceProjectTabsResponseTwoTabOneCalculatePercentAgainstIncomeDefault,
+            )
+            .describe("Type default for percentage against total income."),
+          sequence: zod
+            .number()
+            .min(misReplaceProjectTabsResponseTwoTabOneSequenceMin),
+          active: zod.boolean(),
+          allowEntry: zod.boolean(),
+          allowReporting: zod.boolean(),
+        })
+        .describe(
+          "Full writable MIS tab\/category master values accepted by both create and PATCH.",
+        )
+        .and(
+          zod.object({
+            id: zod.string(),
+            createdAt: zod.coerce.date(),
+            updatedAt: zod.coerce.date(),
+          }),
+        ),
+    }),
+  );
+export const MisReplaceProjectTabsResponse = zod.array(
+  MisReplaceProjectTabsResponseItem,
+);
+
+/**
+ * @summary List project-local MIS services
+ */
+export const MisListProjectServicesParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const MisListProjectServicesQueryParams = zod.object({
+  tabId: zod.coerce.string().optional(),
+  active: zod.coerce.boolean().optional(),
+});
+
+export const misListProjectServicesResponseOneCodeMax = 32;
+
+export const misListProjectServicesResponseOneNameMax = 160;
+
+export const misListProjectServicesResponseOneDescriptionMax = 1000;
+
+export const misListProjectServicesResponseOneUnitMax = 40;
+
+export const misListProjectServicesResponseOneDefaultRateMin = 0;
+
+export const misListProjectServicesResponseOneCurrencyMin = 3;
+export const misListProjectServicesResponseOneCurrencyMax = 3;
+
+export const misListProjectServicesResponseOneSequenceMin = 0;
+
+export const MisListProjectServicesResponseItem = zod
+  .object({
+    tabId: zod.string(),
+    quantitySourceServiceId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional same-project Income service whose quantity defaults into this Cost service. Null removes the link.",
+      ),
+    code: zod
+      .string()
+      .min(1)
+      .max(misListProjectServicesResponseOneCodeMax)
+      .optional()
+      .describe(
+        "Project-local service code. Omit on create to generate a safe code.",
+      ),
+    name: zod.string().min(1).max(misListProjectServicesResponseOneNameMax),
+    description: zod
+      .string()
+      .max(misListProjectServicesResponseOneDescriptionMax)
+      .nullable(),
+    unit: zod.string().min(1).max(misListProjectServicesResponseOneUnitMax),
+    defaultRate: zod
+      .number()
+      .min(misListProjectServicesResponseOneDefaultRateMin)
+      .describe("API number; persisted as an exact database decimal."),
+    currency: zod
+      .string()
+      .min(misListProjectServicesResponseOneCurrencyMin)
+      .max(misListProjectServicesResponseOneCurrencyMax)
+      .optional()
+      .describe("ISO 4217 service currency. Defaults to the project currency."),
+    active: zod.boolean(),
+    sequence: zod.number().min(misListProjectServicesResponseOneSequenceMin),
+    effectiveFrom: zod.coerce.date().nullable(),
+    effectiveTo: zod.coerce.date().nullable(),
+  })
+  .describe(
+    "Full writable project-local service values accepted by both create and PATCH.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      projectId: zod.string(),
+      code: zod.string(),
+      currency: zod.string(),
+      tabName: zod.string(),
+      tabType: zod.enum(["income", "cost", "expense", "salary", "other"]),
+      financialClass: zod
+        .enum(["income", "cost", "expense", "salary", "excluded"])
+        .describe(
+          "How the tab contributes to financial totals; excluded has no profit impact.",
+        ),
+      rateEnabled: zod
+        .boolean()
+        .describe("Effective rate behavior for new entries."),
+      calculatePercentAgainstIncome: zod
+        .boolean()
+        .describe("Effective percentage behavior for new entries."),
+      calculationMode: zod
+        .enum(["quantity_rate", "amount"])
+        .describe("Effective mode for a new entry."),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+export const MisListProjectServicesResponse = zod.array(
+  MisListProjectServicesResponseItem,
+);
+
+/**
+ * @summary Create a project-local service under an enabled project tab
+ */
+export const MisCreateProjectServiceParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misCreateProjectServiceBodyCodeMax = 32;
+
+export const misCreateProjectServiceBodyNameMax = 160;
+
+export const misCreateProjectServiceBodyDescriptionMax = 1000;
+
+export const misCreateProjectServiceBodyUnitMax = 40;
+
+export const misCreateProjectServiceBodyDefaultRateMin = 0;
+
+export const misCreateProjectServiceBodyCurrencyMin = 3;
+export const misCreateProjectServiceBodyCurrencyMax = 3;
+
+export const misCreateProjectServiceBodySequenceMin = 0;
+
+export const MisCreateProjectServiceBody = zod
+  .object({
+    tabId: zod.string(),
+    quantitySourceServiceId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional same-project Income service whose quantity defaults into this Cost service. Null removes the link.",
+      ),
+    code: zod
+      .string()
+      .min(1)
+      .max(misCreateProjectServiceBodyCodeMax)
+      .optional()
+      .describe(
+        "Project-local service code. Omit on create to generate a safe code.",
+      ),
+    name: zod.string().min(1).max(misCreateProjectServiceBodyNameMax),
+    description: zod
+      .string()
+      .max(misCreateProjectServiceBodyDescriptionMax)
+      .nullable(),
+    unit: zod.string().min(1).max(misCreateProjectServiceBodyUnitMax),
+    defaultRate: zod
+      .number()
+      .min(misCreateProjectServiceBodyDefaultRateMin)
+      .describe("API number; persisted as an exact database decimal."),
+    currency: zod
+      .string()
+      .min(misCreateProjectServiceBodyCurrencyMin)
+      .max(misCreateProjectServiceBodyCurrencyMax)
+      .optional()
+      .describe("ISO 4217 service currency. Defaults to the project currency."),
+    active: zod.boolean(),
+    sequence: zod.number().min(misCreateProjectServiceBodySequenceMin),
+    effectiveFrom: zod.coerce.date().nullable(),
+    effectiveTo: zod.coerce.date().nullable(),
+  })
+  .describe(
+    "Full writable project-local service values accepted by both create and PATCH.",
+  );
+
+/**
+ * @summary Replace a project's service display order atomically
+ */
+export const MisReorderProjectServicesParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const MisReorderProjectServicesBody = zod.object({
+  serviceIds: zod
+    .array(zod.string())
+    .describe("Complete permutation of every service ID in the project."),
+});
+
+export const misReorderProjectServicesResponseOneCodeMax = 32;
+
+export const misReorderProjectServicesResponseOneNameMax = 160;
+
+export const misReorderProjectServicesResponseOneDescriptionMax = 1000;
+
+export const misReorderProjectServicesResponseOneUnitMax = 40;
+
+export const misReorderProjectServicesResponseOneDefaultRateMin = 0;
+
+export const misReorderProjectServicesResponseOneCurrencyMin = 3;
+export const misReorderProjectServicesResponseOneCurrencyMax = 3;
+
+export const misReorderProjectServicesResponseOneSequenceMin = 0;
+
+export const MisReorderProjectServicesResponseItem = zod
+  .object({
+    tabId: zod.string(),
+    quantitySourceServiceId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional same-project Income service whose quantity defaults into this Cost service. Null removes the link.",
+      ),
+    code: zod
+      .string()
+      .min(1)
+      .max(misReorderProjectServicesResponseOneCodeMax)
+      .optional()
+      .describe(
+        "Project-local service code. Omit on create to generate a safe code.",
+      ),
+    name: zod.string().min(1).max(misReorderProjectServicesResponseOneNameMax),
+    description: zod
+      .string()
+      .max(misReorderProjectServicesResponseOneDescriptionMax)
+      .nullable(),
+    unit: zod.string().min(1).max(misReorderProjectServicesResponseOneUnitMax),
+    defaultRate: zod
+      .number()
+      .min(misReorderProjectServicesResponseOneDefaultRateMin)
+      .describe("API number; persisted as an exact database decimal."),
+    currency: zod
+      .string()
+      .min(misReorderProjectServicesResponseOneCurrencyMin)
+      .max(misReorderProjectServicesResponseOneCurrencyMax)
+      .optional()
+      .describe("ISO 4217 service currency. Defaults to the project currency."),
+    active: zod.boolean(),
+    sequence: zod.number().min(misReorderProjectServicesResponseOneSequenceMin),
+    effectiveFrom: zod.coerce.date().nullable(),
+    effectiveTo: zod.coerce.date().nullable(),
+  })
+  .describe(
+    "Full writable project-local service values accepted by both create and PATCH.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      projectId: zod.string(),
+      code: zod.string(),
+      currency: zod.string(),
+      tabName: zod.string(),
+      tabType: zod.enum(["income", "cost", "expense", "salary", "other"]),
+      financialClass: zod
+        .enum(["income", "cost", "expense", "salary", "excluded"])
+        .describe(
+          "How the tab contributes to financial totals; excluded has no profit impact.",
+        ),
+      rateEnabled: zod
+        .boolean()
+        .describe("Effective rate behavior for new entries."),
+      calculatePercentAgainstIncome: zod
+        .boolean()
+        .describe("Effective percentage behavior for new entries."),
+      calculationMode: zod
+        .enum(["quantity_rate", "amount"])
+        .describe("Effective mode for a new entry."),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+export const MisReorderProjectServicesResponse = zod.array(
+  MisReorderProjectServicesResponseItem,
+);
+
+/**
+ * @summary List every active service eligible for a project period
+ */
+export const MisListEntryServicesParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const MisListEntryServicesQueryParams = zod.object({
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+});
+
+export const misListEntryServicesResponseOneCodeMax = 32;
+
+export const misListEntryServicesResponseOneNameMax = 160;
+
+export const misListEntryServicesResponseOneDescriptionMax = 1000;
+
+export const misListEntryServicesResponseOneUnitMax = 40;
+
+export const misListEntryServicesResponseOneDefaultRateMin = 0;
+
+export const misListEntryServicesResponseOneCurrencyMin = 3;
+export const misListEntryServicesResponseOneCurrencyMax = 3;
+
+export const misListEntryServicesResponseOneSequenceMin = 0;
+
+export const MisListEntryServicesResponseItem = zod
+  .object({
+    tabId: zod.string(),
+    quantitySourceServiceId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional same-project Income service whose quantity defaults into this Cost service. Null removes the link.",
+      ),
+    code: zod
+      .string()
+      .min(1)
+      .max(misListEntryServicesResponseOneCodeMax)
+      .optional()
+      .describe(
+        "Project-local service code. Omit on create to generate a safe code.",
+      ),
+    name: zod.string().min(1).max(misListEntryServicesResponseOneNameMax),
+    description: zod
+      .string()
+      .max(misListEntryServicesResponseOneDescriptionMax)
+      .nullable(),
+    unit: zod.string().min(1).max(misListEntryServicesResponseOneUnitMax),
+    defaultRate: zod
+      .number()
+      .min(misListEntryServicesResponseOneDefaultRateMin)
+      .describe("API number; persisted as an exact database decimal."),
+    currency: zod
+      .string()
+      .min(misListEntryServicesResponseOneCurrencyMin)
+      .max(misListEntryServicesResponseOneCurrencyMax)
+      .optional()
+      .describe("ISO 4217 service currency. Defaults to the project currency."),
+    active: zod.boolean(),
+    sequence: zod.number().min(misListEntryServicesResponseOneSequenceMin),
+    effectiveFrom: zod.coerce.date().nullable(),
+    effectiveTo: zod.coerce.date().nullable(),
+  })
+  .describe(
+    "Full writable project-local service values accepted by both create and PATCH.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      projectId: zod.string(),
+      code: zod.string(),
+      currency: zod.string(),
+      tabName: zod.string(),
+      tabType: zod.enum(["income", "cost", "expense", "salary", "other"]),
+      financialClass: zod
+        .enum(["income", "cost", "expense", "salary", "excluded"])
+        .describe(
+          "How the tab contributes to financial totals; excluded has no profit impact.",
+        ),
+      rateEnabled: zod
+        .boolean()
+        .describe("Effective rate behavior for new entries."),
+      calculatePercentAgainstIncome: zod
+        .boolean()
+        .describe("Effective percentage behavior for new entries."),
+      calculationMode: zod
+        .enum(["quantity_rate", "amount"])
+        .describe("Effective mode for a new entry."),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+export const MisListEntryServicesResponse = zod.array(
+  MisListEntryServicesResponseItem,
+);
+
+/**
+ * @summary Replace writable project-local MIS service values
+ */
+export const MisUpdateServiceParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misUpdateServiceBodyCodeMax = 32;
+
+export const misUpdateServiceBodyNameMax = 160;
+
+export const misUpdateServiceBodyDescriptionMax = 1000;
+
+export const misUpdateServiceBodyUnitMax = 40;
+
+export const misUpdateServiceBodyDefaultRateMin = 0;
+
+export const misUpdateServiceBodyCurrencyMin = 3;
+export const misUpdateServiceBodyCurrencyMax = 3;
+
+export const misUpdateServiceBodySequenceMin = 0;
+
+export const MisUpdateServiceBody = zod
+  .object({
+    tabId: zod.string(),
+    quantitySourceServiceId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional same-project Income service whose quantity defaults into this Cost service. Null removes the link.",
+      ),
+    code: zod
+      .string()
+      .min(1)
+      .max(misUpdateServiceBodyCodeMax)
+      .optional()
+      .describe(
+        "Project-local service code. Omit on create to generate a safe code.",
+      ),
+    name: zod.string().min(1).max(misUpdateServiceBodyNameMax),
+    description: zod
+      .string()
+      .max(misUpdateServiceBodyDescriptionMax)
+      .nullable(),
+    unit: zod.string().min(1).max(misUpdateServiceBodyUnitMax),
+    defaultRate: zod
+      .number()
+      .min(misUpdateServiceBodyDefaultRateMin)
+      .describe("API number; persisted as an exact database decimal."),
+    currency: zod
+      .string()
+      .min(misUpdateServiceBodyCurrencyMin)
+      .max(misUpdateServiceBodyCurrencyMax)
+      .optional()
+      .describe("ISO 4217 service currency. Defaults to the project currency."),
+    active: zod.boolean(),
+    sequence: zod.number().min(misUpdateServiceBodySequenceMin),
+    effectiveFrom: zod.coerce.date().nullable(),
+    effectiveTo: zod.coerce.date().nullable(),
+  })
+  .describe(
+    "Full writable project-local service values accepted by both create and PATCH.",
+  );
+
+export const misUpdateServiceResponseOneCodeMax = 32;
+
+export const misUpdateServiceResponseOneNameMax = 160;
+
+export const misUpdateServiceResponseOneDescriptionMax = 1000;
+
+export const misUpdateServiceResponseOneUnitMax = 40;
+
+export const misUpdateServiceResponseOneDefaultRateMin = 0;
+
+export const misUpdateServiceResponseOneCurrencyMin = 3;
+export const misUpdateServiceResponseOneCurrencyMax = 3;
+
+export const misUpdateServiceResponseOneSequenceMin = 0;
+
+export const MisUpdateServiceResponse = zod
+  .object({
+    tabId: zod.string(),
+    quantitySourceServiceId: zod
+      .string()
+      .nullish()
+      .describe(
+        "Optional same-project Income service whose quantity defaults into this Cost service. Null removes the link.",
+      ),
+    code: zod
+      .string()
+      .min(1)
+      .max(misUpdateServiceResponseOneCodeMax)
+      .optional()
+      .describe(
+        "Project-local service code. Omit on create to generate a safe code.",
+      ),
+    name: zod.string().min(1).max(misUpdateServiceResponseOneNameMax),
+    description: zod
+      .string()
+      .max(misUpdateServiceResponseOneDescriptionMax)
+      .nullable(),
+    unit: zod.string().min(1).max(misUpdateServiceResponseOneUnitMax),
+    defaultRate: zod
+      .number()
+      .min(misUpdateServiceResponseOneDefaultRateMin)
+      .describe("API number; persisted as an exact database decimal."),
+    currency: zod
+      .string()
+      .min(misUpdateServiceResponseOneCurrencyMin)
+      .max(misUpdateServiceResponseOneCurrencyMax)
+      .optional()
+      .describe("ISO 4217 service currency. Defaults to the project currency."),
+    active: zod.boolean(),
+    sequence: zod.number().min(misUpdateServiceResponseOneSequenceMin),
+    effectiveFrom: zod.coerce.date().nullable(),
+    effectiveTo: zod.coerce.date().nullable(),
+  })
+  .describe(
+    "Full writable project-local service values accepted by both create and PATCH.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      projectId: zod.string(),
+      code: zod.string(),
+      currency: zod.string(),
+      tabName: zod.string(),
+      tabType: zod.enum(["income", "cost", "expense", "salary", "other"]),
+      financialClass: zod
+        .enum(["income", "cost", "expense", "salary", "excluded"])
+        .describe(
+          "How the tab contributes to financial totals; excluded has no profit impact.",
+        ),
+      rateEnabled: zod
+        .boolean()
+        .describe("Effective rate behavior for new entries."),
+      calculatePercentAgainstIncome: zod
+        .boolean()
+        .describe("Effective percentage behavior for new entries."),
+      calculationMode: zod
+        .enum(["quantity_rate", "amount"])
+        .describe("Effective mode for a new entry."),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+
+/**
+ * @summary List permitted period-based MIS entries
+ */
+export const misListEntriesQueryCurrencyMin = 3;
+export const misListEntriesQueryCurrencyMax = 3;
+
+export const misListEntriesQueryStatusesRegExp = new RegExp(
+  "^(draft|submitted|approved|rejected|returned|cancelled)(,(draft|submitted|approved|rejected|returned|cancelled))\*$",
+);
+export const misListEntriesQuerySearchMax = 200;
+
+export const misListEntriesQueryPageDefault = 1;
+
+export const misListEntriesQueryPageSizeDefault = 25;
+export const misListEntriesQueryPageSizeMax = 100;
+
+export const MisListEntriesQueryParams = zod.object({
+  projectIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated MIS project identifiers."),
+  tabId: zod.coerce.string().optional(),
+  serviceId: zod.coerce.string().optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+  startFrom: zod
+    .date()
+    .optional()
+    .describe(
+      "Inclusive lower bound for the entry period start date. Unlike `from`, this does not require full period containment.",
+    ),
+  startTo: zod
+    .date()
+    .optional()
+    .describe(
+      "Inclusive upper bound for the entry period start date. Unlike `to`, this does not require full period containment.",
+    ),
+  currency: zod.coerce
+    .string()
+    .min(misListEntriesQueryCurrencyMin)
+    .max(misListEntriesQueryCurrencyMax)
+    .optional()
+    .describe("Optional ISO 4217 currency filter for entry snapshots."),
+  status: zod
+    .enum([
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+    ])
+    .optional(),
+  statuses: zod.coerce
+    .string()
+    .regex(misListEntriesQueryStatusesRegExp)
+    .optional()
+    .describe(
+      "Comma-separated exact subset of entry statuses. Takes precedence over the scalar status filter when supplied.",
+    ),
+  entryType: zod
+    .enum(["income", "cost", "expense", "salary", "other"])
+    .optional(),
+  search: zod.coerce.string().max(misListEntriesQuerySearchMax).optional(),
+  page: zod.coerce.number().min(1).default(misListEntriesQueryPageDefault),
+  pageSize: zod.coerce
+    .number()
+    .min(1)
+    .max(misListEntriesQueryPageSizeMax)
+    .default(misListEntriesQueryPageSizeDefault),
+});
+
+export const misListEntriesResponseItemsItemOneQuantityMin = 0;
+
+export const misListEntriesResponseItemsItemOneRateMin = 0;
+
+export const misListEntriesResponseItemsItemOneAmountMin = 0;
+
+export const misListEntriesResponseItemsItemOneRemarksMax = 2000;
+
+export const misListEntriesResponseItemsItemOneRateReasonMax = 1000;
+
+export const misListEntriesResponseTotalMin = 0;
+
+export const MisListEntriesResponse = zod.object({
+  items: zod.array(
+    zod
+      .object({
+        projectId: zod.string(),
+        tabId: zod.string(),
+        serviceId: zod.string(),
+        fromDate: zod.coerce.date(),
+        toDate: zod.coerce.date(),
+        quantity: zod
+          .number()
+          .min(misListEntriesResponseItemsItemOneQuantityMin)
+          .nullish()
+          .describe("Required for quantity_rate mode; explicit zero is valid."),
+        rate: zod
+          .number()
+          .min(misListEntriesResponseItemsItemOneRateMin)
+          .nullish()
+          .describe(
+            "Required for quantity_rate mode; authorization-gated for overrides.",
+          ),
+        amount: zod
+          .number()
+          .min(misListEntriesResponseItemsItemOneAmountMin)
+          .nullish()
+          .describe("Required for amount mode; actual amount"),
+        calculationMode: zod
+          .enum(["quantity_rate", "amount"])
+          .optional()
+          .describe(
+            "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+          ),
+        remarks: zod
+          .string()
+          .max(misListEntriesResponseItemsItemOneRemarksMax)
+          .nullable(),
+        rateReason: zod
+          .string()
+          .max(misListEntriesResponseItemsItemOneRateReasonMax)
+          .nullish()
+          .describe(
+            "Required for a rate override; retained only in the audit trail.",
+          ),
+      })
+      .describe(
+        "Full writable transaction values. amount and all snapshot fields are server-owned.",
+      )
+      .and(
+        zod.object({
+          id: zod.string(),
+          parentId: zod
+            .string()
+            .nullable()
+            .describe(
+              "Parent bulk transaction ID; null for legacy standalone entries.",
+            ),
+          bulkNumber: zod
+            .string()
+            .nullable()
+            .describe(
+              "Immutable MIS-BULK number; null for legacy standalone entries.",
+            ),
+          amount: zod
+            .number()
+            .describe(
+              "Server-computed or direct actual amount; persisted as an exact database decimal.",
+            ),
+          calculationMode: zod.enum(["quantity_rate", "amount"]),
+          rateEnabled: zod.boolean(),
+          calculatePercentAgainstIncome: zod.boolean(),
+          projectName: zod.string(),
+          tabName: zod.string(),
+          serviceName: zod.string(),
+          type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+          financialClass: zod
+            .enum(["income", "cost", "expense", "salary", "excluded"])
+            .describe(
+              "How the tab contributes to financial totals; excluded has no profit impact.",
+            ),
+          unit: zod.string(),
+          currency: zod.string(),
+          status: zod.enum([
+            "draft",
+            "submitted",
+            "approved",
+            "rejected",
+            "returned",
+            "cancelled",
+          ]),
+          createdById: zod.string(),
+          createdByName: zod.string().nullish(),
+          updatedById: zod.string().nullish(),
+          updatedByName: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      ),
+  ),
+  total: zod.number().min(misListEntriesResponseTotalMin),
+  page: zod.number().min(1),
+  pageSize: zod.number().min(1),
+});
+
+/**
+ * @summary Create an MIS entry in draft status
+ */
+export const misCreateEntryBodyQuantityMin = 0;
+
+export const misCreateEntryBodyRateMin = 0;
+
+export const misCreateEntryBodyAmountMin = 0;
+
+export const misCreateEntryBodyRemarksMax = 2000;
+
+export const misCreateEntryBodyRateReasonMax = 1000;
+
+export const MisCreateEntryBody = zod
+  .object({
+    projectId: zod.string(),
+    tabId: zod.string(),
+    serviceId: zod.string(),
+    fromDate: zod.coerce.date(),
+    toDate: zod.coerce.date(),
+    quantity: zod
+      .number()
+      .min(misCreateEntryBodyQuantityMin)
+      .nullish()
+      .describe("Required for quantity_rate mode; explicit zero is valid."),
+    rate: zod
+      .number()
+      .min(misCreateEntryBodyRateMin)
+      .nullish()
+      .describe(
+        "Required for quantity_rate mode; authorization-gated for overrides.",
+      ),
+    amount: zod
+      .number()
+      .min(misCreateEntryBodyAmountMin)
+      .nullish()
+      .describe("Required for amount mode; actual amount"),
+    calculationMode: zod
+      .enum(["quantity_rate", "amount"])
+      .optional()
+      .describe(
+        "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+      ),
+    remarks: zod.string().max(misCreateEntryBodyRemarksMax).nullable(),
+    rateReason: zod
+      .string()
+      .max(misCreateEntryBodyRateReasonMax)
+      .nullish()
+      .describe(
+        "Required for a rate override; retained only in the audit trail.",
+      ),
+  })
+  .describe(
+    "Full writable transaction values. amount and all snapshot fields are server-owned.",
+  );
+
+/**
+ * @summary Create all non-blank service lines for a project period atomically
+ */
+export const misCreateBulkEntriesBodyLinesItemQuantityMin = 0;
+
+export const misCreateBulkEntriesBodyLinesItemRateMin = 0;
+
+export const misCreateBulkEntriesBodyLinesItemAmountMin = 0;
+
+export const misCreateBulkEntriesBodyLinesItemRemarksMax = 2000;
+
+export const misCreateBulkEntriesBodyLinesItemRateReasonMax = 1000;
+
+export const misCreateBulkEntriesBodyLinesMax = 1000;
+
+export const MisCreateBulkEntriesBody = zod.object({
+  projectId: zod.string(),
+  fromDate: zod.coerce.date(),
+  toDate: zod.coerce.date(),
+  lines: zod
+    .array(
+      zod.object({
+        id: zod
+          .string()
+          .optional()
+          .describe(
+            "Existing child ID when replacing a parent line; required to preserve line identity during edits.",
+          ),
+        serviceId: zod.string(),
+        quantity: zod
+          .number()
+          .min(misCreateBulkEntriesBodyLinesItemQuantityMin)
+          .nullish()
+          .describe(
+            "Omit or null to skip a blank client line; zero is explicit and is saved.",
+          ),
+        rate: zod
+          .number()
+          .min(misCreateBulkEntriesBodyLinesItemRateMin)
+          .nullish(),
+        amount: zod
+          .number()
+          .min(misCreateBulkEntriesBodyLinesItemAmountMin)
+          .nullish(),
+        calculationMode: zod.enum(["quantity_rate", "amount"]).optional(),
+        remarks: zod
+          .string()
+          .max(misCreateBulkEntriesBodyLinesItemRemarksMax)
+          .nullish(),
+        rateReason: zod
+          .string()
+          .max(misCreateBulkEntriesBodyLinesItemRateReasonMax)
+          .nullish(),
+        fromDate: zod.coerce.date().nullish(),
+        toDate: zod.coerce.date().nullish(),
+      }),
+    )
+    .max(misCreateBulkEntriesBodyLinesMax),
+  action: zod.enum(["draft", "submit"]),
+});
+
+/**
+ * Returns only accounts that created a bulk parent in a project where the caller has view_entries permission.
+ * @summary List distinct creators of permitted MIS bulk parents
+ */
+export const misListEntryCreatorsQuerySearchMax = 200;
+
+export const misListEntryCreatorsQueryPageDefault = 1;
+
+export const misListEntryCreatorsQueryPageSizeDefault = 25;
+export const misListEntryCreatorsQueryPageSizeMax = 100;
+
+export const MisListEntryCreatorsQueryParams = zod.object({
+  search: zod.coerce
+    .string()
+    .max(misListEntryCreatorsQuerySearchMax)
+    .optional(),
+  page: zod.coerce
+    .number()
+    .min(1)
+    .default(misListEntryCreatorsQueryPageDefault),
+  pageSize: zod.coerce
+    .number()
+    .min(1)
+    .max(misListEntryCreatorsQueryPageSizeMax)
+    .default(misListEntryCreatorsQueryPageSizeDefault),
+});
+
+export const misListEntryCreatorsResponseTotalMin = 0;
+
+export const MisListEntryCreatorsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      email: zod.string().email().nullable(),
+      firstName: zod.string().nullable(),
+      lastName: zod.string().nullable(),
+      displayName: zod.string(),
+    }),
+  ),
+  total: zod.number().min(misListEntryCreatorsResponseTotalMin),
+  page: zod.number().min(1),
+  pageSize: zod.number().min(1),
+});
+
+/**
+ * @summary Search permitted atomic MIS bulk parents
+ */
+export const misListEntryParentsQueryBulkNumberMax = 32;
+
+export const misListEntryParentsQueryProjectNumberMax = 32;
+
+export const misListEntryParentsQuerySearchMax = 200;
+
+export const misListEntryParentsQueryPageDefault = 1;
+
+export const misListEntryParentsQueryPageSizeDefault = 25;
+export const misListEntryParentsQueryPageSizeMax = 100;
+
+export const MisListEntryParentsQueryParams = zod.object({
+  bulkNumber: zod.coerce
+    .string()
+    .max(misListEntryParentsQueryBulkNumberMax)
+    .optional(),
+  projectId: zod.coerce.string().optional(),
+  projectNumber: zod.coerce
+    .string()
+    .max(misListEntryParentsQueryProjectNumberMax)
+    .optional(),
+  fromDate: zod.date().optional(),
+  toDate: zod.date().optional(),
+  createdById: zod.coerce.string().optional(),
+  status: zod
+    .enum([
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+    ])
+    .optional(),
+  entryType: zod.enum(["bulk"]).optional(),
+  search: zod.coerce.string().max(misListEntryParentsQuerySearchMax).optional(),
+  page: zod.coerce.number().min(1).default(misListEntryParentsQueryPageDefault),
+  pageSize: zod.coerce
+    .number()
+    .min(1)
+    .max(misListEntryParentsQueryPageSizeMax)
+    .default(misListEntryParentsQueryPageSizeDefault),
+});
+
+export const misListEntryParentsResponseItemsItemChildCountMin = 0;
+
+export const misListEntryParentsResponseTotalMin = 0;
+
+export const MisListEntryParentsResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      bulkNumber: zod.string(),
+      projectId: zod.string(),
+      projectName: zod.string(),
+      projectNumber: zod.string(),
+      fromDate: zod.coerce.date(),
+      toDate: zod.coerce.date(),
+      status: zod.enum([
+        "draft",
+        "submitted",
+        "approved",
+        "rejected",
+        "returned",
+        "cancelled",
+      ]),
+      entryType: zod.enum(["bulk"]),
+      createdById: zod.string(),
+      createdByName: zod.string().nullish(),
+      childCount: zod
+        .number()
+        .min(misListEntryParentsResponseItemsItemChildCountMin)
+        .optional(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+  total: zod.number().min(misListEntryParentsResponseTotalMin),
+  page: zod.number().min(1),
+  pageSize: zod.number().min(1),
+});
+
+/**
+ * @summary Get one permitted bulk parent and all children
+ */
+export const MisGetEntryParentParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misGetEntryParentResponseParentChildCountMin = 0;
+
+export const misGetEntryParentResponseItemsItemOneQuantityMin = 0;
+
+export const misGetEntryParentResponseItemsItemOneRateMin = 0;
+
+export const misGetEntryParentResponseItemsItemOneAmountMin = 0;
+
+export const misGetEntryParentResponseItemsItemOneRemarksMax = 2000;
+
+export const misGetEntryParentResponseItemsItemOneRateReasonMax = 1000;
+
+export const MisGetEntryParentResponse = zod.object({
+  parent: zod.object({
+    id: zod.string(),
+    bulkNumber: zod.string(),
+    projectId: zod.string(),
+    projectName: zod.string(),
+    projectNumber: zod.string(),
+    fromDate: zod.coerce.date(),
+    toDate: zod.coerce.date(),
+    status: zod.enum([
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+    ]),
+    entryType: zod.enum(["bulk"]),
+    createdById: zod.string(),
+    createdByName: zod.string().nullish(),
+    childCount: zod
+      .number()
+      .min(misGetEntryParentResponseParentChildCountMin)
+      .optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  items: zod.array(
+    zod
+      .object({
+        projectId: zod.string(),
+        tabId: zod.string(),
+        serviceId: zod.string(),
+        fromDate: zod.coerce.date(),
+        toDate: zod.coerce.date(),
+        quantity: zod
+          .number()
+          .min(misGetEntryParentResponseItemsItemOneQuantityMin)
+          .nullish()
+          .describe("Required for quantity_rate mode; explicit zero is valid."),
+        rate: zod
+          .number()
+          .min(misGetEntryParentResponseItemsItemOneRateMin)
+          .nullish()
+          .describe(
+            "Required for quantity_rate mode; authorization-gated for overrides.",
+          ),
+        amount: zod
+          .number()
+          .min(misGetEntryParentResponseItemsItemOneAmountMin)
+          .nullish()
+          .describe("Required for amount mode; actual amount"),
+        calculationMode: zod
+          .enum(["quantity_rate", "amount"])
+          .optional()
+          .describe(
+            "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+          ),
+        remarks: zod
+          .string()
+          .max(misGetEntryParentResponseItemsItemOneRemarksMax)
+          .nullable(),
+        rateReason: zod
+          .string()
+          .max(misGetEntryParentResponseItemsItemOneRateReasonMax)
+          .nullish()
+          .describe(
+            "Required for a rate override; retained only in the audit trail.",
+          ),
+      })
+      .describe(
+        "Full writable transaction values. amount and all snapshot fields are server-owned.",
+      )
+      .and(
+        zod.object({
+          id: zod.string(),
+          parentId: zod
+            .string()
+            .nullable()
+            .describe(
+              "Parent bulk transaction ID; null for legacy standalone entries.",
+            ),
+          bulkNumber: zod
+            .string()
+            .nullable()
+            .describe(
+              "Immutable MIS-BULK number; null for legacy standalone entries.",
+            ),
+          amount: zod
+            .number()
+            .describe(
+              "Server-computed or direct actual amount; persisted as an exact database decimal.",
+            ),
+          calculationMode: zod.enum(["quantity_rate", "amount"]),
+          rateEnabled: zod.boolean(),
+          calculatePercentAgainstIncome: zod.boolean(),
+          projectName: zod.string(),
+          tabName: zod.string(),
+          serviceName: zod.string(),
+          type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+          financialClass: zod
+            .enum(["income", "cost", "expense", "salary", "excluded"])
+            .describe(
+              "How the tab contributes to financial totals; excluded has no profit impact.",
+            ),
+          unit: zod.string(),
+          currency: zod.string(),
+          status: zod.enum([
+            "draft",
+            "submitted",
+            "approved",
+            "rejected",
+            "returned",
+            "cancelled",
+          ]),
+          createdById: zod.string(),
+          createdByName: zod.string().nullish(),
+          updatedById: zod.string().nullish(),
+          updatedByName: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      ),
+  ),
+});
+
+/**
+ * @summary Replace all child lines in a bulk parent atomically
+ */
+export const MisUpdateEntryParentParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misUpdateEntryParentBodyLinesItemQuantityMin = 0;
+
+export const misUpdateEntryParentBodyLinesItemRateMin = 0;
+
+export const misUpdateEntryParentBodyLinesItemAmountMin = 0;
+
+export const misUpdateEntryParentBodyLinesItemRemarksMax = 2000;
+
+export const misUpdateEntryParentBodyLinesItemRateReasonMax = 1000;
+
+export const misUpdateEntryParentBodyLinesMax = 1000;
+
+export const misUpdateEntryParentBodyReasonMax = 2000;
+
+export const MisUpdateEntryParentBody = zod.object({
+  projectId: zod
+    .string()
+    .optional()
+    .describe("Optional; the path parent project is used when omitted."),
+  fromDate: zod.coerce.date(),
+  toDate: zod.coerce.date(),
+  lines: zod
+    .array(
+      zod.object({
+        id: zod
+          .string()
+          .optional()
+          .describe(
+            "Existing child ID when replacing a parent line; required to preserve line identity during edits.",
+          ),
+        serviceId: zod.string(),
+        quantity: zod
+          .number()
+          .min(misUpdateEntryParentBodyLinesItemQuantityMin)
+          .nullish()
+          .describe(
+            "Omit or null to skip a blank client line; zero is explicit and is saved.",
+          ),
+        rate: zod
+          .number()
+          .min(misUpdateEntryParentBodyLinesItemRateMin)
+          .nullish(),
+        amount: zod
+          .number()
+          .min(misUpdateEntryParentBodyLinesItemAmountMin)
+          .nullish(),
+        calculationMode: zod.enum(["quantity_rate", "amount"]).optional(),
+        remarks: zod
+          .string()
+          .max(misUpdateEntryParentBodyLinesItemRemarksMax)
+          .nullish(),
+        rateReason: zod
+          .string()
+          .max(misUpdateEntryParentBodyLinesItemRateReasonMax)
+          .nullish(),
+        fromDate: zod.coerce.date().nullish(),
+        toDate: zod.coerce.date().nullish(),
+      }),
+    )
+    .max(misUpdateEntryParentBodyLinesMax),
+  action: zod
+    .enum(["draft", "submit"])
+    .optional()
+    .describe(
+      "Optional status transition; omitted preserves the current parent status.",
+    ),
+  reason: zod
+    .string()
+    .max(misUpdateEntryParentBodyReasonMax)
+    .nullish()
+    .describe("Required when editing an approved parent."),
+});
+
+export const misUpdateEntryParentResponseParentChildCountMin = 0;
+
+export const misUpdateEntryParentResponseItemsItemOneQuantityMin = 0;
+
+export const misUpdateEntryParentResponseItemsItemOneRateMin = 0;
+
+export const misUpdateEntryParentResponseItemsItemOneAmountMin = 0;
+
+export const misUpdateEntryParentResponseItemsItemOneRemarksMax = 2000;
+
+export const misUpdateEntryParentResponseItemsItemOneRateReasonMax = 1000;
+
+export const MisUpdateEntryParentResponse = zod.object({
+  parent: zod.object({
+    id: zod.string(),
+    bulkNumber: zod.string(),
+    projectId: zod.string(),
+    projectName: zod.string(),
+    projectNumber: zod.string(),
+    fromDate: zod.coerce.date(),
+    toDate: zod.coerce.date(),
+    status: zod.enum([
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+    ]),
+    entryType: zod.enum(["bulk"]),
+    createdById: zod.string(),
+    createdByName: zod.string().nullish(),
+    childCount: zod
+      .number()
+      .min(misUpdateEntryParentResponseParentChildCountMin)
+      .optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  items: zod.array(
+    zod
+      .object({
+        projectId: zod.string(),
+        tabId: zod.string(),
+        serviceId: zod.string(),
+        fromDate: zod.coerce.date(),
+        toDate: zod.coerce.date(),
+        quantity: zod
+          .number()
+          .min(misUpdateEntryParentResponseItemsItemOneQuantityMin)
+          .nullish()
+          .describe("Required for quantity_rate mode; explicit zero is valid."),
+        rate: zod
+          .number()
+          .min(misUpdateEntryParentResponseItemsItemOneRateMin)
+          .nullish()
+          .describe(
+            "Required for quantity_rate mode; authorization-gated for overrides.",
+          ),
+        amount: zod
+          .number()
+          .min(misUpdateEntryParentResponseItemsItemOneAmountMin)
+          .nullish()
+          .describe("Required for amount mode; actual amount"),
+        calculationMode: zod
+          .enum(["quantity_rate", "amount"])
+          .optional()
+          .describe(
+            "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+          ),
+        remarks: zod
+          .string()
+          .max(misUpdateEntryParentResponseItemsItemOneRemarksMax)
+          .nullable(),
+        rateReason: zod
+          .string()
+          .max(misUpdateEntryParentResponseItemsItemOneRateReasonMax)
+          .nullish()
+          .describe(
+            "Required for a rate override; retained only in the audit trail.",
+          ),
+      })
+      .describe(
+        "Full writable transaction values. amount and all snapshot fields are server-owned.",
+      )
+      .and(
+        zod.object({
+          id: zod.string(),
+          parentId: zod
+            .string()
+            .nullable()
+            .describe(
+              "Parent bulk transaction ID; null for legacy standalone entries.",
+            ),
+          bulkNumber: zod
+            .string()
+            .nullable()
+            .describe(
+              "Immutable MIS-BULK number; null for legacy standalone entries.",
+            ),
+          amount: zod
+            .number()
+            .describe(
+              "Server-computed or direct actual amount; persisted as an exact database decimal.",
+            ),
+          calculationMode: zod.enum(["quantity_rate", "amount"]),
+          rateEnabled: zod.boolean(),
+          calculatePercentAgainstIncome: zod.boolean(),
+          projectName: zod.string(),
+          tabName: zod.string(),
+          serviceName: zod.string(),
+          type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+          financialClass: zod
+            .enum(["income", "cost", "expense", "salary", "excluded"])
+            .describe(
+              "How the tab contributes to financial totals; excluded has no profit impact.",
+            ),
+          unit: zod.string(),
+          currency: zod.string(),
+          status: zod.enum([
+            "draft",
+            "submitted",
+            "approved",
+            "rejected",
+            "returned",
+            "cancelled",
+          ]),
+          createdById: zod.string(),
+          createdByName: zod.string().nullish(),
+          updatedById: zod.string().nullish(),
+          updatedByName: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      ),
+  ),
+});
+
+/**
+ * @summary Delete a permitted bulk parent and all children atomically
+ */
+export const MisDeleteEntryParentParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const MisDeleteEntryParentResponse = zod.object({
+  success: zod.boolean(),
+  parentId: zod.string(),
+  bulkNumber: zod.string(),
+});
+
+/**
+ * @summary Apply one workflow action to a bulk parent and every child
+ */
+export const MisActOnEntryParentParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misActOnEntryParentBodyRemarksMax = 2000;
+
+export const MisActOnEntryParentBody = zod.object({
+  action: zod.enum([
+    "submit",
+    "approve",
+    "reject",
+    "return",
+    "reset",
+    "cancel",
+  ]),
+  remarks: zod.string().max(misActOnEntryParentBodyRemarksMax).nullable(),
+});
+
+export const misActOnEntryParentResponseParentChildCountMin = 0;
+
+export const misActOnEntryParentResponseItemsItemOneQuantityMin = 0;
+
+export const misActOnEntryParentResponseItemsItemOneRateMin = 0;
+
+export const misActOnEntryParentResponseItemsItemOneAmountMin = 0;
+
+export const misActOnEntryParentResponseItemsItemOneRemarksMax = 2000;
+
+export const misActOnEntryParentResponseItemsItemOneRateReasonMax = 1000;
+
+export const MisActOnEntryParentResponse = zod.object({
+  parent: zod.object({
+    id: zod.string(),
+    bulkNumber: zod.string(),
+    projectId: zod.string(),
+    projectName: zod.string(),
+    projectNumber: zod.string(),
+    fromDate: zod.coerce.date(),
+    toDate: zod.coerce.date(),
+    status: zod.enum([
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+    ]),
+    entryType: zod.enum(["bulk"]),
+    createdById: zod.string(),
+    createdByName: zod.string().nullish(),
+    childCount: zod
+      .number()
+      .min(misActOnEntryParentResponseParentChildCountMin)
+      .optional(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  items: zod.array(
+    zod
+      .object({
+        projectId: zod.string(),
+        tabId: zod.string(),
+        serviceId: zod.string(),
+        fromDate: zod.coerce.date(),
+        toDate: zod.coerce.date(),
+        quantity: zod
+          .number()
+          .min(misActOnEntryParentResponseItemsItemOneQuantityMin)
+          .nullish()
+          .describe("Required for quantity_rate mode; explicit zero is valid."),
+        rate: zod
+          .number()
+          .min(misActOnEntryParentResponseItemsItemOneRateMin)
+          .nullish()
+          .describe(
+            "Required for quantity_rate mode; authorization-gated for overrides.",
+          ),
+        amount: zod
+          .number()
+          .min(misActOnEntryParentResponseItemsItemOneAmountMin)
+          .nullish()
+          .describe("Required for amount mode; actual amount"),
+        calculationMode: zod
+          .enum(["quantity_rate", "amount"])
+          .optional()
+          .describe(
+            "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+          ),
+        remarks: zod
+          .string()
+          .max(misActOnEntryParentResponseItemsItemOneRemarksMax)
+          .nullable(),
+        rateReason: zod
+          .string()
+          .max(misActOnEntryParentResponseItemsItemOneRateReasonMax)
+          .nullish()
+          .describe(
+            "Required for a rate override; retained only in the audit trail.",
+          ),
+      })
+      .describe(
+        "Full writable transaction values. amount and all snapshot fields are server-owned.",
+      )
+      .and(
+        zod.object({
+          id: zod.string(),
+          parentId: zod
+            .string()
+            .nullable()
+            .describe(
+              "Parent bulk transaction ID; null for legacy standalone entries.",
+            ),
+          bulkNumber: zod
+            .string()
+            .nullable()
+            .describe(
+              "Immutable MIS-BULK number; null for legacy standalone entries.",
+            ),
+          amount: zod
+            .number()
+            .describe(
+              "Server-computed or direct actual amount; persisted as an exact database decimal.",
+            ),
+          calculationMode: zod.enum(["quantity_rate", "amount"]),
+          rateEnabled: zod.boolean(),
+          calculatePercentAgainstIncome: zod.boolean(),
+          projectName: zod.string(),
+          tabName: zod.string(),
+          serviceName: zod.string(),
+          type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+          financialClass: zod
+            .enum(["income", "cost", "expense", "salary", "excluded"])
+            .describe(
+              "How the tab contributes to financial totals; excluded has no profit impact.",
+            ),
+          unit: zod.string(),
+          currency: zod.string(),
+          status: zod.enum([
+            "draft",
+            "submitted",
+            "approved",
+            "rejected",
+            "returned",
+            "cancelled",
+          ]),
+          createdById: zod.string(),
+          createdByName: zod.string().nullish(),
+          updatedById: zod.string().nullish(),
+          updatedByName: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+          updatedAt: zod.coerce.date(),
+        }),
+      ),
+  ),
+});
+
+/**
+ * @summary Get append-only audit history for a bulk parent
+ */
+export const MisGetEntryParentHistoryParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const MisGetEntryParentHistoryResponseItem = zod
+  .object({
+    id: zod.string(),
+    entryId: zod.string(),
+    action: zod.string().describe("CREATE"),
+    actorId: zod.string().nullable(),
+    actorName: zod.string().nullish(),
+    remarks: zod.string().nullish(),
+    oldValues: zod
+      .record(zod.string(), zod.unknown())
+      .nullish()
+      .describe("Audit-only untyped prior-value snapshot."),
+    newValues: zod
+      .record(zod.string(), zod.unknown())
+      .nullish()
+      .describe("Audit-only untyped resulting-value snapshot."),
+    occurredAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      parentId: zod.string(),
+      bulkNumber: zod.string(),
+    }),
+  );
+export const MisGetEntryParentHistoryResponse = zod.array(
+  MisGetEntryParentHistoryResponseItem,
+);
+
+/**
+ * @summary Get one permitted MIS entry
+ */
+export const MisGetEntryParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misGetEntryResponseOneQuantityMin = 0;
+
+export const misGetEntryResponseOneRateMin = 0;
+
+export const misGetEntryResponseOneAmountMin = 0;
+
+export const misGetEntryResponseOneRemarksMax = 2000;
+
+export const misGetEntryResponseOneRateReasonMax = 1000;
+
+export const MisGetEntryResponse = zod
+  .object({
+    projectId: zod.string(),
+    tabId: zod.string(),
+    serviceId: zod.string(),
+    fromDate: zod.coerce.date(),
+    toDate: zod.coerce.date(),
+    quantity: zod
+      .number()
+      .min(misGetEntryResponseOneQuantityMin)
+      .nullish()
+      .describe("Required for quantity_rate mode; explicit zero is valid."),
+    rate: zod
+      .number()
+      .min(misGetEntryResponseOneRateMin)
+      .nullish()
+      .describe(
+        "Required for quantity_rate mode; authorization-gated for overrides.",
+      ),
+    amount: zod
+      .number()
+      .min(misGetEntryResponseOneAmountMin)
+      .nullish()
+      .describe("Required for amount mode; actual amount"),
+    calculationMode: zod
+      .enum(["quantity_rate", "amount"])
+      .optional()
+      .describe(
+        "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+      ),
+    remarks: zod.string().max(misGetEntryResponseOneRemarksMax).nullable(),
+    rateReason: zod
+      .string()
+      .max(misGetEntryResponseOneRateReasonMax)
+      .nullish()
+      .describe(
+        "Required for a rate override; retained only in the audit trail.",
+      ),
+  })
+  .describe(
+    "Full writable transaction values. amount and all snapshot fields are server-owned.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      parentId: zod
+        .string()
+        .nullable()
+        .describe(
+          "Parent bulk transaction ID; null for legacy standalone entries.",
+        ),
+      bulkNumber: zod
+        .string()
+        .nullable()
+        .describe(
+          "Immutable MIS-BULK number; null for legacy standalone entries.",
+        ),
+      amount: zod
+        .number()
+        .describe(
+          "Server-computed or direct actual amount; persisted as an exact database decimal.",
+        ),
+      calculationMode: zod.enum(["quantity_rate", "amount"]),
+      rateEnabled: zod.boolean(),
+      calculatePercentAgainstIncome: zod.boolean(),
+      projectName: zod.string(),
+      tabName: zod.string(),
+      serviceName: zod.string(),
+      type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+      financialClass: zod
+        .enum(["income", "cost", "expense", "salary", "excluded"])
+        .describe(
+          "How the tab contributes to financial totals; excluded has no profit impact.",
+        ),
+      unit: zod.string(),
+      currency: zod.string(),
+      status: zod.enum([
+        "draft",
+        "submitted",
+        "approved",
+        "rejected",
+        "returned",
+        "cancelled",
+      ]),
+      createdById: zod.string(),
+      createdByName: zod.string().nullish(),
+      updatedById: zod.string().nullish(),
+      updatedByName: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+
+/**
+ * @summary Replace writable MIS entry values
+ */
+export const MisUpdateEntryParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misUpdateEntryBodyQuantityMin = 0;
+
+export const misUpdateEntryBodyRateMin = 0;
+
+export const misUpdateEntryBodyAmountMin = 0;
+
+export const misUpdateEntryBodyRemarksMax = 2000;
+
+export const misUpdateEntryBodyRateReasonMax = 1000;
+
+export const MisUpdateEntryBody = zod
+  .object({
+    projectId: zod.string(),
+    tabId: zod.string(),
+    serviceId: zod.string(),
+    fromDate: zod.coerce.date(),
+    toDate: zod.coerce.date(),
+    quantity: zod
+      .number()
+      .min(misUpdateEntryBodyQuantityMin)
+      .nullish()
+      .describe("Required for quantity_rate mode; explicit zero is valid."),
+    rate: zod
+      .number()
+      .min(misUpdateEntryBodyRateMin)
+      .nullish()
+      .describe(
+        "Required for quantity_rate mode; authorization-gated for overrides.",
+      ),
+    amount: zod
+      .number()
+      .min(misUpdateEntryBodyAmountMin)
+      .nullish()
+      .describe("Required for amount mode; actual amount"),
+    calculationMode: zod
+      .enum(["quantity_rate", "amount"])
+      .optional()
+      .describe(
+        "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+      ),
+    remarks: zod.string().max(misUpdateEntryBodyRemarksMax).nullable(),
+    rateReason: zod
+      .string()
+      .max(misUpdateEntryBodyRateReasonMax)
+      .nullish()
+      .describe(
+        "Required for a rate override; retained only in the audit trail.",
+      ),
+  })
+  .describe(
+    "Full writable transaction values. amount and all snapshot fields are server-owned.",
+  );
+
+export const misUpdateEntryResponseOneQuantityMin = 0;
+
+export const misUpdateEntryResponseOneRateMin = 0;
+
+export const misUpdateEntryResponseOneAmountMin = 0;
+
+export const misUpdateEntryResponseOneRemarksMax = 2000;
+
+export const misUpdateEntryResponseOneRateReasonMax = 1000;
+
+export const MisUpdateEntryResponse = zod
+  .object({
+    projectId: zod.string(),
+    tabId: zod.string(),
+    serviceId: zod.string(),
+    fromDate: zod.coerce.date(),
+    toDate: zod.coerce.date(),
+    quantity: zod
+      .number()
+      .min(misUpdateEntryResponseOneQuantityMin)
+      .nullish()
+      .describe("Required for quantity_rate mode; explicit zero is valid."),
+    rate: zod
+      .number()
+      .min(misUpdateEntryResponseOneRateMin)
+      .nullish()
+      .describe(
+        "Required for quantity_rate mode; authorization-gated for overrides.",
+      ),
+    amount: zod
+      .number()
+      .min(misUpdateEntryResponseOneAmountMin)
+      .nullish()
+      .describe("Required for amount mode; actual amount"),
+    calculationMode: zod
+      .enum(["quantity_rate", "amount"])
+      .optional()
+      .describe(
+        "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+      ),
+    remarks: zod.string().max(misUpdateEntryResponseOneRemarksMax).nullable(),
+    rateReason: zod
+      .string()
+      .max(misUpdateEntryResponseOneRateReasonMax)
+      .nullish()
+      .describe(
+        "Required for a rate override; retained only in the audit trail.",
+      ),
+  })
+  .describe(
+    "Full writable transaction values. amount and all snapshot fields are server-owned.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      parentId: zod
+        .string()
+        .nullable()
+        .describe(
+          "Parent bulk transaction ID; null for legacy standalone entries.",
+        ),
+      bulkNumber: zod
+        .string()
+        .nullable()
+        .describe(
+          "Immutable MIS-BULK number; null for legacy standalone entries.",
+        ),
+      amount: zod
+        .number()
+        .describe(
+          "Server-computed or direct actual amount; persisted as an exact database decimal.",
+        ),
+      calculationMode: zod.enum(["quantity_rate", "amount"]),
+      rateEnabled: zod.boolean(),
+      calculatePercentAgainstIncome: zod.boolean(),
+      projectName: zod.string(),
+      tabName: zod.string(),
+      serviceName: zod.string(),
+      type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+      financialClass: zod
+        .enum(["income", "cost", "expense", "salary", "excluded"])
+        .describe(
+          "How the tab contributes to financial totals; excluded has no profit impact.",
+        ),
+      unit: zod.string(),
+      currency: zod.string(),
+      status: zod.enum([
+        "draft",
+        "submitted",
+        "approved",
+        "rejected",
+        "returned",
+        "cancelled",
+      ]),
+      createdById: zod.string(),
+      createdByName: zod.string().nullish(),
+      updatedById: zod.string().nullish(),
+      updatedByName: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+
+/**
+ * @summary Delete an MIS entry when the caller has the required permission
+ */
+export const MisDeleteEntryParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const MisDeleteEntryResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Submit, approve, reject, reset, or cancel an MIS entry
+ */
+export const MisActOnEntryParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const misActOnEntryBodyRemarksMax = 2000;
+
+export const MisActOnEntryBody = zod.object({
+  action: zod.enum([
+    "submit",
+    "approve",
+    "reject",
+    "return",
+    "reset",
+    "cancel",
+  ]),
+  remarks: zod.string().max(misActOnEntryBodyRemarksMax).nullable(),
+});
+
+export const misActOnEntryResponseOneQuantityMin = 0;
+
+export const misActOnEntryResponseOneRateMin = 0;
+
+export const misActOnEntryResponseOneAmountMin = 0;
+
+export const misActOnEntryResponseOneRemarksMax = 2000;
+
+export const misActOnEntryResponseOneRateReasonMax = 1000;
+
+export const MisActOnEntryResponse = zod
+  .object({
+    projectId: zod.string(),
+    tabId: zod.string(),
+    serviceId: zod.string(),
+    fromDate: zod.coerce.date(),
+    toDate: zod.coerce.date(),
+    quantity: zod
+      .number()
+      .min(misActOnEntryResponseOneQuantityMin)
+      .nullish()
+      .describe("Required for quantity_rate mode; explicit zero is valid."),
+    rate: zod
+      .number()
+      .min(misActOnEntryResponseOneRateMin)
+      .nullish()
+      .describe(
+        "Required for quantity_rate mode; authorization-gated for overrides.",
+      ),
+    amount: zod
+      .number()
+      .min(misActOnEntryResponseOneAmountMin)
+      .nullish()
+      .describe("Required for amount mode; actual amount"),
+    calculationMode: zod
+      .enum(["quantity_rate", "amount"])
+      .optional()
+      .describe(
+        "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+      ),
+    remarks: zod.string().max(misActOnEntryResponseOneRemarksMax).nullable(),
+    rateReason: zod
+      .string()
+      .max(misActOnEntryResponseOneRateReasonMax)
+      .nullish()
+      .describe(
+        "Required for a rate override; retained only in the audit trail.",
+      ),
+  })
+  .describe(
+    "Full writable transaction values. amount and all snapshot fields are server-owned.",
+  )
+  .and(
+    zod.object({
+      id: zod.string(),
+      parentId: zod
+        .string()
+        .nullable()
+        .describe(
+          "Parent bulk transaction ID; null for legacy standalone entries.",
+        ),
+      bulkNumber: zod
+        .string()
+        .nullable()
+        .describe(
+          "Immutable MIS-BULK number; null for legacy standalone entries.",
+        ),
+      amount: zod
+        .number()
+        .describe(
+          "Server-computed or direct actual amount; persisted as an exact database decimal.",
+        ),
+      calculationMode: zod.enum(["quantity_rate", "amount"]),
+      rateEnabled: zod.boolean(),
+      calculatePercentAgainstIncome: zod.boolean(),
+      projectName: zod.string(),
+      tabName: zod.string(),
+      serviceName: zod.string(),
+      type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+      financialClass: zod
+        .enum(["income", "cost", "expense", "salary", "excluded"])
+        .describe(
+          "How the tab contributes to financial totals; excluded has no profit impact.",
+        ),
+      unit: zod.string(),
+      currency: zod.string(),
+      status: zod.enum([
+        "draft",
+        "submitted",
+        "approved",
+        "rejected",
+        "returned",
+        "cancelled",
+      ]),
+      createdById: zod.string(),
+      createdByName: zod.string().nullish(),
+      updatedById: zod.string().nullish(),
+      updatedByName: zod.string().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    }),
+  );
+
+/**
+ * @summary Get the permission-gated audit history for an MIS entry
+ */
+export const MisGetEntryHistoryParams = zod.object({
+  id: zod.coerce.string().describe("MIS record identifier."),
+});
+
+export const MisGetEntryHistoryResponseItem = zod.object({
+  id: zod.string(),
+  entryId: zod.string(),
+  action: zod.string().describe("CREATE"),
+  actorId: zod.string().nullable(),
+  actorName: zod.string().nullish(),
+  remarks: zod.string().nullish(),
+  oldValues: zod
+    .record(zod.string(), zod.unknown())
+    .nullish()
+    .describe("Audit-only untyped prior-value snapshot."),
+  newValues: zod
+    .record(zod.string(), zod.unknown())
+    .nullish()
+    .describe("Audit-only untyped resulting-value snapshot."),
+  occurredAt: zod.coerce.date(),
+});
+export const MisGetEntryHistoryResponse = zod.array(
+  MisGetEntryHistoryResponseItem,
+);
+
+/**
+ * @summary Run a currency-safe unified MIS report over permitted projects
+ */
+export const misGetReportQuerySearchMax = 200;
+
+export const misGetReportQueryCurrencyMin = 3;
+export const misGetReportQueryCurrencyMax = 3;
+
+export const MisGetReportQueryParams = zod.object({
+  projectIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated MIS project identifiers."),
+  tabId: zod.coerce.string().optional(),
+  serviceId: zod.coerce.string().optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+  status: zod
+    .enum([
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+    ])
+    .optional()
+    .describe(
+      "Entry status filter. Defaults to approved for report and dashboard aggregates.",
+    ),
+  entryType: zod
+    .enum(["income", "cost", "expense", "salary", "other"])
+    .optional(),
+  search: zod.coerce.string().max(misGetReportQuerySearchMax).optional(),
+  reportType: zod.enum([
+    "income",
+    "cost",
+    "expense",
+    "salary",
+    "summary",
+    "project-profitability",
+    "project-comparison",
+    "period-comparison",
+    "service-tab-comparison",
+  ]),
+  compareFrom: zod.date().optional(),
+  compareTo: zod.date().optional(),
+  currency: zod.coerce
+    .string()
+    .min(misGetReportQueryCurrencyMin)
+    .max(misGetReportQueryCurrencyMax)
+    .optional()
+    .describe(
+      "Optional ISO 4217 currency. Omit to receive separate currency groups.",
+    ),
+});
+
+export const misGetReportResponseCurrencyGroupsItemCurrentTotalsEntryCountMin = 0;
+
+export const misGetReportResponseCurrencyGroupsItemComparisonTotalsOneEntryCountMin = 0;
+
+export const misGetReportResponseCurrencyGroupsItemGroupsItemCurrentTotalsEntryCountMin = 0;
+
+export const misGetReportResponseCurrencyGroupsItemGroupsItemComparisonTotalsOneEntryCountMin = 0;
+
+export const MisGetReportResponse = zod.object({
+  reportType: zod.enum([
+    "income",
+    "cost",
+    "expense",
+    "salary",
+    "summary",
+    "project-profitability",
+    "project-comparison",
+    "period-comparison",
+    "service-tab-comparison",
+  ]),
+  currencyGroups: zod
+    .array(
+      zod.object({
+        currency: zod.string(),
+        currentTotals: zod
+          .object({
+            income: zod.number(),
+            cost: zod.number(),
+            expenses: zod.number(),
+            salaries: zod.number(),
+            totalAmount: zod
+              .number()
+              .describe("Sum of all entry amounts in this aggregate"),
+            grossProfit: zod.number().describe("Income minus cost."),
+            netProfit: zod.number().describe("Income minus cost"),
+            profitMargin: zod
+              .number()
+              .describe("Net profit ÷ income × 100; 0 when income is zero."),
+            entryCount: zod
+              .number()
+              .min(
+                misGetReportResponseCurrencyGroupsItemCurrentTotalsEntryCountMin,
+              ),
+          })
+          .describe(
+            "Totals are always scoped to one currency group and never sum currencies together.",
+          ),
+        comparisonTotals: zod.union([
+          zod
+            .object({
+              income: zod.number(),
+              cost: zod.number(),
+              expenses: zod.number(),
+              salaries: zod.number(),
+              totalAmount: zod
+                .number()
+                .describe("Sum of all entry amounts in this aggregate"),
+              grossProfit: zod.number().describe("Income minus cost."),
+              netProfit: zod.number().describe("Income minus cost"),
+              profitMargin: zod
+                .number()
+                .describe("Net profit ÷ income × 100; 0 when income is zero."),
+              entryCount: zod
+                .number()
+                .min(
+                  misGetReportResponseCurrencyGroupsItemComparisonTotalsOneEntryCountMin,
+                ),
+            })
+            .describe(
+              "Totals are always scoped to one currency group and never sum currencies together.",
+            ),
+          zod.null(),
+        ]),
+        groups: zod.array(
+          zod
+            .object({
+              projectId: zod.string().nullable(),
+              projectName: zod.string().nullable(),
+              projectCode: zod.string().nullish(),
+              tabId: zod.string().nullable(),
+              tabName: zod.string().nullable(),
+              type: zod.string().nullish(),
+              serviceId: zod.string().nullable(),
+              serviceCode: zod.string().nullish(),
+              serviceName: zod.string().nullable(),
+              serviceOrder: zod
+                .number()
+                .nullish()
+                .describe(
+                  "Persisted service sequence used for stable ordering.",
+                ),
+              calculatePercentAgainstIncome: zod
+                .boolean()
+                .nullish()
+                .describe(
+                  "Effective entry snapshot configuration. Null means this aggregate mixes enabled and disabled rows.",
+                ),
+              periodStart: zod.coerce.date().nullable(),
+              periodEnd: zod.coerce.date().nullable(),
+              currentTotals: zod
+                .object({
+                  income: zod.number(),
+                  cost: zod.number(),
+                  expenses: zod.number(),
+                  salaries: zod.number(),
+                  totalAmount: zod
+                    .number()
+                    .describe("Sum of all entry amounts in this aggregate"),
+                  grossProfit: zod.number().describe("Income minus cost."),
+                  netProfit: zod.number().describe("Income minus cost"),
+                  profitMargin: zod
+                    .number()
+                    .describe(
+                      "Net profit ÷ income × 100; 0 when income is zero.",
+                    ),
+                  entryCount: zod
+                    .number()
+                    .min(
+                      misGetReportResponseCurrencyGroupsItemGroupsItemCurrentTotalsEntryCountMin,
+                    ),
+                })
+                .describe(
+                  "Totals are always scoped to one currency group and never sum currencies together.",
+                ),
+              comparisonTotals: zod.union([
+                zod
+                  .object({
+                    income: zod.number(),
+                    cost: zod.number(),
+                    expenses: zod.number(),
+                    salaries: zod.number(),
+                    totalAmount: zod
+                      .number()
+                      .describe("Sum of all entry amounts in this aggregate"),
+                    grossProfit: zod.number().describe("Income minus cost."),
+                    netProfit: zod.number().describe("Income minus cost"),
+                    profitMargin: zod
+                      .number()
+                      .describe(
+                        "Net profit ÷ income × 100; 0 when income is zero.",
+                      ),
+                    entryCount: zod
+                      .number()
+                      .min(
+                        misGetReportResponseCurrencyGroupsItemGroupsItemComparisonTotalsOneEntryCountMin,
+                      ),
+                  })
+                  .describe(
+                    "Totals are always scoped to one currency group and never sum currencies together.",
+                  ),
+                zod.null(),
+              ]),
+            })
+            .describe(
+              "A report grouping row. Identity fields vary with reportType; null means that dimension is not grouped.",
+            ),
+        ),
+      }),
+    )
+    .describe(
+      "One group per currency, preventing invalid cross-currency totals.",
+    ),
+});
+
+/**
+ * @summary Export a permitted unified MIS report
+ */
+export const misExportReportQuerySearchMax = 200;
+
+export const misExportReportQueryCurrencyMin = 3;
+export const misExportReportQueryCurrencyMax = 3;
+
+export const MisExportReportQueryParams = zod.object({
+  projectIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated MIS project identifiers."),
+  tabId: zod.coerce.string().optional(),
+  serviceId: zod.coerce.string().optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+  status: zod
+    .enum([
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+    ])
+    .optional()
+    .describe(
+      "Entry status filter. Defaults to approved for report and dashboard aggregates.",
+    ),
+  entryType: zod
+    .enum(["income", "cost", "expense", "salary", "other"])
+    .optional(),
+  search: zod.coerce.string().max(misExportReportQuerySearchMax).optional(),
+  reportType: zod.enum([
+    "income",
+    "cost",
+    "expense",
+    "salary",
+    "summary",
+    "project-profitability",
+    "project-comparison",
+    "period-comparison",
+    "service-tab-comparison",
+  ]),
+  compareFrom: zod.date().optional(),
+  compareTo: zod.date().optional(),
+  currency: zod.coerce
+    .string()
+    .min(misExportReportQueryCurrencyMin)
+    .max(misExportReportQueryCurrencyMax)
+    .optional()
+    .describe(
+      "Optional ISO 4217 currency. Omit to receive separate currency groups.",
+    ),
+  format: zod.enum(["xlsx", "pdf", "csv"]),
+});
+
+/**
+ * Server-computed export of the same dashboard aggregates. Requires reports, financial and export permission for every included project.
+ * @summary Download the MIS Dashboard or MIS Overview Report as PDF or Excel
+ */
+export const misExportDashboardQueryStatusDefault = `all`;
+
+export const MisExportDashboardQueryParams = zod.object({
+  format: zod.enum(["pdf", "xlsx"]),
+  view: zod.enum(["dashboard", "overview"]),
+  projectIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated MIS project identifiers."),
+  tabId: zod.coerce.string().optional(),
+  serviceId: zod.coerce.string().optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+  status: zod
+    .enum([
+      "all",
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+    ])
+    .default(misExportDashboardQueryStatusDefault),
+});
+
+export const MisListPercentageServicesParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const MisListPercentageServicesQueryParams = zod.object({
+  kind: zod.enum(["overhead", "op_expense"]),
+});
+
+export const misListPercentageServicesResponseOneNameMax = 160;
+
+export const misListPercentageServicesResponseOnePercentageMin = 0;
+export const misListPercentageServicesResponseOnePercentageMax = 100;
+
+export const MisListPercentageServicesResponseItem = zod
+  .object({
+    kind: zod.enum(["overhead", "op_expense"]),
+    name: zod.string().min(1).max(misListPercentageServicesResponseOneNameMax),
+    percentage: zod
+      .number()
+      .min(misListPercentageServicesResponseOnePercentageMin)
+      .max(misListPercentageServicesResponseOnePercentageMax),
+    active: zod.boolean(),
+  })
+  .and(
+    zod.object({
+      id: zod.string(),
+      projectId: zod.string(),
+    }),
+  );
+export const MisListPercentageServicesResponse = zod.array(
+  MisListPercentageServicesResponseItem,
+);
+
+export const MisCreatePercentageServiceParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const misCreatePercentageServiceBodyNameMax = 160;
+
+export const misCreatePercentageServiceBodyPercentageMin = 0;
+export const misCreatePercentageServiceBodyPercentageMax = 100;
+
+export const MisCreatePercentageServiceBody = zod.object({
+  kind: zod.enum(["overhead", "op_expense"]),
+  name: zod.string().min(1).max(misCreatePercentageServiceBodyNameMax),
+  percentage: zod
+    .number()
+    .min(misCreatePercentageServiceBodyPercentageMin)
+    .max(misCreatePercentageServiceBodyPercentageMax),
+  active: zod.boolean(),
+});
+
+export const MisUpdatePercentageServiceParams = zod.object({
+  id: zod.coerce.string(),
+  serviceId: zod.coerce.string(),
+});
+
+export const misUpdatePercentageServiceBodyNameMax = 160;
+
+export const misUpdatePercentageServiceBodyPercentageMin = 0;
+export const misUpdatePercentageServiceBodyPercentageMax = 100;
+
+export const MisUpdatePercentageServiceBody = zod.object({
+  kind: zod.enum(["overhead", "op_expense"]),
+  name: zod.string().min(1).max(misUpdatePercentageServiceBodyNameMax),
+  percentage: zod
+    .number()
+    .min(misUpdatePercentageServiceBodyPercentageMin)
+    .max(misUpdatePercentageServiceBodyPercentageMax),
+  active: zod.boolean(),
+});
+
+export const misUpdatePercentageServiceResponseOneNameMax = 160;
+
+export const misUpdatePercentageServiceResponseOnePercentageMin = 0;
+export const misUpdatePercentageServiceResponseOnePercentageMax = 100;
+
+export const MisUpdatePercentageServiceResponse = zod
+  .object({
+    kind: zod.enum(["overhead", "op_expense"]),
+    name: zod.string().min(1).max(misUpdatePercentageServiceResponseOneNameMax),
+    percentage: zod
+      .number()
+      .min(misUpdatePercentageServiceResponseOnePercentageMin)
+      .max(misUpdatePercentageServiceResponseOnePercentageMax),
+    active: zod.boolean(),
+  })
+  .and(
+    zod.object({
+      id: zod.string(),
+      projectId: zod.string(),
+    }),
+  );
+
+export const MisDeletePercentageServiceParams = zod.object({
+  id: zod.coerce.string(),
+  serviceId: zod.coerce.string(),
+});
+
+/**
+ * @summary Get currency-safe MIS dashboard aggregates for permitted projects
+ */
+export const misGetDashboardQueryStatusDefault = `all`;
+export const misGetDashboardQuerySearchMax = 200;
+
+export const MisGetDashboardQueryParams = zod.object({
+  includeServices: zod
+    .enum(["true", "false"])
+    .optional()
+    .describe(
+      "Include service-level financial breakdowns for the separate overview report.",
+    ),
+  projectIds: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated MIS project identifiers."),
+  tabId: zod.coerce.string().optional(),
+  serviceId: zod.coerce.string().optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+  status: zod
+    .enum([
+      "all",
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+    ])
+    .default(misGetDashboardQueryStatusDefault),
+  entryType: zod
+    .enum(["income", "cost", "expense", "salary", "other"])
+    .optional(),
+  search: zod.coerce.string().max(misGetDashboardQuerySearchMax).optional(),
+});
+
+export const misGetDashboardResponseCurrencyGroupsItemByServiceItemTotalsEntryCountMin = 0;
+
+export const misGetDashboardResponseCurrencyGroupsItemTotalsEntryCountMin = 0;
+
+export const misGetDashboardResponseCurrencyGroupsItemByProjectItemTotalsEntryCountMin = 0;
+
+export const misGetDashboardResponseCurrencyGroupsItemByTabItemTotalsEntryCountMin = 0;
+
+export const misGetDashboardResponseCurrencyGroupsItemByPeriodItemTotalsEntryCountMin = 0;
+
+export const misGetDashboardResponseRecentEntriesItemOneQuantityMin = 0;
+
+export const misGetDashboardResponseRecentEntriesItemOneRateMin = 0;
+
+export const misGetDashboardResponseRecentEntriesItemOneAmountMin = 0;
+
+export const misGetDashboardResponseRecentEntriesItemOneRemarksMax = 2000;
+
+export const misGetDashboardResponseRecentEntriesItemOneRateReasonMax = 1000;
+
+export const MisGetDashboardResponse = zod.object({
+  percentageAdjustments: zod
+    .array(
+      zod
+        .object({
+          projectId: zod.string(),
+          projectName: zod.string(),
+          currency: zod.string(),
+          income: zod.number(),
+          baseProfit: zod.number(),
+          overhead: zod
+            .object({
+              total: zod.number(),
+              services: zod.array(
+                zod.object({
+                  id: zod.string(),
+                  name: zod.string(),
+                  percentage: zod.number(),
+                  amount: zod.number(),
+                }),
+              ),
+            })
+            .optional(),
+          opExpense: zod
+            .object({
+              total: zod.number(),
+              services: zod.array(
+                zod.object({
+                  id: zod.string(),
+                  name: zod.string(),
+                  percentage: zod.number(),
+                  amount: zod.number(),
+                }),
+              ),
+            })
+            .optional(),
+          adjustedProfit: zod.number().optional(),
+        })
+        .describe(
+          "Charges configured by this project applied to combined selected-project income for this currency and period\/statuses. Restricted sections are omitted. Legacy adjustedProfit is not emitted.",
+        ),
+    )
+    .optional(),
+  currencyGroups: zod
+    .array(
+      zod.object({
+        currency: zod.string(),
+        byService: zod
+          .array(
+            zod.object({
+              serviceId: zod.string(),
+              serviceName: zod.string(),
+              tabId: zod.string(),
+              tabName: zod.string(),
+              financialClass: zod
+                .enum(["income", "cost", "expense", "salary", "excluded"])
+                .describe(
+                  "How the tab contributes to financial totals; excluded has no profit impact.",
+                ),
+              totals: zod
+                .object({
+                  income: zod.number(),
+                  cost: zod.number(),
+                  expenses: zod.number(),
+                  salaries: zod.number(),
+                  totalAmount: zod
+                    .number()
+                    .describe("Sum of all entry amounts in this aggregate"),
+                  grossProfit: zod.number().describe("Income minus cost."),
+                  netProfit: zod.number().describe("Income minus cost"),
+                  profitMargin: zod
+                    .number()
+                    .describe(
+                      "Net profit ÷ income × 100; 0 when income is zero.",
+                    ),
+                  entryCount: zod
+                    .number()
+                    .min(
+                      misGetDashboardResponseCurrencyGroupsItemByServiceItemTotalsEntryCountMin,
+                    ),
+                })
+                .describe(
+                  "Totals are always scoped to one currency group and never sum currencies together.",
+                ),
+            }),
+          )
+          .optional(),
+        adjustedNetProfit: zod
+          .number()
+          .optional()
+          .describe(
+            "Net profit after combined selected-project percentage charges. Omitted unless both charge permissions cover every selected project.",
+          ),
+        totals: zod
+          .object({
+            income: zod.number(),
+            cost: zod.number(),
+            expenses: zod.number(),
+            salaries: zod.number(),
+            totalAmount: zod
+              .number()
+              .describe("Sum of all entry amounts in this aggregate"),
+            grossProfit: zod.number().describe("Income minus cost."),
+            netProfit: zod.number().describe("Income minus cost"),
+            profitMargin: zod
+              .number()
+              .describe("Net profit ÷ income × 100; 0 when income is zero."),
+            entryCount: zod
+              .number()
+              .min(
+                misGetDashboardResponseCurrencyGroupsItemTotalsEntryCountMin,
+              ),
+          })
+          .describe(
+            "Totals are always scoped to one currency group and never sum currencies together.",
+          ),
+        byProject: zod.array(
+          zod.object({
+            projectId: zod.string(),
+            projectName: zod.string(),
+            totals: zod
+              .object({
+                income: zod.number(),
+                cost: zod.number(),
+                expenses: zod.number(),
+                salaries: zod.number(),
+                totalAmount: zod
+                  .number()
+                  .describe("Sum of all entry amounts in this aggregate"),
+                grossProfit: zod.number().describe("Income minus cost."),
+                netProfit: zod.number().describe("Income minus cost"),
+                profitMargin: zod
+                  .number()
+                  .describe(
+                    "Net profit ÷ income × 100; 0 when income is zero.",
+                  ),
+                entryCount: zod
+                  .number()
+                  .min(
+                    misGetDashboardResponseCurrencyGroupsItemByProjectItemTotalsEntryCountMin,
+                  ),
+              })
+              .describe(
+                "Totals are always scoped to one currency group and never sum currencies together.",
+              ),
+          }),
+        ),
+        byTab: zod.array(
+          zod.object({
+            tabId: zod.string(),
+            tabName: zod.string(),
+            type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+            financialClass: zod
+              .enum(["income", "cost", "expense", "salary", "excluded"])
+              .describe(
+                "How the tab contributes to financial totals; excluded has no profit impact.",
+              ),
+            totals: zod
+              .object({
+                income: zod.number(),
+                cost: zod.number(),
+                expenses: zod.number(),
+                salaries: zod.number(),
+                totalAmount: zod
+                  .number()
+                  .describe("Sum of all entry amounts in this aggregate"),
+                grossProfit: zod.number().describe("Income minus cost."),
+                netProfit: zod.number().describe("Income minus cost"),
+                profitMargin: zod
+                  .number()
+                  .describe(
+                    "Net profit ÷ income × 100; 0 when income is zero.",
+                  ),
+                entryCount: zod
+                  .number()
+                  .min(
+                    misGetDashboardResponseCurrencyGroupsItemByTabItemTotalsEntryCountMin,
+                  ),
+              })
+              .describe(
+                "Totals are always scoped to one currency group and never sum currencies together.",
+              ),
+          }),
+        ),
+        byPeriod: zod.array(
+          zod.object({
+            fromDate: zod.coerce.date(),
+            toDate: zod.coerce.date(),
+            totals: zod
+              .object({
+                income: zod.number(),
+                cost: zod.number(),
+                expenses: zod.number(),
+                salaries: zod.number(),
+                totalAmount: zod
+                  .number()
+                  .describe("Sum of all entry amounts in this aggregate"),
+                grossProfit: zod.number().describe("Income minus cost."),
+                netProfit: zod.number().describe("Income minus cost"),
+                profitMargin: zod
+                  .number()
+                  .describe(
+                    "Net profit ÷ income × 100; 0 when income is zero.",
+                  ),
+                entryCount: zod
+                  .number()
+                  .min(
+                    misGetDashboardResponseCurrencyGroupsItemByPeriodItemTotalsEntryCountMin,
+                  ),
+              })
+              .describe(
+                "Totals are always scoped to one currency group and never sum currencies together.",
+              ),
+          }),
+        ),
+      }),
+    )
+    .describe(
+      "Currency-separated totals and breakdown rows; values must not be aggregated across groups.",
+    ),
+  recentEntries: zod
+    .array(
+      zod
+        .object({
+          projectId: zod.string(),
+          tabId: zod.string(),
+          serviceId: zod.string(),
+          fromDate: zod.coerce.date(),
+          toDate: zod.coerce.date(),
+          quantity: zod
+            .number()
+            .min(misGetDashboardResponseRecentEntriesItemOneQuantityMin)
+            .nullish()
+            .describe(
+              "Required for quantity_rate mode; explicit zero is valid.",
+            ),
+          rate: zod
+            .number()
+            .min(misGetDashboardResponseRecentEntriesItemOneRateMin)
+            .nullish()
+            .describe(
+              "Required for quantity_rate mode; authorization-gated for overrides.",
+            ),
+          amount: zod
+            .number()
+            .min(misGetDashboardResponseRecentEntriesItemOneAmountMin)
+            .nullish()
+            .describe("Required for amount mode; actual amount"),
+          calculationMode: zod
+            .enum(["quantity_rate", "amount"])
+            .optional()
+            .describe(
+              "Optional explicit mode for an intentional legacy Salary\/Expense transition.",
+            ),
+          remarks: zod
+            .string()
+            .max(misGetDashboardResponseRecentEntriesItemOneRemarksMax)
+            .nullable(),
+          rateReason: zod
+            .string()
+            .max(misGetDashboardResponseRecentEntriesItemOneRateReasonMax)
+            .nullish()
+            .describe(
+              "Required for a rate override; retained only in the audit trail.",
+            ),
+        })
+        .describe(
+          "Full writable transaction values. amount and all snapshot fields are server-owned.",
+        )
+        .and(
+          zod.object({
+            id: zod.string(),
+            parentId: zod
+              .string()
+              .nullable()
+              .describe(
+                "Parent bulk transaction ID; null for legacy standalone entries.",
+              ),
+            bulkNumber: zod
+              .string()
+              .nullable()
+              .describe(
+                "Immutable MIS-BULK number; null for legacy standalone entries.",
+              ),
+            amount: zod
+              .number()
+              .describe(
+                "Server-computed or direct actual amount; persisted as an exact database decimal.",
+              ),
+            calculationMode: zod.enum(["quantity_rate", "amount"]),
+            rateEnabled: zod.boolean(),
+            calculatePercentAgainstIncome: zod.boolean(),
+            projectName: zod.string(),
+            tabName: zod.string(),
+            serviceName: zod.string(),
+            type: zod.enum(["income", "cost", "expense", "salary", "other"]),
+            financialClass: zod
+              .enum(["income", "cost", "expense", "salary", "excluded"])
+              .describe(
+                "How the tab contributes to financial totals; excluded has no profit impact.",
+              ),
+            unit: zod.string(),
+            currency: zod.string(),
+            status: zod.enum([
+              "draft",
+              "submitted",
+              "approved",
+              "rejected",
+              "returned",
+              "cancelled",
+            ]),
+            createdById: zod.string(),
+            createdByName: zod.string().nullish(),
+            updatedById: zod.string().nullish(),
+            updatedByName: zod.string().nullish(),
+            createdAt: zod.coerce.date(),
+            updatedAt: zod.coerce.date(),
+          }),
+        ),
+    )
+    .describe("Recent entries limited to records the current user may access."),
+});
+
+/**
+ * @summary Get permission-scoped advanced MIS analytics
+ */
+export const getMisAnalyticsQueryReportTypeDefault = `summary`;
+export const getMisAnalyticsQuerySearchMax = 200;
+
+export const getMisAnalyticsQueryCurrencyRegExp = new RegExp("^[A-Za-z]{3}$");
+export const getMisAnalyticsQueryStatusDefault = `approved`;
+export const getMisAnalyticsQueryViewDefault = `monthly`;
+export const getMisAnalyticsQueryModeDefault = `analytics`;
+export const getMisAnalyticsQueryPageDefault = 1;
+
+export const getMisAnalyticsQueryPageSizeDefault = 50;
+export const getMisAnalyticsQueryPageSizeMax = 500;
+
+export const getMisAnalyticsQueryPeriodComparisonDefault = false;
+
+export const GetMisAnalyticsQueryParams = zod.object({
+  projectIds: zod.coerce.string().optional(),
+  projectCode: zod.coerce.string().optional(),
+  tabIds: zod.coerce.string().optional(),
+  serviceIds: zod.coerce.string().optional(),
+  serviceCodes: zod.coerce.string().optional(),
+  types: zod.coerce.string().optional(),
+  reportType: zod
+    .enum([
+      "income",
+      "cost",
+      "expense",
+      "salary",
+      "summary",
+      "project-profitability",
+      "project-comparison",
+      "period-comparison",
+      "service-tab-comparison",
+    ])
+    .default(getMisAnalyticsQueryReportTypeDefault)
+    .describe(
+      "Report category. Category report types filter to that financial class; summary and comparison report types retain all configured classes.\n",
+    ),
+  search: zod.coerce
+    .string()
+    .max(getMisAnalyticsQuerySearchMax)
+    .optional()
+    .describe(
+      "Case-insensitive search over scoped project, tab, service, and entry snapshot text.",
+    ),
+  currency: zod.coerce
+    .string()
+    .regex(getMisAnalyticsQueryCurrencyRegExp)
+    .optional()
+    .describe(
+      "Optional ISO 4217 currency filter. Omit to retain separate currency groups.",
+    ),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+  status: zod
+    .enum([
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+      "all",
+    ])
+    .default(getMisAnalyticsQueryStatusDefault)
+    .describe(
+      "Explicit status selection. Comma-separated and repeated values are accepted. Use all to include every status. If absent, approved remains the backwards-compatible default.\n",
+    ),
+  compareFrom: zod.date().optional(),
+  compareTo: zod.date().optional(),
+  groupBy: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Ordered comma-separated date, project, projectCode, type, service, month, or year.",
+    ),
+  view: zod
+    .enum(["daily", "weekly", "monthly", "custom"])
+    .default(getMisAnalyticsQueryViewDefault),
+  mode: zod
+    .enum(["analytics", "project", "service", "type", "dynamic"])
+    .default(getMisAnalyticsQueryModeDefault),
+  page: zod.coerce.number().min(1).default(getMisAnalyticsQueryPageDefault),
+  pageSize: zod.coerce
+    .number()
+    .min(1)
+    .max(getMisAnalyticsQueryPageSizeMax)
+    .default(getMisAnalyticsQueryPageSizeDefault),
+  periodComparison: zod.coerce
+    .boolean()
+    .default(getMisAnalyticsQueryPeriodComparisonDefault)
+    .describe("Enable additive comparison of three or more selected periods."),
+  periods: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "JSON array of {id,label?,from,to} period objects. Required when periodComparison=true; minimum 3 and maximum 24 periods.\n",
+    ),
+});
+
+export const GetMisAnalyticsResponse = zod.object({
+  filters: zod.object({}).passthrough(),
+  dateBasis: zod.enum(["period_start"]),
+  totalsByCurrency: zod.array(
+    zod.object({
+      currency: zod.string(),
+      current: zod.object({
+        totalIncome: zod.number(),
+        totalCost: zod.number(),
+        totalExpenses: zod.number(),
+        totalSalaries: zod.number(),
+        grossProfit: zod.number(),
+        netProfit: zod.number(),
+        profitMargin: zod.number(),
+        totalAmount: zod.number(),
+        quantity: zod.number(),
+        weightedRate: zod.number().nullable(),
+        rateMin: zod.number().nullable(),
+        rateMax: zod.number().nullable(),
+        rateVaried: zod.boolean(),
+        units: zod.array(zod.string()),
+        unitVaried: zod.boolean(),
+        entryCount: zod.number(),
+        contributionPercent: zod.number().optional(),
+        incomeContributionPercent: zod.number().optional(),
+        costContributionPercent: zod.number().optional(),
+        expensesContributionPercent: zod.number().optional(),
+        salariesContributionPercent: zod.number().optional(),
+        percentageAgainstIncome: zod
+          .number()
+          .nullish()
+          .describe(
+            "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+          ),
+      }),
+      previous: zod
+        .object({
+          totalIncome: zod.number(),
+          totalCost: zod.number(),
+          totalExpenses: zod.number(),
+          totalSalaries: zod.number(),
+          grossProfit: zod.number(),
+          netProfit: zod.number(),
+          profitMargin: zod.number(),
+          totalAmount: zod.number(),
+          quantity: zod.number(),
+          weightedRate: zod.number().nullable(),
+          rateMin: zod.number().nullable(),
+          rateMax: zod.number().nullable(),
+          rateVaried: zod.boolean(),
+          units: zod.array(zod.string()),
+          unitVaried: zod.boolean(),
+          entryCount: zod.number(),
+          contributionPercent: zod.number().optional(),
+          incomeContributionPercent: zod.number().optional(),
+          costContributionPercent: zod.number().optional(),
+          expensesContributionPercent: zod.number().optional(),
+          salariesContributionPercent: zod.number().optional(),
+          percentageAgainstIncome: zod
+            .number()
+            .nullish()
+            .describe(
+              "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+            ),
+        })
+        .nullable(),
+      difference: zod.object({}).passthrough().nullable(),
+      percentageDifference: zod.object({}).passthrough().nullable(),
+    }),
+  ),
+  rows: zod.array(
+    zod.object({
+      currency: zod.string(),
+      projectId: zod.string().nullish(),
+      projectIds: zod.array(zod.string()).optional(),
+      projectName: zod.string().nullish(),
+      projectCode: zod.string().nullish(),
+      tabId: zod.string().nullish(),
+      tabIds: zod.array(zod.string()).optional(),
+      tabName: zod
+        .string()
+        .nullish()
+        .describe("Configured tab label; type groups are separated by tab ID."),
+      type: zod.string().nullish(),
+      serviceId: zod.string().nullish(),
+      serviceIds: zod.array(zod.string()).optional(),
+      serviceCode: zod.string().nullish(),
+      serviceName: zod.string().nullish(),
+      serviceOrder: zod.number().nullish(),
+      calculatePercentAgainstIncome: zod.boolean().nullish(),
+      periodId: zod.string().nullish(),
+      periodLabel: zod.string().nullish(),
+      periodStart: zod.coerce.date().nullish(),
+      periodEnd: zod.coerce.date().nullish(),
+      current: zod.object({
+        totalIncome: zod.number(),
+        totalCost: zod.number(),
+        totalExpenses: zod.number(),
+        totalSalaries: zod.number(),
+        grossProfit: zod.number(),
+        netProfit: zod.number(),
+        profitMargin: zod.number(),
+        totalAmount: zod.number(),
+        quantity: zod.number(),
+        weightedRate: zod.number().nullable(),
+        rateMin: zod.number().nullable(),
+        rateMax: zod.number().nullable(),
+        rateVaried: zod.boolean(),
+        units: zod.array(zod.string()),
+        unitVaried: zod.boolean(),
+        entryCount: zod.number(),
+        contributionPercent: zod.number().optional(),
+        incomeContributionPercent: zod.number().optional(),
+        costContributionPercent: zod.number().optional(),
+        expensesContributionPercent: zod.number().optional(),
+        salariesContributionPercent: zod.number().optional(),
+        percentageAgainstIncome: zod
+          .number()
+          .nullish()
+          .describe(
+            "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+          ),
+      }),
+      previous: zod
+        .object({
+          totalIncome: zod.number(),
+          totalCost: zod.number(),
+          totalExpenses: zod.number(),
+          totalSalaries: zod.number(),
+          grossProfit: zod.number(),
+          netProfit: zod.number(),
+          profitMargin: zod.number(),
+          totalAmount: zod.number(),
+          quantity: zod.number(),
+          weightedRate: zod.number().nullable(),
+          rateMin: zod.number().nullable(),
+          rateMax: zod.number().nullable(),
+          rateVaried: zod.boolean(),
+          units: zod.array(zod.string()),
+          unitVaried: zod.boolean(),
+          entryCount: zod.number(),
+          contributionPercent: zod.number().optional(),
+          incomeContributionPercent: zod.number().optional(),
+          costContributionPercent: zod.number().optional(),
+          expensesContributionPercent: zod.number().optional(),
+          salariesContributionPercent: zod.number().optional(),
+          percentageAgainstIncome: zod
+            .number()
+            .nullish()
+            .describe(
+              "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+            ),
+        })
+        .nullable(),
+      difference: zod.object({}).passthrough().nullable(),
+      percentageDifference: zod.object({}).passthrough().nullable(),
+      drilldownFilters: zod
+        .object({
+          projectIds: zod.array(zod.string()),
+          tabIds: zod.array(zod.string()),
+          serviceIds: zod.array(zod.string()),
+          entryType: zod.string().nullable(),
+          status: zod.string(),
+          statuses: zod.array(
+            zod.enum([
+              "draft",
+              "submitted",
+              "approved",
+              "rejected",
+              "returned",
+              "cancelled",
+            ]),
+          ),
+          currency: zod.string(),
+          from: zod.coerce.date().nullable(),
+          to: zod.coerce.date().nullable(),
+          startFrom: zod.coerce.date().nullable(),
+          startTo: zod.coerce.date().nullable(),
+        })
+        .describe(
+          "Safe filters for the Entries screen. from\/to preserve the complete report range; startFrom\/startTo constrain from_date to the displayed period-start bucket. Disabled project-tab assignments are never represented by aggregate rows.\n",
+        ),
+      previousDrilldownFilters: zod
+        .object({
+          projectIds: zod.array(zod.string()),
+          tabIds: zod.array(zod.string()),
+          serviceIds: zod.array(zod.string()),
+          entryType: zod.string().nullable(),
+          status: zod.string(),
+          statuses: zod.array(
+            zod.enum([
+              "draft",
+              "submitted",
+              "approved",
+              "rejected",
+              "returned",
+              "cancelled",
+            ]),
+          ),
+          currency: zod.string(),
+          from: zod.coerce.date().nullable(),
+          to: zod.coerce.date().nullable(),
+          startFrom: zod.coerce.date().nullable(),
+          startTo: zod.coerce.date().nullable(),
+        })
+        .describe(
+          "Safe filters for the Entries screen. from\/to preserve the complete report range; startFrom\/startTo constrain from_date to the displayed period-start bucket. Disabled project-tab assignments are never represented by aggregate rows.\n",
+        )
+        .nullish(),
+    }),
+  ),
+  trend: zod.array(
+    zod.object({
+      currency: zod.string(),
+      projectId: zod.string().nullish(),
+      projectIds: zod.array(zod.string()).optional(),
+      projectName: zod.string().nullish(),
+      projectCode: zod.string().nullish(),
+      tabId: zod.string().nullish(),
+      tabIds: zod.array(zod.string()).optional(),
+      tabName: zod
+        .string()
+        .nullish()
+        .describe("Configured tab label; type groups are separated by tab ID."),
+      type: zod.string().nullish(),
+      serviceId: zod.string().nullish(),
+      serviceIds: zod.array(zod.string()).optional(),
+      serviceCode: zod.string().nullish(),
+      serviceName: zod.string().nullish(),
+      serviceOrder: zod.number().nullish(),
+      calculatePercentAgainstIncome: zod.boolean().nullish(),
+      periodId: zod.string().nullish(),
+      periodLabel: zod.string().nullish(),
+      periodStart: zod.coerce.date().nullish(),
+      periodEnd: zod.coerce.date().nullish(),
+      current: zod.object({
+        totalIncome: zod.number(),
+        totalCost: zod.number(),
+        totalExpenses: zod.number(),
+        totalSalaries: zod.number(),
+        grossProfit: zod.number(),
+        netProfit: zod.number(),
+        profitMargin: zod.number(),
+        totalAmount: zod.number(),
+        quantity: zod.number(),
+        weightedRate: zod.number().nullable(),
+        rateMin: zod.number().nullable(),
+        rateMax: zod.number().nullable(),
+        rateVaried: zod.boolean(),
+        units: zod.array(zod.string()),
+        unitVaried: zod.boolean(),
+        entryCount: zod.number(),
+        contributionPercent: zod.number().optional(),
+        incomeContributionPercent: zod.number().optional(),
+        costContributionPercent: zod.number().optional(),
+        expensesContributionPercent: zod.number().optional(),
+        salariesContributionPercent: zod.number().optional(),
+        percentageAgainstIncome: zod
+          .number()
+          .nullish()
+          .describe(
+            "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+          ),
+      }),
+      previous: zod
+        .object({
+          totalIncome: zod.number(),
+          totalCost: zod.number(),
+          totalExpenses: zod.number(),
+          totalSalaries: zod.number(),
+          grossProfit: zod.number(),
+          netProfit: zod.number(),
+          profitMargin: zod.number(),
+          totalAmount: zod.number(),
+          quantity: zod.number(),
+          weightedRate: zod.number().nullable(),
+          rateMin: zod.number().nullable(),
+          rateMax: zod.number().nullable(),
+          rateVaried: zod.boolean(),
+          units: zod.array(zod.string()),
+          unitVaried: zod.boolean(),
+          entryCount: zod.number(),
+          contributionPercent: zod.number().optional(),
+          incomeContributionPercent: zod.number().optional(),
+          costContributionPercent: zod.number().optional(),
+          expensesContributionPercent: zod.number().optional(),
+          salariesContributionPercent: zod.number().optional(),
+          percentageAgainstIncome: zod
+            .number()
+            .nullish()
+            .describe(
+              "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+            ),
+        })
+        .nullable(),
+      difference: zod.object({}).passthrough().nullable(),
+      percentageDifference: zod.object({}).passthrough().nullable(),
+      drilldownFilters: zod
+        .object({
+          projectIds: zod.array(zod.string()),
+          tabIds: zod.array(zod.string()),
+          serviceIds: zod.array(zod.string()),
+          entryType: zod.string().nullable(),
+          status: zod.string(),
+          statuses: zod.array(
+            zod.enum([
+              "draft",
+              "submitted",
+              "approved",
+              "rejected",
+              "returned",
+              "cancelled",
+            ]),
+          ),
+          currency: zod.string(),
+          from: zod.coerce.date().nullable(),
+          to: zod.coerce.date().nullable(),
+          startFrom: zod.coerce.date().nullable(),
+          startTo: zod.coerce.date().nullable(),
+        })
+        .describe(
+          "Safe filters for the Entries screen. from\/to preserve the complete report range; startFrom\/startTo constrain from_date to the displayed period-start bucket. Disabled project-tab assignments are never represented by aggregate rows.\n",
+        ),
+      previousDrilldownFilters: zod
+        .object({
+          projectIds: zod.array(zod.string()),
+          tabIds: zod.array(zod.string()),
+          serviceIds: zod.array(zod.string()),
+          entryType: zod.string().nullable(),
+          status: zod.string(),
+          statuses: zod.array(
+            zod.enum([
+              "draft",
+              "submitted",
+              "approved",
+              "rejected",
+              "returned",
+              "cancelled",
+            ]),
+          ),
+          currency: zod.string(),
+          from: zod.coerce.date().nullable(),
+          to: zod.coerce.date().nullable(),
+          startFrom: zod.coerce.date().nullable(),
+          startTo: zod.coerce.date().nullable(),
+        })
+        .describe(
+          "Safe filters for the Entries screen. from\/to preserve the complete report range; startFrom\/startTo constrain from_date to the displayed period-start bucket. Disabled project-tab assignments are never represented by aggregate rows.\n",
+        )
+        .nullish(),
+    }),
+  ),
+  pagination: zod.object({
+    page: zod.number(),
+    pageSize: zod.number(),
+    total: zod.number(),
+    pageCount: zod.number(),
+  }),
+  periods: zod
+    .array(
+      zod.object({
+        period: zod.object({
+          id: zod.string(),
+          label: zod.string(),
+          from: zod.coerce.date(),
+          to: zod.coerce.date(),
+        }),
+        totalsByCurrency: zod.array(
+          zod.object({
+            currency: zod.string(),
+            current: zod.object({
+              totalIncome: zod.number(),
+              totalCost: zod.number(),
+              totalExpenses: zod.number(),
+              totalSalaries: zod.number(),
+              grossProfit: zod.number(),
+              netProfit: zod.number(),
+              profitMargin: zod.number(),
+              totalAmount: zod.number(),
+              quantity: zod.number(),
+              weightedRate: zod.number().nullable(),
+              rateMin: zod.number().nullable(),
+              rateMax: zod.number().nullable(),
+              rateVaried: zod.boolean(),
+              units: zod.array(zod.string()),
+              unitVaried: zod.boolean(),
+              entryCount: zod.number(),
+              contributionPercent: zod.number().optional(),
+              incomeContributionPercent: zod.number().optional(),
+              costContributionPercent: zod.number().optional(),
+              expensesContributionPercent: zod.number().optional(),
+              salariesContributionPercent: zod.number().optional(),
+              percentageAgainstIncome: zod
+                .number()
+                .nullish()
+                .describe(
+                  "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+                ),
+            }),
+            previous: zod
+              .object({
+                totalIncome: zod.number(),
+                totalCost: zod.number(),
+                totalExpenses: zod.number(),
+                totalSalaries: zod.number(),
+                grossProfit: zod.number(),
+                netProfit: zod.number(),
+                profitMargin: zod.number(),
+                totalAmount: zod.number(),
+                quantity: zod.number(),
+                weightedRate: zod.number().nullable(),
+                rateMin: zod.number().nullable(),
+                rateMax: zod.number().nullable(),
+                rateVaried: zod.boolean(),
+                units: zod.array(zod.string()),
+                unitVaried: zod.boolean(),
+                entryCount: zod.number(),
+                contributionPercent: zod.number().optional(),
+                incomeContributionPercent: zod.number().optional(),
+                costContributionPercent: zod.number().optional(),
+                expensesContributionPercent: zod.number().optional(),
+                salariesContributionPercent: zod.number().optional(),
+                percentageAgainstIncome: zod
+                  .number()
+                  .nullish()
+                  .describe(
+                    "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+                  ),
+              })
+              .nullable(),
+            difference: zod.object({}).passthrough().nullable(),
+            percentageDifference: zod.object({}).passthrough().nullable(),
+          }),
+        ),
+        rows: zod.array(
+          zod.object({
+            currency: zod.string(),
+            projectId: zod.string().nullish(),
+            projectIds: zod.array(zod.string()).optional(),
+            projectName: zod.string().nullish(),
+            projectCode: zod.string().nullish(),
+            tabId: zod.string().nullish(),
+            tabIds: zod.array(zod.string()).optional(),
+            tabName: zod
+              .string()
+              .nullish()
+              .describe(
+                "Configured tab label; type groups are separated by tab ID.",
+              ),
+            type: zod.string().nullish(),
+            serviceId: zod.string().nullish(),
+            serviceIds: zod.array(zod.string()).optional(),
+            serviceCode: zod.string().nullish(),
+            serviceName: zod.string().nullish(),
+            serviceOrder: zod.number().nullish(),
+            calculatePercentAgainstIncome: zod.boolean().nullish(),
+            periodId: zod.string().nullish(),
+            periodLabel: zod.string().nullish(),
+            periodStart: zod.coerce.date().nullish(),
+            periodEnd: zod.coerce.date().nullish(),
+            current: zod.object({
+              totalIncome: zod.number(),
+              totalCost: zod.number(),
+              totalExpenses: zod.number(),
+              totalSalaries: zod.number(),
+              grossProfit: zod.number(),
+              netProfit: zod.number(),
+              profitMargin: zod.number(),
+              totalAmount: zod.number(),
+              quantity: zod.number(),
+              weightedRate: zod.number().nullable(),
+              rateMin: zod.number().nullable(),
+              rateMax: zod.number().nullable(),
+              rateVaried: zod.boolean(),
+              units: zod.array(zod.string()),
+              unitVaried: zod.boolean(),
+              entryCount: zod.number(),
+              contributionPercent: zod.number().optional(),
+              incomeContributionPercent: zod.number().optional(),
+              costContributionPercent: zod.number().optional(),
+              expensesContributionPercent: zod.number().optional(),
+              salariesContributionPercent: zod.number().optional(),
+              percentageAgainstIncome: zod
+                .number()
+                .nullish()
+                .describe(
+                  "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+                ),
+            }),
+            previous: zod
+              .object({
+                totalIncome: zod.number(),
+                totalCost: zod.number(),
+                totalExpenses: zod.number(),
+                totalSalaries: zod.number(),
+                grossProfit: zod.number(),
+                netProfit: zod.number(),
+                profitMargin: zod.number(),
+                totalAmount: zod.number(),
+                quantity: zod.number(),
+                weightedRate: zod.number().nullable(),
+                rateMin: zod.number().nullable(),
+                rateMax: zod.number().nullable(),
+                rateVaried: zod.boolean(),
+                units: zod.array(zod.string()),
+                unitVaried: zod.boolean(),
+                entryCount: zod.number(),
+                contributionPercent: zod.number().optional(),
+                incomeContributionPercent: zod.number().optional(),
+                costContributionPercent: zod.number().optional(),
+                expensesContributionPercent: zod.number().optional(),
+                salariesContributionPercent: zod.number().optional(),
+                percentageAgainstIncome: zod
+                  .number()
+                  .nullish()
+                  .describe(
+                    "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+                  ),
+              })
+              .nullable(),
+            difference: zod.object({}).passthrough().nullable(),
+            percentageDifference: zod.object({}).passthrough().nullable(),
+            drilldownFilters: zod
+              .object({
+                projectIds: zod.array(zod.string()),
+                tabIds: zod.array(zod.string()),
+                serviceIds: zod.array(zod.string()),
+                entryType: zod.string().nullable(),
+                status: zod.string(),
+                statuses: zod.array(
+                  zod.enum([
+                    "draft",
+                    "submitted",
+                    "approved",
+                    "rejected",
+                    "returned",
+                    "cancelled",
+                  ]),
+                ),
+                currency: zod.string(),
+                from: zod.coerce.date().nullable(),
+                to: zod.coerce.date().nullable(),
+                startFrom: zod.coerce.date().nullable(),
+                startTo: zod.coerce.date().nullable(),
+              })
+              .describe(
+                "Safe filters for the Entries screen. from\/to preserve the complete report range; startFrom\/startTo constrain from_date to the displayed period-start bucket. Disabled project-tab assignments are never represented by aggregate rows.\n",
+              ),
+            previousDrilldownFilters: zod
+              .object({
+                projectIds: zod.array(zod.string()),
+                tabIds: zod.array(zod.string()),
+                serviceIds: zod.array(zod.string()),
+                entryType: zod.string().nullable(),
+                status: zod.string(),
+                statuses: zod.array(
+                  zod.enum([
+                    "draft",
+                    "submitted",
+                    "approved",
+                    "rejected",
+                    "returned",
+                    "cancelled",
+                  ]),
+                ),
+                currency: zod.string(),
+                from: zod.coerce.date().nullable(),
+                to: zod.coerce.date().nullable(),
+                startFrom: zod.coerce.date().nullable(),
+                startTo: zod.coerce.date().nullable(),
+              })
+              .describe(
+                "Safe filters for the Entries screen. from\/to preserve the complete report range; startFrom\/startTo constrain from_date to the displayed period-start bucket. Disabled project-tab assignments are never represented by aggregate rows.\n",
+              )
+              .nullish(),
+          }),
+        ),
+        trend: zod.array(
+          zod.object({
+            currency: zod.string(),
+            projectId: zod.string().nullish(),
+            projectIds: zod.array(zod.string()).optional(),
+            projectName: zod.string().nullish(),
+            projectCode: zod.string().nullish(),
+            tabId: zod.string().nullish(),
+            tabIds: zod.array(zod.string()).optional(),
+            tabName: zod
+              .string()
+              .nullish()
+              .describe(
+                "Configured tab label; type groups are separated by tab ID.",
+              ),
+            type: zod.string().nullish(),
+            serviceId: zod.string().nullish(),
+            serviceIds: zod.array(zod.string()).optional(),
+            serviceCode: zod.string().nullish(),
+            serviceName: zod.string().nullish(),
+            serviceOrder: zod.number().nullish(),
+            calculatePercentAgainstIncome: zod.boolean().nullish(),
+            periodId: zod.string().nullish(),
+            periodLabel: zod.string().nullish(),
+            periodStart: zod.coerce.date().nullish(),
+            periodEnd: zod.coerce.date().nullish(),
+            current: zod.object({
+              totalIncome: zod.number(),
+              totalCost: zod.number(),
+              totalExpenses: zod.number(),
+              totalSalaries: zod.number(),
+              grossProfit: zod.number(),
+              netProfit: zod.number(),
+              profitMargin: zod.number(),
+              totalAmount: zod.number(),
+              quantity: zod.number(),
+              weightedRate: zod.number().nullable(),
+              rateMin: zod.number().nullable(),
+              rateMax: zod.number().nullable(),
+              rateVaried: zod.boolean(),
+              units: zod.array(zod.string()),
+              unitVaried: zod.boolean(),
+              entryCount: zod.number(),
+              contributionPercent: zod.number().optional(),
+              incomeContributionPercent: zod.number().optional(),
+              costContributionPercent: zod.number().optional(),
+              expensesContributionPercent: zod.number().optional(),
+              salariesContributionPercent: zod.number().optional(),
+              percentageAgainstIncome: zod
+                .number()
+                .nullish()
+                .describe(
+                  "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+                ),
+            }),
+            previous: zod
+              .object({
+                totalIncome: zod.number(),
+                totalCost: zod.number(),
+                totalExpenses: zod.number(),
+                totalSalaries: zod.number(),
+                grossProfit: zod.number(),
+                netProfit: zod.number(),
+                profitMargin: zod.number(),
+                totalAmount: zod.number(),
+                quantity: zod.number(),
+                weightedRate: zod.number().nullable(),
+                rateMin: zod.number().nullable(),
+                rateMax: zod.number().nullable(),
+                rateVaried: zod.boolean(),
+                units: zod.array(zod.string()),
+                unitVaried: zod.boolean(),
+                entryCount: zod.number(),
+                contributionPercent: zod.number().optional(),
+                incomeContributionPercent: zod.number().optional(),
+                costContributionPercent: zod.number().optional(),
+                expensesContributionPercent: zod.number().optional(),
+                salariesContributionPercent: zod.number().optional(),
+                percentageAgainstIncome: zod
+                  .number()
+                  .nullish()
+                  .describe(
+                    "Amount divided by the period\/currency total income when the effective category\/service configuration enables it; null when disabled.\n",
+                  ),
+              })
+              .nullable(),
+            difference: zod.object({}).passthrough().nullable(),
+            percentageDifference: zod.object({}).passthrough().nullable(),
+            drilldownFilters: zod
+              .object({
+                projectIds: zod.array(zod.string()),
+                tabIds: zod.array(zod.string()),
+                serviceIds: zod.array(zod.string()),
+                entryType: zod.string().nullable(),
+                status: zod.string(),
+                statuses: zod.array(
+                  zod.enum([
+                    "draft",
+                    "submitted",
+                    "approved",
+                    "rejected",
+                    "returned",
+                    "cancelled",
+                  ]),
+                ),
+                currency: zod.string(),
+                from: zod.coerce.date().nullable(),
+                to: zod.coerce.date().nullable(),
+                startFrom: zod.coerce.date().nullable(),
+                startTo: zod.coerce.date().nullable(),
+              })
+              .describe(
+                "Safe filters for the Entries screen. from\/to preserve the complete report range; startFrom\/startTo constrain from_date to the displayed period-start bucket. Disabled project-tab assignments are never represented by aggregate rows.\n",
+              ),
+            previousDrilldownFilters: zod
+              .object({
+                projectIds: zod.array(zod.string()),
+                tabIds: zod.array(zod.string()),
+                serviceIds: zod.array(zod.string()),
+                entryType: zod.string().nullable(),
+                status: zod.string(),
+                statuses: zod.array(
+                  zod.enum([
+                    "draft",
+                    "submitted",
+                    "approved",
+                    "rejected",
+                    "returned",
+                    "cancelled",
+                  ]),
+                ),
+                currency: zod.string(),
+                from: zod.coerce.date().nullable(),
+                to: zod.coerce.date().nullable(),
+                startFrom: zod.coerce.date().nullable(),
+                startTo: zod.coerce.date().nullable(),
+              })
+              .describe(
+                "Safe filters for the Entries screen. from\/to preserve the complete report range; startFrom\/startTo constrain from_date to the displayed period-start bucket. Disabled project-tab assignments are never represented by aggregate rows.\n",
+              )
+              .nullish(),
+          }),
+        ),
+        pagination: zod.object({
+          page: zod.number(),
+          pageSize: zod.number(),
+          total: zod.number(),
+          pageCount: zod.number(),
+        }),
+      }),
+    )
+    .optional()
+    .describe(
+      "Additive multi-period results. Each item is a period descriptor and the exact non-recursive analytics result fields for that period.\n",
+    ),
+});
+
+/**
+ * @summary Export all permission-scoped MIS analytics rows
+ */
+export const exportMisAnalyticsQueryReportTypeDefault = `summary`;
+export const exportMisAnalyticsQuerySearchMax = 200;
+
+export const exportMisAnalyticsQueryCurrencyRegExp = new RegExp(
+  "^[A-Za-z]{3}$",
+);
+export const exportMisAnalyticsQueryStatusDefault = `approved`;
+export const exportMisAnalyticsQueryViewDefault = `monthly`;
+export const exportMisAnalyticsQueryModeDefault = `analytics`;
+export const exportMisAnalyticsQueryPeriodComparisonDefault = false;
+
+export const ExportMisAnalyticsQueryParams = zod.object({
+  projectIds: zod.coerce.string().optional(),
+  projectCode: zod.coerce.string().optional(),
+  tabIds: zod.coerce.string().optional(),
+  serviceIds: zod.coerce.string().optional(),
+  serviceCodes: zod.coerce.string().optional(),
+  types: zod.coerce.string().optional(),
+  reportType: zod
+    .enum([
+      "income",
+      "cost",
+      "expense",
+      "salary",
+      "summary",
+      "project-profitability",
+      "project-comparison",
+      "period-comparison",
+      "service-tab-comparison",
+    ])
+    .default(exportMisAnalyticsQueryReportTypeDefault)
+    .describe(
+      "Report category. Category report types filter to that financial class; summary and comparison report types retain all configured classes.\n",
+    ),
+  search: zod.coerce
+    .string()
+    .max(exportMisAnalyticsQuerySearchMax)
+    .optional()
+    .describe(
+      "Case-insensitive search over scoped project, tab, service, and entry snapshot text.",
+    ),
+  currency: zod.coerce
+    .string()
+    .regex(exportMisAnalyticsQueryCurrencyRegExp)
+    .optional()
+    .describe(
+      "Optional ISO 4217 currency filter. Omit to retain separate currency groups.",
+    ),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+  status: zod
+    .enum([
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "returned",
+      "cancelled",
+      "all",
+    ])
+    .default(exportMisAnalyticsQueryStatusDefault)
+    .describe(
+      "Explicit status selection. Comma-separated and repeated values are accepted. Use all to include every status. If absent, approved remains the backwards-compatible default.\n",
+    ),
+  compareFrom: zod.date().optional(),
+  compareTo: zod.date().optional(),
+  groupBy: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "Ordered comma-separated date, project, projectCode, type, service, month, or year.",
+    ),
+  view: zod
+    .enum(["daily", "weekly", "monthly", "custom"])
+    .default(exportMisAnalyticsQueryViewDefault),
+  mode: zod
+    .enum(["analytics", "project", "service", "type", "dynamic"])
+    .default(exportMisAnalyticsQueryModeDefault),
+  periodComparison: zod.coerce
+    .boolean()
+    .default(exportMisAnalyticsQueryPeriodComparisonDefault)
+    .describe("Enable additive comparison of three or more selected periods."),
+  periods: zod.coerce
+    .string()
+    .optional()
+    .describe(
+      "JSON array of {id,label?,from,to} period objects. Required when periodComparison=true; minimum 3 and maximum 24 periods.\n",
+    ),
+  format: zod.enum(["csv", "xlsx", "pdf"]),
+});

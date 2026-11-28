@@ -25,6 +25,8 @@ export const projectsTable = pgTable(
     notes: text("notes"),
     pdfRequired: boolean("pdf_required").notNull().default(false),
     disabled: boolean("disabled").notNull().default(false),
+    // When false (default), only one entry per date is allowed on this project.
+    allowDuplicateDates: boolean("allow_duplicate_dates").notNull().default(false),
     // Entry-date window for non-admin users. NULL = no limit on that side.
     // 0 = that direction fully blocked (e.g. futureDays 0 → no future entries).
     backdatedDays: integer("backdated_days"),

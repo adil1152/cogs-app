@@ -109,6 +109,7 @@ router.post(
       contractEnd,
       notes,
       pdfRequired,
+      allowDuplicateDates,
       backdatedDays,
       futureDays,
     } = parsed.data;
@@ -129,6 +130,7 @@ router.post(
               : contractEnd,
           notes: notes ?? null,
           pdfRequired: pdfRequired ?? false,
+          allowDuplicateDates: allowDuplicateDates ?? false,
           backdatedDays: backdatedDays ?? null,
           futureDays: futureDays ?? null,
           createdById: req.user!.id,
@@ -250,6 +252,8 @@ router.patch(
       data.pdfRequired = parsed.data.pdfRequired;
     if (parsed.data.disabled !== undefined)
       data.disabled = parsed.data.disabled;
+    if (parsed.data.allowDuplicateDates !== undefined)
+      data.allowDuplicateDates = parsed.data.allowDuplicateDates;
     if (parsed.data.backdatedDays !== undefined)
       data.backdatedDays = parsed.data.backdatedDays;
     if (parsed.data.futureDays !== undefined)

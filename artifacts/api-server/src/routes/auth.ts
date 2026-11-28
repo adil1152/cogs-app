@@ -2,7 +2,6 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import {
-  GetCurrentAuthUserResponse,
   RegisterWithPasswordBody as RegisterBody,
   LoginWithPasswordBody as LoginBody,
   LogoutResponse,
@@ -24,6 +23,7 @@ import {
 } from "../lib/auth";
 import { requireAuth } from "../middlewares/requireAuth";
 import { getSmtpSettingsRow, isEmailConfigured, sendMail } from "../lib/mailer";
+import { validateAuthProfile } from "../lib/auth-profile";
 
 const router: IRouter = Router();
 
@@ -52,11 +52,8 @@ function normMobile(s: string | null | undefined): string | null {
 }
 
 router.get("/auth/user", (req: Request, res: Response) => {
-  res.json(
-    GetCurrentAuthUserResponse.parse({
-      user: req.isAuthenticated() ? req.user : null,
-    }),
-  );
+  const response = validateAuthProfile(req.isAuthenticated() ? req.user : null, res);
+  if (response) res.json(response);
 });
 
 router.post("/auth/register", async (req: Request, res: Response) => {
@@ -152,6 +149,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     return;
   }
 
+  if (!validateAuthProfile(toAuthUser(user), res)) return;
   const sessionData: SessionData = { user: toAuthUser(user) };
   const sid = await createSession(sessionData);
   setSessionCookie(res, sid);

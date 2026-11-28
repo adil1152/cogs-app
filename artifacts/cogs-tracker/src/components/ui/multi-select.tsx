@@ -32,6 +32,13 @@ interface MultiSelectProps {
   allLabel?: string;
   className?: string;
   disabled?: boolean;
+  /**
+   * An empty selected list traditionally means "all".  These optional props
+   * let scoped report filters distinguish that state from an explicit "none"
+   * selection without changing the query shape sent to the API.
+   */
+  selectionMode?: "all" | "selected" | "none";
+  onSelectionModeChange?: (mode: "all" | "selected" | "none") => void;
   "data-testid"?: string;
 }
 
@@ -50,6 +57,8 @@ export function MultiSelect({
   allLabel = "All",
   className,
   disabled,
+  selectionMode = selected.length ? "selected" : "all",
+  onSelectionModeChange,
   "data-testid": testId,
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false);
@@ -58,13 +67,17 @@ export function MultiSelect({
   function toggle(value: string) {
     if (selectedSet.has(value)) {
       onChange(selected.filter((v) => v !== value));
+      if (selected.length === 1) onSelectionModeChange?.("none");
     } else {
       onChange([...selected, value]);
+      onSelectionModeChange?.("selected");
     }
   }
 
   const triggerLabel =
-    selected.length === 0
+    selectionMode === "none"
+      ? "None (empty result)"
+      : selected.length === 0
       ? allLabel
       : selected.length === 1
         ? (options.find((o) => o.value === selected[0])?.label ?? "1 selected")
@@ -117,6 +130,30 @@ export function MultiSelect({
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
+            {onSelectionModeChange && (
+              <CommandGroup heading="Scope">
+                <CommandItem
+                  value="select all authorized scope"
+                  onSelect={() => {
+                    onChange([]);
+                    onSelectionModeChange("all");
+                  }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4", selectionMode === "all" ? "opacity-100" : "opacity-0")} />
+                  <span>{allLabel}</span>
+                </CommandItem>
+                <CommandItem
+                  value="select none empty result"
+                  onSelect={() => {
+                    onChange([]);
+                    onSelectionModeChange("none");
+                  }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4", selectionMode === "none" ? "opacity-100" : "opacity-0")} />
+                  <span>None (empty result)</span>
+                </CommandItem>
+              </CommandGroup>
+            )}
             <CommandGroup>
               {options.map((option) => {
                 const isSelected = selectedSet.has(option.value);

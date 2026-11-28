@@ -12,7 +12,7 @@ import {
   serviceSubItemsTable,
   subServiceCostEntriesTable,
 } from "@workspace/db";
-import { and, eq, gte, lte, desc, isNull, inArray, sql } from "drizzle-orm";
+import { and, eq, ne, gte, lte, desc, isNull, inArray, sql } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import {
   CreateDailyEntryBody,
@@ -32,6 +32,36 @@ import { diffSnapshots, listEntryAudit, recordAudit } from "../lib/audit";
 
 /** Thrown by `insertServiceCosts` when sub-item refs don't belong to the parent. */
 class SubItemIntegrityError extends Error {}
+
+class DuplicateDateError extends Error {}
+
+/**
+ * Race-safe duplicate-date guard: serializes competing writers for the same
+ * (project, date) via a transaction-scoped advisory lock, then re-checks for
+ * an existing entry inside the transaction. Throws DuplicateDateError when a
+ * conflicting entry exists.
+ */
+async function assertNoDuplicateDate(
+  tx: PgTransaction<any, any, any>,
+  projectId: string,
+  entryDate: string,
+  excludeEntryId?: string,
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`dup:${projectId}:${entryDate}`}))`,
+  );
+  const conditions = [
+    eq(dailyEntriesTable.projectId, projectId),
+    eq(dailyEntriesTable.entryDate, entryDate),
+  ];
+  if (excludeEntryId) conditions.push(ne(dailyEntriesTable.id, excludeEntryId));
+  const [dup] = await tx
+    .select({ id: dailyEntriesTable.id })
+    .from(dailyEntriesTable)
+    .where(and(...conditions))
+    .limit(1);
+  if (dup) throw new DuplicateDateError();
+}
 
 /**
  * A previously saved snapshot meal row, keyed for reuse during entry edits.
@@ -415,6 +445,28 @@ router.post(
       }
     }
 
+    // Duplicate-date guard: unless the project explicitly allows duplicate
+    // dates, only one entry per date may exist (applies to admins too).
+    if (!(v.project as { allowDuplicateDates?: boolean }).allowDuplicateDates) {
+      const [dup] = await db
+        .select({ id: dailyEntriesTable.id })
+        .from(dailyEntriesTable)
+        .where(
+          and(
+            eq(dailyEntriesTable.projectId, projectId),
+            eq(dailyEntriesTable.entryDate, asDateString(parsed.data.entryDate)),
+          ),
+        )
+        .limit(1);
+      if (dup) {
+        res.status(409).json({
+          error:
+            "An entry for this date already exists on this project. Duplicate dates are not allowed — edit the existing entry, or enable \"Allow duplicate dates\" in the project settings.",
+        });
+        return;
+      }
+    }
+
     const override = !!parsed.data.totalMandaysOverride;
     const serviceCosts = parsed.data.serviceCosts as ServiceCostInputItem[];
     try {
@@ -445,6 +497,13 @@ router.post(
     for (let attempt = 0; attempt < MAX_RETRIES && !createdId; attempt++) {
       try {
         await db.transaction(async (tx) => {
+          if (!(v.project as { allowDuplicateDates?: boolean }).allowDuplicateDates) {
+            await assertNoDuplicateDate(
+              tx,
+              projectId,
+              asDateString(parsed.data.entryDate),
+            );
+          }
           const [maxRow] = await tx
             .select({
               max: sql<number | null>`MAX(${dailyEntriesTable.sequenceNumber})`,
@@ -489,6 +548,13 @@ router.post(
         lastErr = e;
         if (e instanceof SubItemIntegrityError) {
           res.status(400).json({ error: e.message });
+          return;
+        }
+        if (e instanceof DuplicateDateError) {
+          res.status(409).json({
+            error:
+              "An entry for this date already exists on this project. Duplicate dates are not allowed — edit the existing entry, or enable \"Allow duplicate dates\" in the project settings.",
+          });
           return;
         }
         if ((e as { code?: string }).code === "23505") continue; // sequence collision — retry
@@ -584,6 +650,33 @@ router.patch(
       }
     }
 
+    // Duplicate-date guard on date change (applies to admins too).
+    if (
+      parsed.data.entryDate !== undefined &&
+      asDateString(parsed.data.entryDate) !== entry.entryDate &&
+      v.project &&
+      !(v.project as { allowDuplicateDates?: boolean }).allowDuplicateDates
+    ) {
+      const [dup] = await db
+        .select({ id: dailyEntriesTable.id })
+        .from(dailyEntriesTable)
+        .where(
+          and(
+            eq(dailyEntriesTable.projectId, entry.projectId),
+            eq(dailyEntriesTable.entryDate, asDateString(parsed.data.entryDate)),
+            ne(dailyEntriesTable.id, id),
+          ),
+        )
+        .limit(1);
+      if (dup) {
+        res.status(409).json({
+          error:
+            "An entry for this date already exists on this project. Duplicate dates are not allowed — pick another date, or enable \"Allow duplicate dates\" in the project settings.",
+        });
+        return;
+      }
+    }
+
     // Snapshot of cost rows for audit diff (compared as JSON strings).
     const beforeCosts = await db
       .select()
@@ -648,6 +741,19 @@ router.patch(
 
     try {
       await db.transaction(async (tx) => {
+        if (
+          parsed.data.entryDate !== undefined &&
+          asDateString(parsed.data.entryDate) !== entry.entryDate &&
+          v.project &&
+          !(v.project as { allowDuplicateDates?: boolean }).allowDuplicateDates
+        ) {
+          await assertNoDuplicateDate(
+            tx,
+            entry.projectId,
+            asDateString(parsed.data.entryDate),
+            id,
+          );
+        }
         const data: Record<string, unknown> = {};
         if (parsed.data.entryDate !== undefined)
           data.entryDate = asDateString(parsed.data.entryDate);
@@ -838,6 +944,13 @@ router.patch(
       }
       if (e instanceof SubItemIntegrityError) {
         res.status(400).json({ error: e.message });
+        return;
+      }
+      if (e instanceof DuplicateDateError) {
+        res.status(409).json({
+          error:
+            "An entry for this date already exists on this project. Duplicate dates are not allowed — pick another date, or enable \"Allow duplicate dates\" in the project settings.",
+        });
         return;
       }
       throw e;

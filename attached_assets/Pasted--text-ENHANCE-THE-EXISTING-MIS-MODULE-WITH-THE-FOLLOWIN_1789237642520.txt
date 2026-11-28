@@ -1,0 +1,583 @@
+```text
+ENHANCE THE EXISTING MIS MODULE WITH THE FOLLOWING FEATURES ONLY.
+
+IMPORTANT:
+- Do NOT rebuild the MIS module.
+- Do NOT remove or change existing MIS functionality unless required for these enhancements.
+- Do NOT affect the existing COGS application.
+- Preserve all existing data, permissions, workflows, and calculations.
+- First inspect the current MIS implementation and integrate these features using the existing architecture.
+
+==================================================
+1. ATTRACTIVE EXCEL & PDF REPORTS
+==================================================
+
+Improve all MIS Excel and PDF reports to provide a professional, management-friendly presentation.
+
+The reports should not look like raw database exports.
+
+### Excel Report Requirements
+
+Create a professional Excel report layout including:
+
+- QNC/company title and report title
+- Project name / project number
+- From Date / To Date
+- Report generation date
+- Selected filters
+- Clear section headers
+- Proper column widths
+- Number formatting
+- Currency formatting
+- Percentage formatting
+- Thousands separators
+- Frozen header rows
+- Auto filters
+- Totals and subtotals
+- Professional spacing
+- Summary section at the top
+- Detailed data section below
+
+Include visual charts in Excel:
+
+1. Bar Chart
+   - Compare Income, Cost, Expenses, and Salaries
+   - Allow project/service comparison where applicable
+
+2. Pie / Donut Chart
+   - Show percentage distribution of:
+     Income
+     Cost
+     Expenses
+     Salaries
+
+3. Additional useful chart where appropriate:
+   - Project comparison
+   - Service comparison
+   - Daily trend
+
+Charts must automatically update based on the selected report data.
+
+The Excel report must be easy for management to read and present.
+
+==================================================
+2. ATTRACTIVE PDF REPORTS
+==================================================
+
+Improve PDF reports to look like professional management reports.
+
+PDF layout should include:
+
+Cover/Header:
+- QNC logo/company name
+- MIS Report title
+- Project
+- Project Number
+- Reporting Period
+- Generated Date
+
+Summary area:
+- Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+- Gross Profit
+- Net Profit
+- Profit Margin
+
+Detailed sections:
+- Income
+- Cost
+- Expenses
+- Salaries
+- Other/custom types
+
+Use:
+
+- Professional tables
+- Clear section headings
+- Page numbers
+- Report date
+- Proper currency formatting
+- Totals/subtotals
+- Consistent typography
+- Good spacing
+- Landscape orientation where required for wide reports
+
+Include charts inside the PDF:
+
+1. Bar Graph
+2. Pie/Donut Chart
+3. Trend graph where useful
+
+Charts must represent the selected report data dynamically.
+
+Make the PDF suitable for directly sharing with management or clients.
+
+==================================================
+3. BULK ENTRY MUST REMAIN AS ONE ENTRY
+==================================================
+
+IMPORTANT EXISTING ISSUE:
+
+The current bulk entry feature is good because it allows the user to enter all services for a project and period on one page.
+
+However, after submission, the bulk entry is currently split into separate records/groups.
+
+This must be changed.
+
+A bulk entry must remain a SINGLE PARENT ENTRY / TRANSACTION.
+
+Example:
+
+Bulk Entry ID:
+MIS-BULK-000125
+
+Project:
+ABC Project
+
+Period:
+01-Sep-2026 → 30-Sep-2026
+
+Inside the bulk entry:
+
+INCOME
+  Service A
+  Service B
+
+COST
+  Service C
+  Service D
+
+EXPENSE
+  Service E
+
+SALARY
+  Service F
+
+The system may store individual line items internally, but all lines must remain linked to the same Bulk Entry ID / Parent Entry.
+
+==================================================
+4. BULK ENTRY HISTORY / SEARCH
+==================================================
+
+Create a proper Bulk Entry list/history screen.
+
+Users must be able to search for the original bulk entry using:
+
+- Bulk Entry Number
+- Project
+- Project Number
+- From Date
+- To Date
+- Created By
+- Status
+- Entry Type
+
+Example:
+
+MIS-BULK-000125
+ABC Project
+01-Sep-2026 → 30-Sep-2026
+Status: Submitted
+
+Opening this entry must display ALL services entered during the original bulk-entry submission.
+
+Do NOT show them as unrelated independent entries.
+
+==================================================
+5. EDIT BULK ENTRY BEFORE APPROVAL
+==================================================
+
+A bulk entry must remain editable after:
+
+- Draft
+- Submitted
+- Returned
+- Rejected
+
+as long as it has NOT been finally approved.
+
+Recommended workflow:
+
+Draft
+→ Submitted
+→ Approved
+
+or:
+
+Submitted
+→ Rejected / Returned
+→ Draft
+→ Resubmit
+
+Once approved:
+
+- Lock the bulk entry.
+- Users must not be able to modify it unless they have a specific override/admin permission.
+
+The Edit button should automatically depend on:
+
+Current Status
++
+User Permission
+
+Example:
+
+Draft:
+Edit = YES
+
+Submitted:
+Edit = YES if user has edit permission
+
+Rejected:
+Edit = YES
+
+Approved:
+Edit = NO
+
+Administrator Override:
+Edit = YES
+
+==================================================
+6. BULK ENTRY STATUS MUST APPLY TO THE WHOLE ENTRY
+==================================================
+
+The bulk entry must have ONE overall status.
+
+Example:
+
+Bulk Entry:
+MIS-BULK-000125
+
+Status:
+Submitted
+
+All child service lines inherit/reference the same status.
+
+Do NOT allow one service line to appear as Approved while another line belongs to the same bulk entry as Draft.
+
+The approval status must be controlled at the Bulk Entry level unless a separate line-level approval feature already exists and is intentionally configured.
+
+==================================================
+7. PERIOD DATE LOCKING – CRITICAL
+==================================================
+
+Implement strong date-period protection.
+
+For each Project + Period, the system must check whether an entry already exists.
+
+Example:
+
+Project:
+ABC
+
+Existing entry:
+01-Sep-2026 → 30-Sep-2026
+
+The system must prevent another overlapping entry for the same project unless the project specifically allows multiple entries for the same period.
+
+DEFAULT BEHAVIOR:
+
+One Project
++
+One Period
+=
+One Bulk Entry
+
+==================================================
+8. OVERLAPPING DATE VALIDATION
+==================================================
+
+The system must detect overlapping periods.
+
+Example:
+
+Existing:
+01-Sep-2026 → 30-Sep-2026
+
+New entry:
+
+15-Sep-2026 → 25-Sep-2026
+
+This must be rejected if multiple entries are not allowed.
+
+Also reject:
+
+01-Sep → 15-Sep
+10-Sep → 30-Sep
+20-Sep → 05-Oct
+
+if they overlap an existing locked period.
+
+Do not only compare exact matching dates.
+
+Use proper date-range overlap validation.
+
+==================================================
+9. PROJECT SETTING – ALLOW MULTIPLE ENTRIES
+==================================================
+
+Add a setting inside Project Settings:
+
+"Allow Multiple MIS Entries for Same Period"
+
+Options:
+
+YES
+NO
+
+Default:
+
+NO
+
+If NO:
+
+Only one bulk entry is allowed for overlapping periods for that project.
+
+If YES:
+
+Multiple entries may be created within the same reporting period.
+
+Example:
+
+Project:
+ABC
+
+Allow Multiple Entries:
+YES
+
+Then the project may have:
+
+Entry 1:
+01-Sep → 10-Sep
+
+Entry 2:
+11-Sep → 20-Sep
+
+Entry 3:
+21-Sep → 30-Sep
+
+Or multiple entries covering the same period if the business requirement allows it.
+
+==================================================
+10. MULTIPLE ENTRY CONTROL
+==================================================
+
+When:
+
+Allow Multiple Entries = YES
+
+do not remove date validation completely.
+
+Instead, provide a controlled configuration.
+
+Allow the project administrator to define:
+
+- Allow overlapping entries
+- Allow non-overlapping entries only
+- Allow unlimited entries
+- Maximum entries per period (optional)
+
+Default:
+
+If multiple entries are enabled but overlapping is not explicitly allowed,
+allow multiple entries only when their date ranges do not overlap.
+
+==================================================
+11. CLEAR USER MESSAGE FOR LOCKED PERIOD
+==================================================
+
+If the user attempts to create a duplicate/overlapping entry, show a clear message:
+
+"An MIS entry already exists for this project for the selected period."
+
+Display:
+
+Existing Entry Number
+Existing From Date
+Existing To Date
+Existing Status
+
+Example:
+
+Existing Entry:
+MIS-BULK-000125
+
+Period:
+01-Sep-2026 → 30-Sep-2026
+
+Status:
+Submitted
+
+Provide a button:
+
+"Open Existing Entry"
+
+if the user has permission to view it.
+
+==================================================
+12. APPROVED PERIOD LOCK
+==================================================
+
+Once a bulk entry is approved:
+
+- Lock the entry.
+- Prevent normal editing.
+- Prevent creating conflicting entries where project rules prohibit multiple entries.
+- Protect the approved values from accidental changes.
+
+Only users with a special:
+
+"Edit Approved MIS Entry"
+
+permission may modify approved data.
+
+Any approved-entry modification must be recorded in the audit trail.
+
+==================================================
+13. SIDEBAR EXPAND / COLLAPSE
+==================================================
+
+Improve the MIS user interface by making the left navigation sidebar collapsible.
+
+Add a clear button/icon:
+
+☰ / Collapse
+
+Behavior:
+
+Expanded:
+Show icons + menu names
+
+Collapsed:
+Show icons only
+
+Click again:
+Restore expanded sidebar
+
+The sidebar state should remain consistent while navigating between MIS pages.
+
+On desktop:
+
+Expanded width:
+Normal full navigation
+
+Collapsed width:
+Compact icon-only navigation
+
+Ensure the main content area automatically expands when the sidebar is collapsed.
+
+The layout must remain responsive and must not break tables, forms, dashboards, or reports.
+
+==================================================
+14. UI CONSISTENCY
+==================================================
+
+Use the existing application's design system.
+
+Do not introduce a completely different visual style.
+
+The enhancements should feel native to the current MIS application.
+
+Maintain:
+
+- Existing colors
+- Existing typography
+- Existing buttons
+- Existing navigation patterns
+- Existing authentication
+
+Improve spacing and usability where needed.
+
+==================================================
+15. REQUIRED TESTING
+==================================================
+
+After implementation, test the following:
+
+A. REPORTS
+
+1. Generate Excel report.
+2. Verify formatting.
+3. Verify totals.
+4. Verify percentages.
+5. Verify bar chart.
+6. Verify pie/donut chart.
+7. Verify filters affect charts.
+8. Generate PDF.
+9. Verify PDF formatting.
+10. Verify charts are displayed correctly.
+
+B. BULK ENTRY
+
+11. Create bulk entry with multiple services.
+12. Submit bulk entry.
+13. Confirm it remains one parent bulk entry.
+14. Search for the bulk entry.
+15. Open it and confirm all service lines are visible.
+16. Edit it while status is Submitted.
+17. Reject/return it.
+18. Edit and resubmit it.
+19. Approve it.
+20. Confirm it becomes locked.
+
+C. DATE LOCK
+
+21. Create Project A entry:
+01-Sep → 30-Sep
+
+22. Attempt another overlapping entry.
+
+23. Confirm system blocks it when multiple entries are disabled.
+
+24. Enable:
+Allow Multiple MIS Entries = YES
+
+25. Create another permitted entry.
+
+26. Verify the project setting controls behavior correctly.
+
+27. Test partial overlaps.
+
+28. Test exact date duplicates.
+
+29. Test back-to-back periods.
+
+30. Test approved entries.
+
+D. SECURITY
+
+31. User without edit permission cannot edit bulk entries.
+32. User without rate permission cannot edit rates.
+33. User without project access cannot view the bulk entry.
+34. Admin can override where authorized.
+
+E. SIDEBAR
+
+35. Expand sidebar.
+36. Collapse sidebar.
+37. Navigate between MIS pages.
+38. Confirm content resizes correctly.
+39. Confirm dashboard works.
+40. Confirm large report tables still work.
+
+==================================================
+FINAL ACCEPTANCE CRITERIA
+==================================================
+
+The enhancement is complete only when:
+
+1. Excel reports are professional and include dynamic charts.
+2. PDF reports are professional and include dynamic charts.
+3. Bulk entry remains one identifiable parent transaction.
+4. Submitted/draft/rejected bulk entries can be found and edited when permitted.
+5. Approved entries are locked.
+6. Date-period locking prevents unintended duplicate/overlapping entries.
+7. Each project has a setting controlling whether multiple entries are permitted.
+8. Date overlap rules work correctly.
+9. Sidebar can expand and collapse using a button.
+10. Existing MIS and COGS functionality remains fully operational.
+
+Do not sacrifice existing functionality while implementing these enhancements.
+```

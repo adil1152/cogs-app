@@ -24,6 +24,7 @@ import type {
   AuditLogEntry,
   AuthUser,
   AuthUserEnvelope,
+  BadRequestResponse,
   ChangePasswordBody,
   CreateDailyEntryBody,
   CreateEntryAttachmentBody,
@@ -38,9 +39,12 @@ import type {
   EntryAttachment,
   EntryMatrixReport,
   ErrorEnvelope,
+  ExportMisAnalyticsParams,
+  ForbiddenResponse,
   ForgotPasswordBody,
   ForgotPasswordResponse,
   GetAggregateReportParams,
+  GetMisAnalyticsParams,
   GetProjectEntryMatrixParams,
   GetProjectSummaryParams,
   GetTrendsReportParams,
@@ -48,9 +52,59 @@ import type {
   HealthStatus,
   ListProjectEntriesParams,
   ListServiceEntriesParams,
+  ListSystemAuditLog200,
+  ListSystemAuditLogParams,
   ListVisibleServicesParams,
   LoginBody,
   LogoutResponse,
+  MisAnalyticsEnvelope,
+  MisAuthority,
+  MisAuthorityInput,
+  MisAuthorityPage,
+  MisBulkEntriesInput,
+  MisBulkEntriesResponse,
+  MisDashboard,
+  MisEntry,
+  MisEntryActionInput,
+  MisEntryHistoryItem,
+  MisEntryInput,
+  MisEntryPage,
+  MisErrorResponse,
+  MisExportDashboardParams,
+  MisExportReportParams,
+  MisGetDashboardParams,
+  MisGetReportParams,
+  MisListAuthoritiesParams,
+  MisListEntriesParams,
+  MisListEntryCreatorsParams,
+  MisListEntryParentsParams,
+  MisListEntryServicesParams,
+  MisListPercentageServicesParams,
+  MisListProjectServicesParams,
+  MisListProjectsParams,
+  MisListTabsParams,
+  MisListUsersParams,
+  MisMe,
+  MisParentActionInput,
+  MisParentDeleteResponse,
+  MisParentDetail,
+  MisParentEditInput,
+  MisParentHistoryItem,
+  MisParentPage,
+  MisPercentageService,
+  MisPercentageServiceInput,
+  MisProject,
+  MisProjectInput,
+  MisProjectPage,
+  MisProjectTabAssignment,
+  MisProjectTabAssignmentsInput,
+  MisReport,
+  MisService,
+  MisServiceInput,
+  MisServiceReorderInput,
+  MisTab,
+  MisTabInput,
+  MisUserPickerPage,
   Project,
   ProjectAccess,
   ProjectDetail,
@@ -91,6 +145,103 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+/**
+ * @summary Administrator-only system change history
+ */
+export const getListSystemAuditLogUrl = (params?: ListSystemAuditLogParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/audit-log?${stringifiedParams}`
+    : `/api/admin/audit-log`;
+};
+
+export const listSystemAuditLog = async (
+  params?: ListSystemAuditLogParams,
+  options?: RequestInit,
+): Promise<ListSystemAuditLog200> => {
+  return customFetch<ListSystemAuditLog200>(getListSystemAuditLogUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSystemAuditLogQueryKey = (
+  params?: ListSystemAuditLogParams,
+) => {
+  return [`/api/admin/audit-log`, ...(params ? [params] : [])] as const;
+};
+
+export const getListSystemAuditLogQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSystemAuditLog>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListSystemAuditLogParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSystemAuditLog>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSystemAuditLogQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSystemAuditLog>>
+  > = ({ signal }) => listSystemAuditLog(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSystemAuditLog>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSystemAuditLogQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSystemAuditLog>>
+>;
+export type ListSystemAuditLogQueryError = ErrorType<void>;
+
+/**
+ * @summary Administrator-only system change history
+ */
+
+export function useListSystemAuditLog<
+  TData = Awaited<ReturnType<typeof listSystemAuditLog>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListSystemAuditLogParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSystemAuditLog>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSystemAuditLogQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Health check
@@ -189,7 +340,7 @@ export const getGetCurrentAuthUserQueryKey = () => {
 
 export const getGetCurrentAuthUserQueryOptions = <
   TData = Awaited<ReturnType<typeof getCurrentAuthUser>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorEnvelope>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof getCurrentAuthUser>>,
@@ -216,7 +367,7 @@ export const getGetCurrentAuthUserQueryOptions = <
 export type GetCurrentAuthUserQueryResult = NonNullable<
   Awaited<ReturnType<typeof getCurrentAuthUser>>
 >;
-export type GetCurrentAuthUserQueryError = ErrorType<unknown>;
+export type GetCurrentAuthUserQueryError = ErrorType<ErrorEnvelope>;
 
 /**
  * @summary Get the currently authenticated user
@@ -224,7 +375,7 @@ export type GetCurrentAuthUserQueryError = ErrorType<unknown>;
 
 export function useGetCurrentAuthUser<
   TData = Awaited<ReturnType<typeof getCurrentAuthUser>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorEnvelope>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof getCurrentAuthUser>>,
@@ -5666,3 +5817,4109 @@ export const useSetProjectApprovalChain = <
 > => {
   return useMutation(getSetProjectApprovalChainMutationOptions(options));
 };
+
+/**
+ * @summary Get current user's effective MIS access and project grants
+ */
+export const getMisGetCurrentAccessUrl = () => {
+  return `/api/mis/me`;
+};
+
+export const misGetCurrentAccess = async (
+  options?: RequestInit,
+): Promise<MisMe> => {
+  return customFetch<MisMe>(getMisGetCurrentAccessUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisGetCurrentAccessQueryKey = () => {
+  return [`/api/mis/me`] as const;
+};
+
+export const getMisGetCurrentAccessQueryOptions = <
+  TData = Awaited<ReturnType<typeof misGetCurrentAccess>>,
+  TError = ErrorType<MisErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof misGetCurrentAccess>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisGetCurrentAccessQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misGetCurrentAccess>>
+  > = ({ signal }) => misGetCurrentAccess({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misGetCurrentAccess>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisGetCurrentAccessQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misGetCurrentAccess>>
+>;
+export type MisGetCurrentAccessQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Get current user's effective MIS access and project grants
+ */
+
+export function useMisGetCurrentAccess<
+  TData = Awaited<ReturnType<typeof misGetCurrentAccess>>,
+  TError = ErrorType<MisErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof misGetCurrentAccess>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisGetCurrentAccessQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List users available to an MIS administrator authority picker
+ */
+export const getMisListUsersUrl = (params?: MisListUsersParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/users?${stringifiedParams}`
+    : `/api/mis/users`;
+};
+
+export const misListUsers = async (
+  params?: MisListUsersParams,
+  options?: RequestInit,
+): Promise<MisUserPickerPage> => {
+  return customFetch<MisUserPickerPage>(getMisListUsersUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListUsersQueryKey = (params?: MisListUsersParams) => {
+  return [`/api/mis/users`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisListUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListUsers>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisListUsersQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof misListUsers>>> = ({
+    signal,
+  }) => misListUsers(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListUsers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListUsersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListUsers>>
+>;
+export type MisListUsersQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary List users available to an MIS administrator authority picker
+ */
+
+export function useMisListUsers<
+  TData = Awaited<ReturnType<typeof misListUsers>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListUsersParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListUsers>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListUsersQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List MIS authority grants
+ */
+export const getMisListAuthoritiesUrl = (params?: MisListAuthoritiesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/authorities?${stringifiedParams}`
+    : `/api/mis/authorities`;
+};
+
+export const misListAuthorities = async (
+  params?: MisListAuthoritiesParams,
+  options?: RequestInit,
+): Promise<MisAuthorityPage> => {
+  return customFetch<MisAuthorityPage>(getMisListAuthoritiesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListAuthoritiesQueryKey = (
+  params?: MisListAuthoritiesParams,
+) => {
+  return [`/api/mis/authorities`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisListAuthoritiesQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListAuthorities>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListAuthoritiesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListAuthorities>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getMisListAuthoritiesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misListAuthorities>>
+  > = ({ signal }) => misListAuthorities(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListAuthorities>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListAuthoritiesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListAuthorities>>
+>;
+export type MisListAuthoritiesQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary List MIS authority grants
+ */
+
+export function useMisListAuthorities<
+  TData = Awaited<ReturnType<typeof misListAuthorities>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListAuthoritiesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListAuthorities>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListAuthoritiesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Grant an MIS role globally or for one project
+ */
+export const getMisCreateAuthorityUrl = () => {
+  return `/api/mis/authorities`;
+};
+
+export const misCreateAuthority = async (
+  misAuthorityInput: MisAuthorityInput,
+  options?: RequestInit,
+): Promise<MisAuthority> => {
+  return customFetch<MisAuthority>(getMisCreateAuthorityUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misAuthorityInput),
+  });
+};
+
+export const getMisCreateAuthorityMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateAuthority>>,
+    TError,
+    { data: BodyType<MisAuthorityInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misCreateAuthority>>,
+  TError,
+  { data: BodyType<MisAuthorityInput> },
+  TContext
+> => {
+  const mutationKey = ["misCreateAuthority"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misCreateAuthority>>,
+    { data: BodyType<MisAuthorityInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return misCreateAuthority(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisCreateAuthorityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misCreateAuthority>>
+>;
+export type MisCreateAuthorityMutationBody = BodyType<MisAuthorityInput>;
+export type MisCreateAuthorityMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Grant an MIS role globally or for one project
+ */
+export const useMisCreateAuthority = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateAuthority>>,
+    TError,
+    { data: BodyType<MisAuthorityInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misCreateAuthority>>,
+  TError,
+  { data: BodyType<MisAuthorityInput> },
+  TContext
+> => {
+  return useMutation(getMisCreateAuthorityMutationOptions(options));
+};
+
+/**
+ * @summary Replace the writable values of an MIS authority grant
+ */
+export const getMisUpdateAuthorityUrl = (id: string) => {
+  return `/api/mis/authorities/${id}`;
+};
+
+export const misUpdateAuthority = async (
+  id: string,
+  misAuthorityInput: MisAuthorityInput,
+  options?: RequestInit,
+): Promise<MisAuthority> => {
+  return customFetch<MisAuthority>(getMisUpdateAuthorityUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misAuthorityInput),
+  });
+};
+
+export const getMisUpdateAuthorityMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateAuthority>>,
+    TError,
+    { id: string; data: BodyType<MisAuthorityInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misUpdateAuthority>>,
+  TError,
+  { id: string; data: BodyType<MisAuthorityInput> },
+  TContext
+> => {
+  const mutationKey = ["misUpdateAuthority"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misUpdateAuthority>>,
+    { id: string; data: BodyType<MisAuthorityInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misUpdateAuthority(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisUpdateAuthorityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misUpdateAuthority>>
+>;
+export type MisUpdateAuthorityMutationBody = BodyType<MisAuthorityInput>;
+export type MisUpdateAuthorityMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Replace the writable values of an MIS authority grant
+ */
+export const useMisUpdateAuthority = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateAuthority>>,
+    TError,
+    { id: string; data: BodyType<MisAuthorityInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misUpdateAuthority>>,
+  TError,
+  { id: string; data: BodyType<MisAuthorityInput> },
+  TContext
+> => {
+  return useMutation(getMisUpdateAuthorityMutationOptions(options));
+};
+
+/**
+ * @summary Revoke an MIS authority grant
+ */
+export const getMisDeleteAuthorityUrl = (id: string) => {
+  return `/api/mis/authorities/${id}`;
+};
+
+export const misDeleteAuthority = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getMisDeleteAuthorityUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getMisDeleteAuthorityMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misDeleteAuthority>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misDeleteAuthority>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["misDeleteAuthority"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misDeleteAuthority>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return misDeleteAuthority(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisDeleteAuthorityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misDeleteAuthority>>
+>;
+
+export type MisDeleteAuthorityMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Revoke an MIS authority grant
+ */
+export const useMisDeleteAuthority = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misDeleteAuthority>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misDeleteAuthority>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getMisDeleteAuthorityMutationOptions(options));
+};
+
+/**
+ * @summary List MIS projects visible to the current user
+ */
+export const getMisListProjectsUrl = (params?: MisListProjectsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/projects?${stringifiedParams}`
+    : `/api/mis/projects`;
+};
+
+export const misListProjects = async (
+  params?: MisListProjectsParams,
+  options?: RequestInit,
+): Promise<MisProjectPage> => {
+  return customFetch<MisProjectPage>(getMisListProjectsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListProjectsQueryKey = (params?: MisListProjectsParams) => {
+  return [`/api/mis/projects`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisListProjectsQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListProjects>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListProjectsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListProjects>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisListProjectsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof misListProjects>>> = ({
+    signal,
+  }) => misListProjects(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListProjects>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListProjectsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListProjects>>
+>;
+export type MisListProjectsQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary List MIS projects visible to the current user
+ */
+
+export function useMisListProjects<
+  TData = Awaited<ReturnType<typeof misListProjects>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListProjectsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListProjects>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListProjectsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create an MIS project
+ */
+export const getMisCreateProjectUrl = () => {
+  return `/api/mis/projects`;
+};
+
+export const misCreateProject = async (
+  misProjectInput: MisProjectInput,
+  options?: RequestInit,
+): Promise<MisProject> => {
+  return customFetch<MisProject>(getMisCreateProjectUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misProjectInput),
+  });
+};
+
+export const getMisCreateProjectMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateProject>>,
+    TError,
+    { data: BodyType<MisProjectInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misCreateProject>>,
+  TError,
+  { data: BodyType<MisProjectInput> },
+  TContext
+> => {
+  const mutationKey = ["misCreateProject"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misCreateProject>>,
+    { data: BodyType<MisProjectInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return misCreateProject(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisCreateProjectMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misCreateProject>>
+>;
+export type MisCreateProjectMutationBody = BodyType<MisProjectInput>;
+export type MisCreateProjectMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Create an MIS project
+ */
+export const useMisCreateProject = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateProject>>,
+    TError,
+    { data: BodyType<MisProjectInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misCreateProject>>,
+  TError,
+  { data: BodyType<MisProjectInput> },
+  TContext
+> => {
+  return useMutation(getMisCreateProjectMutationOptions(options));
+};
+
+/**
+ * @summary Get a permitted MIS project with effective project permissions
+ */
+export const getMisGetProjectUrl = (id: string) => {
+  return `/api/mis/projects/${id}`;
+};
+
+export const misGetProject = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MisProject> => {
+  return customFetch<MisProject>(getMisGetProjectUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisGetProjectQueryKey = (id: string) => {
+  return [`/api/mis/projects/${id}`] as const;
+};
+
+export const getMisGetProjectQueryOptions = <
+  TData = Awaited<ReturnType<typeof misGetProject>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetProject>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisGetProjectQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof misGetProject>>> = ({
+    signal,
+  }) => misGetProject(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof misGetProject>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisGetProjectQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misGetProject>>
+>;
+export type MisGetProjectQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Get a permitted MIS project with effective project permissions
+ */
+
+export function useMisGetProject<
+  TData = Awaited<ReturnType<typeof misGetProject>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetProject>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisGetProjectQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace writable MIS project values
+ */
+export const getMisUpdateProjectUrl = (id: string) => {
+  return `/api/mis/projects/${id}`;
+};
+
+export const misUpdateProject = async (
+  id: string,
+  misProjectInput: MisProjectInput,
+  options?: RequestInit,
+): Promise<MisProject> => {
+  return customFetch<MisProject>(getMisUpdateProjectUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misProjectInput),
+  });
+};
+
+export const getMisUpdateProjectMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateProject>>,
+    TError,
+    { id: string; data: BodyType<MisProjectInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misUpdateProject>>,
+  TError,
+  { id: string; data: BodyType<MisProjectInput> },
+  TContext
+> => {
+  const mutationKey = ["misUpdateProject"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misUpdateProject>>,
+    { id: string; data: BodyType<MisProjectInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misUpdateProject(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisUpdateProjectMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misUpdateProject>>
+>;
+export type MisUpdateProjectMutationBody = BodyType<MisProjectInput>;
+export type MisUpdateProjectMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Replace writable MIS project values
+ */
+export const useMisUpdateProject = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateProject>>,
+    TError,
+    { id: string; data: BodyType<MisProjectInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misUpdateProject>>,
+  TError,
+  { id: string; data: BodyType<MisProjectInput> },
+  TContext
+> => {
+  return useMutation(getMisUpdateProjectMutationOptions(options));
+};
+
+/**
+ * @summary List MIS tab/category master records
+ */
+export const getMisListTabsUrl = (params?: MisListTabsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/tabs?${stringifiedParams}`
+    : `/api/mis/tabs`;
+};
+
+export const misListTabs = async (
+  params?: MisListTabsParams,
+  options?: RequestInit,
+): Promise<MisTab[]> => {
+  return customFetch<MisTab[]>(getMisListTabsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListTabsQueryKey = (params?: MisListTabsParams) => {
+  return [`/api/mis/tabs`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisListTabsQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListTabs>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListTabsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListTabs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisListTabsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof misListTabs>>> = ({
+    signal,
+  }) => misListTabs(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListTabs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListTabsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListTabs>>
+>;
+export type MisListTabsQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary List MIS tab/category master records
+ */
+
+export function useMisListTabs<
+  TData = Awaited<ReturnType<typeof misListTabs>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListTabsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListTabs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListTabsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create an MIS tab/category master record
+ */
+export const getMisCreateTabUrl = () => {
+  return `/api/mis/tabs`;
+};
+
+export const misCreateTab = async (
+  misTabInput: MisTabInput,
+  options?: RequestInit,
+): Promise<MisTab> => {
+  return customFetch<MisTab>(getMisCreateTabUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misTabInput),
+  });
+};
+
+export const getMisCreateTabMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateTab>>,
+    TError,
+    { data: BodyType<MisTabInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misCreateTab>>,
+  TError,
+  { data: BodyType<MisTabInput> },
+  TContext
+> => {
+  const mutationKey = ["misCreateTab"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misCreateTab>>,
+    { data: BodyType<MisTabInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return misCreateTab(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisCreateTabMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misCreateTab>>
+>;
+export type MisCreateTabMutationBody = BodyType<MisTabInput>;
+export type MisCreateTabMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Create an MIS tab/category master record
+ */
+export const useMisCreateTab = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateTab>>,
+    TError,
+    { data: BodyType<MisTabInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misCreateTab>>,
+  TError,
+  { data: BodyType<MisTabInput> },
+  TContext
+> => {
+  return useMutation(getMisCreateTabMutationOptions(options));
+};
+
+/**
+ * @summary Replace writable MIS tab/category master values
+ */
+export const getMisUpdateTabUrl = (id: string) => {
+  return `/api/mis/tabs/${id}`;
+};
+
+export const misUpdateTab = async (
+  id: string,
+  misTabInput: MisTabInput,
+  options?: RequestInit,
+): Promise<MisTab> => {
+  return customFetch<MisTab>(getMisUpdateTabUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misTabInput),
+  });
+};
+
+export const getMisUpdateTabMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateTab>>,
+    TError,
+    { id: string; data: BodyType<MisTabInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misUpdateTab>>,
+  TError,
+  { id: string; data: BodyType<MisTabInput> },
+  TContext
+> => {
+  const mutationKey = ["misUpdateTab"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misUpdateTab>>,
+    { id: string; data: BodyType<MisTabInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misUpdateTab(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisUpdateTabMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misUpdateTab>>
+>;
+export type MisUpdateTabMutationBody = BodyType<MisTabInput>;
+export type MisUpdateTabMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Replace writable MIS tab/category master values
+ */
+export const useMisUpdateTab = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateTab>>,
+    TError,
+    { id: string; data: BodyType<MisTabInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misUpdateTab>>,
+  TError,
+  { id: string; data: BodyType<MisTabInput> },
+  TContext
+> => {
+  return useMutation(getMisUpdateTabMutationOptions(options));
+};
+
+/**
+ * @summary List master tabs and their assignments for a project
+ */
+export const getMisListProjectTabsUrl = (id: string) => {
+  return `/api/mis/projects/${id}/tabs`;
+};
+
+export const misListProjectTabs = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MisProjectTabAssignment[]> => {
+  return customFetch<MisProjectTabAssignment[]>(getMisListProjectTabsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListProjectTabsQueryKey = (id: string) => {
+  return [`/api/mis/projects/${id}/tabs`] as const;
+};
+
+export const getMisListProjectTabsQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListProjectTabs>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListProjectTabs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisListProjectTabsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misListProjectTabs>>
+  > = ({ signal }) => misListProjectTabs(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListProjectTabs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListProjectTabsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListProjectTabs>>
+>;
+export type MisListProjectTabsQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary List master tabs and their assignments for a project
+ */
+
+export function useMisListProjectTabs<
+  TData = Awaited<ReturnType<typeof misListProjectTabs>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListProjectTabs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListProjectTabsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace a project's tab assignment set and display sequence
+ */
+export const getMisReplaceProjectTabsUrl = (id: string) => {
+  return `/api/mis/projects/${id}/tabs`;
+};
+
+export const misReplaceProjectTabs = async (
+  id: string,
+  misProjectTabAssignmentsInput: MisProjectTabAssignmentsInput,
+  options?: RequestInit,
+): Promise<MisProjectTabAssignment[]> => {
+  return customFetch<MisProjectTabAssignment[]>(
+    getMisReplaceProjectTabsUrl(id),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(misProjectTabAssignmentsInput),
+    },
+  );
+};
+
+export const getMisReplaceProjectTabsMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misReplaceProjectTabs>>,
+    TError,
+    { id: string; data: BodyType<MisProjectTabAssignmentsInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misReplaceProjectTabs>>,
+  TError,
+  { id: string; data: BodyType<MisProjectTabAssignmentsInput> },
+  TContext
+> => {
+  const mutationKey = ["misReplaceProjectTabs"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misReplaceProjectTabs>>,
+    { id: string; data: BodyType<MisProjectTabAssignmentsInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misReplaceProjectTabs(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisReplaceProjectTabsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misReplaceProjectTabs>>
+>;
+export type MisReplaceProjectTabsMutationBody =
+  BodyType<MisProjectTabAssignmentsInput>;
+export type MisReplaceProjectTabsMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Replace a project's tab assignment set and display sequence
+ */
+export const useMisReplaceProjectTabs = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misReplaceProjectTabs>>,
+    TError,
+    { id: string; data: BodyType<MisProjectTabAssignmentsInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misReplaceProjectTabs>>,
+  TError,
+  { id: string; data: BodyType<MisProjectTabAssignmentsInput> },
+  TContext
+> => {
+  return useMutation(getMisReplaceProjectTabsMutationOptions(options));
+};
+
+/**
+ * @summary List project-local MIS services
+ */
+export const getMisListProjectServicesUrl = (
+  id: string,
+  params?: MisListProjectServicesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/projects/${id}/services?${stringifiedParams}`
+    : `/api/mis/projects/${id}/services`;
+};
+
+export const misListProjectServices = async (
+  id: string,
+  params?: MisListProjectServicesParams,
+  options?: RequestInit,
+): Promise<MisService[]> => {
+  return customFetch<MisService[]>(getMisListProjectServicesUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListProjectServicesQueryKey = (
+  id: string,
+  params?: MisListProjectServicesParams,
+) => {
+  return [
+    `/api/mis/projects/${id}/services`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getMisListProjectServicesQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListProjectServices>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  params?: MisListProjectServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListProjectServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getMisListProjectServicesQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misListProjectServices>>
+  > = ({ signal }) =>
+    misListProjectServices(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListProjectServices>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListProjectServicesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListProjectServices>>
+>;
+export type MisListProjectServicesQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary List project-local MIS services
+ */
+
+export function useMisListProjectServices<
+  TData = Awaited<ReturnType<typeof misListProjectServices>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  params?: MisListProjectServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListProjectServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListProjectServicesQueryOptions(
+    id,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a project-local service under an enabled project tab
+ */
+export const getMisCreateProjectServiceUrl = (id: string) => {
+  return `/api/mis/projects/${id}/services`;
+};
+
+export const misCreateProjectService = async (
+  id: string,
+  misServiceInput: MisServiceInput,
+  options?: RequestInit,
+): Promise<MisService> => {
+  return customFetch<MisService>(getMisCreateProjectServiceUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misServiceInput),
+  });
+};
+
+export const getMisCreateProjectServiceMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateProjectService>>,
+    TError,
+    { id: string; data: BodyType<MisServiceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misCreateProjectService>>,
+  TError,
+  { id: string; data: BodyType<MisServiceInput> },
+  TContext
+> => {
+  const mutationKey = ["misCreateProjectService"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misCreateProjectService>>,
+    { id: string; data: BodyType<MisServiceInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misCreateProjectService(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisCreateProjectServiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misCreateProjectService>>
+>;
+export type MisCreateProjectServiceMutationBody = BodyType<MisServiceInput>;
+export type MisCreateProjectServiceMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Create a project-local service under an enabled project tab
+ */
+export const useMisCreateProjectService = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateProjectService>>,
+    TError,
+    { id: string; data: BodyType<MisServiceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misCreateProjectService>>,
+  TError,
+  { id: string; data: BodyType<MisServiceInput> },
+  TContext
+> => {
+  return useMutation(getMisCreateProjectServiceMutationOptions(options));
+};
+
+/**
+ * @summary Replace a project's service display order atomically
+ */
+export const getMisReorderProjectServicesUrl = (id: string) => {
+  return `/api/mis/projects/${id}/services/reorder`;
+};
+
+export const misReorderProjectServices = async (
+  id: string,
+  misServiceReorderInput: MisServiceReorderInput,
+  options?: RequestInit,
+): Promise<MisService[]> => {
+  return customFetch<MisService[]>(getMisReorderProjectServicesUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misServiceReorderInput),
+  });
+};
+
+export const getMisReorderProjectServicesMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misReorderProjectServices>>,
+    TError,
+    { id: string; data: BodyType<MisServiceReorderInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misReorderProjectServices>>,
+  TError,
+  { id: string; data: BodyType<MisServiceReorderInput> },
+  TContext
+> => {
+  const mutationKey = ["misReorderProjectServices"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misReorderProjectServices>>,
+    { id: string; data: BodyType<MisServiceReorderInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misReorderProjectServices(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisReorderProjectServicesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misReorderProjectServices>>
+>;
+export type MisReorderProjectServicesMutationBody =
+  BodyType<MisServiceReorderInput>;
+export type MisReorderProjectServicesMutationError =
+  ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Replace a project's service display order atomically
+ */
+export const useMisReorderProjectServices = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misReorderProjectServices>>,
+    TError,
+    { id: string; data: BodyType<MisServiceReorderInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misReorderProjectServices>>,
+  TError,
+  { id: string; data: BodyType<MisServiceReorderInput> },
+  TContext
+> => {
+  return useMutation(getMisReorderProjectServicesMutationOptions(options));
+};
+
+/**
+ * @summary List every active service eligible for a project period
+ */
+export const getMisListEntryServicesUrl = (
+  id: string,
+  params?: MisListEntryServicesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/projects/${id}/entry-services?${stringifiedParams}`
+    : `/api/mis/projects/${id}/entry-services`;
+};
+
+export const misListEntryServices = async (
+  id: string,
+  params?: MisListEntryServicesParams,
+  options?: RequestInit,
+): Promise<MisService[]> => {
+  return customFetch<MisService[]>(getMisListEntryServicesUrl(id, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListEntryServicesQueryKey = (
+  id: string,
+  params?: MisListEntryServicesParams,
+) => {
+  return [
+    `/api/mis/projects/${id}/entry-services`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getMisListEntryServicesQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListEntryServices>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  params?: MisListEntryServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListEntryServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getMisListEntryServicesQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misListEntryServices>>
+  > = ({ signal }) =>
+    misListEntryServices(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListEntryServices>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListEntryServicesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListEntryServices>>
+>;
+export type MisListEntryServicesQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary List every active service eligible for a project period
+ */
+
+export function useMisListEntryServices<
+  TData = Awaited<ReturnType<typeof misListEntryServices>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  params?: MisListEntryServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListEntryServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListEntryServicesQueryOptions(id, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace writable project-local MIS service values
+ */
+export const getMisUpdateServiceUrl = (id: string) => {
+  return `/api/mis/services/${id}`;
+};
+
+export const misUpdateService = async (
+  id: string,
+  misServiceInput: MisServiceInput,
+  options?: RequestInit,
+): Promise<MisService> => {
+  return customFetch<MisService>(getMisUpdateServiceUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misServiceInput),
+  });
+};
+
+export const getMisUpdateServiceMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateService>>,
+    TError,
+    { id: string; data: BodyType<MisServiceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misUpdateService>>,
+  TError,
+  { id: string; data: BodyType<MisServiceInput> },
+  TContext
+> => {
+  const mutationKey = ["misUpdateService"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misUpdateService>>,
+    { id: string; data: BodyType<MisServiceInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misUpdateService(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisUpdateServiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misUpdateService>>
+>;
+export type MisUpdateServiceMutationBody = BodyType<MisServiceInput>;
+export type MisUpdateServiceMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Replace writable project-local MIS service values
+ */
+export const useMisUpdateService = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateService>>,
+    TError,
+    { id: string; data: BodyType<MisServiceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misUpdateService>>,
+  TError,
+  { id: string; data: BodyType<MisServiceInput> },
+  TContext
+> => {
+  return useMutation(getMisUpdateServiceMutationOptions(options));
+};
+
+/**
+ * @summary List permitted period-based MIS entries
+ */
+export const getMisListEntriesUrl = (params?: MisListEntriesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/entries?${stringifiedParams}`
+    : `/api/mis/entries`;
+};
+
+export const misListEntries = async (
+  params?: MisListEntriesParams,
+  options?: RequestInit,
+): Promise<MisEntryPage> => {
+  return customFetch<MisEntryPage>(getMisListEntriesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListEntriesQueryKey = (params?: MisListEntriesParams) => {
+  return [`/api/mis/entries`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisListEntriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListEntries>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListEntriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListEntries>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisListEntriesQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof misListEntries>>> = ({
+    signal,
+  }) => misListEntries(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListEntries>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListEntriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListEntries>>
+>;
+export type MisListEntriesQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary List permitted period-based MIS entries
+ */
+
+export function useMisListEntries<
+  TData = Awaited<ReturnType<typeof misListEntries>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListEntriesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListEntries>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListEntriesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create an MIS entry in draft status
+ */
+export const getMisCreateEntryUrl = () => {
+  return `/api/mis/entries`;
+};
+
+export const misCreateEntry = async (
+  misEntryInput: MisEntryInput,
+  options?: RequestInit,
+): Promise<MisEntry> => {
+  return customFetch<MisEntry>(getMisCreateEntryUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misEntryInput),
+  });
+};
+
+export const getMisCreateEntryMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateEntry>>,
+    TError,
+    { data: BodyType<MisEntryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misCreateEntry>>,
+  TError,
+  { data: BodyType<MisEntryInput> },
+  TContext
+> => {
+  const mutationKey = ["misCreateEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misCreateEntry>>,
+    { data: BodyType<MisEntryInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return misCreateEntry(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisCreateEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misCreateEntry>>
+>;
+export type MisCreateEntryMutationBody = BodyType<MisEntryInput>;
+export type MisCreateEntryMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Create an MIS entry in draft status
+ */
+export const useMisCreateEntry = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateEntry>>,
+    TError,
+    { data: BodyType<MisEntryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misCreateEntry>>,
+  TError,
+  { data: BodyType<MisEntryInput> },
+  TContext
+> => {
+  return useMutation(getMisCreateEntryMutationOptions(options));
+};
+
+/**
+ * @summary Create all non-blank service lines for a project period atomically
+ */
+export const getMisCreateBulkEntriesUrl = () => {
+  return `/api/mis/entries/bulk`;
+};
+
+export const misCreateBulkEntries = async (
+  misBulkEntriesInput: MisBulkEntriesInput,
+  options?: RequestInit,
+): Promise<MisBulkEntriesResponse> => {
+  return customFetch<MisBulkEntriesResponse>(getMisCreateBulkEntriesUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misBulkEntriesInput),
+  });
+};
+
+export const getMisCreateBulkEntriesMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateBulkEntries>>,
+    TError,
+    { data: BodyType<MisBulkEntriesInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misCreateBulkEntries>>,
+  TError,
+  { data: BodyType<MisBulkEntriesInput> },
+  TContext
+> => {
+  const mutationKey = ["misCreateBulkEntries"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misCreateBulkEntries>>,
+    { data: BodyType<MisBulkEntriesInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return misCreateBulkEntries(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisCreateBulkEntriesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misCreateBulkEntries>>
+>;
+export type MisCreateBulkEntriesMutationBody = BodyType<MisBulkEntriesInput>;
+export type MisCreateBulkEntriesMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Create all non-blank service lines for a project period atomically
+ */
+export const useMisCreateBulkEntries = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreateBulkEntries>>,
+    TError,
+    { data: BodyType<MisBulkEntriesInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misCreateBulkEntries>>,
+  TError,
+  { data: BodyType<MisBulkEntriesInput> },
+  TContext
+> => {
+  return useMutation(getMisCreateBulkEntriesMutationOptions(options));
+};
+
+/**
+ * Returns only accounts that created a bulk parent in a project where the caller has view_entries permission.
+ * @summary List distinct creators of permitted MIS bulk parents
+ */
+export const getMisListEntryCreatorsUrl = (
+  params?: MisListEntryCreatorsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/entries/creators?${stringifiedParams}`
+    : `/api/mis/entries/creators`;
+};
+
+export const misListEntryCreators = async (
+  params?: MisListEntryCreatorsParams,
+  options?: RequestInit,
+): Promise<MisUserPickerPage> => {
+  return customFetch<MisUserPickerPage>(getMisListEntryCreatorsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListEntryCreatorsQueryKey = (
+  params?: MisListEntryCreatorsParams,
+) => {
+  return [`/api/mis/entries/creators`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisListEntryCreatorsQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListEntryCreators>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListEntryCreatorsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListEntryCreators>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getMisListEntryCreatorsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misListEntryCreators>>
+  > = ({ signal }) =>
+    misListEntryCreators(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListEntryCreators>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListEntryCreatorsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListEntryCreators>>
+>;
+export type MisListEntryCreatorsQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary List distinct creators of permitted MIS bulk parents
+ */
+
+export function useMisListEntryCreators<
+  TData = Awaited<ReturnType<typeof misListEntryCreators>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListEntryCreatorsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListEntryCreators>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListEntryCreatorsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Search permitted atomic MIS bulk parents
+ */
+export const getMisListEntryParentsUrl = (
+  params?: MisListEntryParentsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/entries/parents?${stringifiedParams}`
+    : `/api/mis/entries/parents`;
+};
+
+export const misListEntryParents = async (
+  params?: MisListEntryParentsParams,
+  options?: RequestInit,
+): Promise<MisParentPage> => {
+  return customFetch<MisParentPage>(getMisListEntryParentsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisListEntryParentsQueryKey = (
+  params?: MisListEntryParentsParams,
+) => {
+  return [`/api/mis/entries/parents`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisListEntryParentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListEntryParents>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListEntryParentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListEntryParents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getMisListEntryParentsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misListEntryParents>>
+  > = ({ signal }) =>
+    misListEntryParents(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListEntryParents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListEntryParentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListEntryParents>>
+>;
+export type MisListEntryParentsQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Search permitted atomic MIS bulk parents
+ */
+
+export function useMisListEntryParents<
+  TData = Awaited<ReturnType<typeof misListEntryParents>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisListEntryParentsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListEntryParents>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListEntryParentsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get one permitted bulk parent and all children
+ */
+export const getMisGetEntryParentUrl = (id: string) => {
+  return `/api/mis/entries/parents/${id}`;
+};
+
+export const misGetEntryParent = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MisParentDetail> => {
+  return customFetch<MisParentDetail>(getMisGetEntryParentUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisGetEntryParentQueryKey = (id: string) => {
+  return [`/api/mis/entries/parents/${id}`] as const;
+};
+
+export const getMisGetEntryParentQueryOptions = <
+  TData = Awaited<ReturnType<typeof misGetEntryParent>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetEntryParent>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisGetEntryParentQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misGetEntryParent>>
+  > = ({ signal }) => misGetEntryParent(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof misGetEntryParent>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisGetEntryParentQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misGetEntryParent>>
+>;
+export type MisGetEntryParentQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Get one permitted bulk parent and all children
+ */
+
+export function useMisGetEntryParent<
+  TData = Awaited<ReturnType<typeof misGetEntryParent>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetEntryParent>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisGetEntryParentQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace all child lines in a bulk parent atomically
+ */
+export const getMisUpdateEntryParentUrl = (id: string) => {
+  return `/api/mis/entries/parents/${id}`;
+};
+
+export const misUpdateEntryParent = async (
+  id: string,
+  misParentEditInput: MisParentEditInput,
+  options?: RequestInit,
+): Promise<MisParentDetail> => {
+  return customFetch<MisParentDetail>(getMisUpdateEntryParentUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misParentEditInput),
+  });
+};
+
+export const getMisUpdateEntryParentMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateEntryParent>>,
+    TError,
+    { id: string; data: BodyType<MisParentEditInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misUpdateEntryParent>>,
+  TError,
+  { id: string; data: BodyType<MisParentEditInput> },
+  TContext
+> => {
+  const mutationKey = ["misUpdateEntryParent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misUpdateEntryParent>>,
+    { id: string; data: BodyType<MisParentEditInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misUpdateEntryParent(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisUpdateEntryParentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misUpdateEntryParent>>
+>;
+export type MisUpdateEntryParentMutationBody = BodyType<MisParentEditInput>;
+export type MisUpdateEntryParentMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Replace all child lines in a bulk parent atomically
+ */
+export const useMisUpdateEntryParent = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateEntryParent>>,
+    TError,
+    { id: string; data: BodyType<MisParentEditInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misUpdateEntryParent>>,
+  TError,
+  { id: string; data: BodyType<MisParentEditInput> },
+  TContext
+> => {
+  return useMutation(getMisUpdateEntryParentMutationOptions(options));
+};
+
+/**
+ * @summary Delete a permitted bulk parent and all children atomically
+ */
+export const getMisDeleteEntryParentUrl = (id: string) => {
+  return `/api/mis/entries/parents/${id}`;
+};
+
+export const misDeleteEntryParent = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MisParentDeleteResponse> => {
+  return customFetch<MisParentDeleteResponse>(getMisDeleteEntryParentUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getMisDeleteEntryParentMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misDeleteEntryParent>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misDeleteEntryParent>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["misDeleteEntryParent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misDeleteEntryParent>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return misDeleteEntryParent(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisDeleteEntryParentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misDeleteEntryParent>>
+>;
+
+export type MisDeleteEntryParentMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Delete a permitted bulk parent and all children atomically
+ */
+export const useMisDeleteEntryParent = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misDeleteEntryParent>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misDeleteEntryParent>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getMisDeleteEntryParentMutationOptions(options));
+};
+
+/**
+ * @summary Apply one workflow action to a bulk parent and every child
+ */
+export const getMisActOnEntryParentUrl = (id: string) => {
+  return `/api/mis/entries/parents/${id}/action`;
+};
+
+export const misActOnEntryParent = async (
+  id: string,
+  misParentActionInput: MisParentActionInput,
+  options?: RequestInit,
+): Promise<MisParentDetail> => {
+  return customFetch<MisParentDetail>(getMisActOnEntryParentUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misParentActionInput),
+  });
+};
+
+export const getMisActOnEntryParentMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misActOnEntryParent>>,
+    TError,
+    { id: string; data: BodyType<MisParentActionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misActOnEntryParent>>,
+  TError,
+  { id: string; data: BodyType<MisParentActionInput> },
+  TContext
+> => {
+  const mutationKey = ["misActOnEntryParent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misActOnEntryParent>>,
+    { id: string; data: BodyType<MisParentActionInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misActOnEntryParent(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisActOnEntryParentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misActOnEntryParent>>
+>;
+export type MisActOnEntryParentMutationBody = BodyType<MisParentActionInput>;
+export type MisActOnEntryParentMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Apply one workflow action to a bulk parent and every child
+ */
+export const useMisActOnEntryParent = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misActOnEntryParent>>,
+    TError,
+    { id: string; data: BodyType<MisParentActionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misActOnEntryParent>>,
+  TError,
+  { id: string; data: BodyType<MisParentActionInput> },
+  TContext
+> => {
+  return useMutation(getMisActOnEntryParentMutationOptions(options));
+};
+
+/**
+ * @summary Get append-only audit history for a bulk parent
+ */
+export const getMisGetEntryParentHistoryUrl = (id: string) => {
+  return `/api/mis/entries/parents/${id}/history`;
+};
+
+export const misGetEntryParentHistory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MisParentHistoryItem[]> => {
+  return customFetch<MisParentHistoryItem[]>(
+    getMisGetEntryParentHistoryUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getMisGetEntryParentHistoryQueryKey = (id: string) => {
+  return [`/api/mis/entries/parents/${id}/history`] as const;
+};
+
+export const getMisGetEntryParentHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof misGetEntryParentHistory>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetEntryParentHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getMisGetEntryParentHistoryQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misGetEntryParentHistory>>
+  > = ({ signal }) =>
+    misGetEntryParentHistory(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof misGetEntryParentHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisGetEntryParentHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misGetEntryParentHistory>>
+>;
+export type MisGetEntryParentHistoryQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Get append-only audit history for a bulk parent
+ */
+
+export function useMisGetEntryParentHistory<
+  TData = Awaited<ReturnType<typeof misGetEntryParentHistory>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetEntryParentHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisGetEntryParentHistoryQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get one permitted MIS entry
+ */
+export const getMisGetEntryUrl = (id: string) => {
+  return `/api/mis/entries/${id}`;
+};
+
+export const misGetEntry = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MisEntry> => {
+  return customFetch<MisEntry>(getMisGetEntryUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisGetEntryQueryKey = (id: string) => {
+  return [`/api/mis/entries/${id}`] as const;
+};
+
+export const getMisGetEntryQueryOptions = <
+  TData = Awaited<ReturnType<typeof misGetEntry>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetEntry>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisGetEntryQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof misGetEntry>>> = ({
+    signal,
+  }) => misGetEntry(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof misGetEntry>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisGetEntryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misGetEntry>>
+>;
+export type MisGetEntryQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Get one permitted MIS entry
+ */
+
+export function useMisGetEntry<
+  TData = Awaited<ReturnType<typeof misGetEntry>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetEntry>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisGetEntryQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Replace writable MIS entry values
+ */
+export const getMisUpdateEntryUrl = (id: string) => {
+  return `/api/mis/entries/${id}`;
+};
+
+export const misUpdateEntry = async (
+  id: string,
+  misEntryInput: MisEntryInput,
+  options?: RequestInit,
+): Promise<MisEntry> => {
+  return customFetch<MisEntry>(getMisUpdateEntryUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misEntryInput),
+  });
+};
+
+export const getMisUpdateEntryMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateEntry>>,
+    TError,
+    { id: string; data: BodyType<MisEntryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misUpdateEntry>>,
+  TError,
+  { id: string; data: BodyType<MisEntryInput> },
+  TContext
+> => {
+  const mutationKey = ["misUpdateEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misUpdateEntry>>,
+    { id: string; data: BodyType<MisEntryInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misUpdateEntry(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisUpdateEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misUpdateEntry>>
+>;
+export type MisUpdateEntryMutationBody = BodyType<MisEntryInput>;
+export type MisUpdateEntryMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Replace writable MIS entry values
+ */
+export const useMisUpdateEntry = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdateEntry>>,
+    TError,
+    { id: string; data: BodyType<MisEntryInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misUpdateEntry>>,
+  TError,
+  { id: string; data: BodyType<MisEntryInput> },
+  TContext
+> => {
+  return useMutation(getMisUpdateEntryMutationOptions(options));
+};
+
+/**
+ * @summary Delete an MIS entry when the caller has the required permission
+ */
+export const getMisDeleteEntryUrl = (id: string) => {
+  return `/api/mis/entries/${id}`;
+};
+
+export const misDeleteEntry = async (
+  id: string,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getMisDeleteEntryUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getMisDeleteEntryMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misDeleteEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misDeleteEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ["misDeleteEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misDeleteEntry>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return misDeleteEntry(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisDeleteEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misDeleteEntry>>
+>;
+
+export type MisDeleteEntryMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Delete an MIS entry when the caller has the required permission
+ */
+export const useMisDeleteEntry = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misDeleteEntry>>,
+    TError,
+    { id: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misDeleteEntry>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getMisDeleteEntryMutationOptions(options));
+};
+
+/**
+ * @summary Submit, approve, reject, reset, or cancel an MIS entry
+ */
+export const getMisActOnEntryUrl = (id: string) => {
+  return `/api/mis/entries/${id}/action`;
+};
+
+export const misActOnEntry = async (
+  id: string,
+  misEntryActionInput: MisEntryActionInput,
+  options?: RequestInit,
+): Promise<MisEntry> => {
+  return customFetch<MisEntry>(getMisActOnEntryUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(misEntryActionInput),
+  });
+};
+
+export const getMisActOnEntryMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misActOnEntry>>,
+    TError,
+    { id: string; data: BodyType<MisEntryActionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misActOnEntry>>,
+  TError,
+  { id: string; data: BodyType<MisEntryActionInput> },
+  TContext
+> => {
+  const mutationKey = ["misActOnEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misActOnEntry>>,
+    { id: string; data: BodyType<MisEntryActionInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misActOnEntry(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisActOnEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misActOnEntry>>
+>;
+export type MisActOnEntryMutationBody = BodyType<MisEntryActionInput>;
+export type MisActOnEntryMutationError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Submit, approve, reject, reset, or cancel an MIS entry
+ */
+export const useMisActOnEntry = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misActOnEntry>>,
+    TError,
+    { id: string; data: BodyType<MisEntryActionInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misActOnEntry>>,
+  TError,
+  { id: string; data: BodyType<MisEntryActionInput> },
+  TContext
+> => {
+  return useMutation(getMisActOnEntryMutationOptions(options));
+};
+
+/**
+ * @summary Get the permission-gated audit history for an MIS entry
+ */
+export const getMisGetEntryHistoryUrl = (id: string) => {
+  return `/api/mis/entries/${id}/history`;
+};
+
+export const misGetEntryHistory = async (
+  id: string,
+  options?: RequestInit,
+): Promise<MisEntryHistoryItem[]> => {
+  return customFetch<MisEntryHistoryItem[]>(getMisGetEntryHistoryUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisGetEntryHistoryQueryKey = (id: string) => {
+  return [`/api/mis/entries/${id}/history`] as const;
+};
+
+export const getMisGetEntryHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof misGetEntryHistory>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetEntryHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisGetEntryHistoryQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misGetEntryHistory>>
+  > = ({ signal }) => misGetEntryHistory(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof misGetEntryHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisGetEntryHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misGetEntryHistory>>
+>;
+export type MisGetEntryHistoryQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Get the permission-gated audit history for an MIS entry
+ */
+
+export function useMisGetEntryHistory<
+  TData = Awaited<ReturnType<typeof misGetEntryHistory>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetEntryHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisGetEntryHistoryQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Run a currency-safe unified MIS report over permitted projects
+ */
+export const getMisGetReportUrl = (params: MisGetReportParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/reports?${stringifiedParams}`
+    : `/api/mis/reports`;
+};
+
+export const misGetReport = async (
+  params: MisGetReportParams,
+  options?: RequestInit,
+): Promise<MisReport> => {
+  return customFetch<MisReport>(getMisGetReportUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisGetReportQueryKey = (params?: MisGetReportParams) => {
+  return [`/api/mis/reports`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisGetReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof misGetReport>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params: MisGetReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisGetReportQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof misGetReport>>> = ({
+    signal,
+  }) => misGetReport(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misGetReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisGetReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misGetReport>>
+>;
+export type MisGetReportQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Run a currency-safe unified MIS report over permitted projects
+ */
+
+export function useMisGetReport<
+  TData = Awaited<ReturnType<typeof misGetReport>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params: MisGetReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisGetReportQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Export a permitted unified MIS report
+ */
+export const getMisExportReportUrl = (params: MisExportReportParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/reports/export?${stringifiedParams}`
+    : `/api/mis/reports/export`;
+};
+
+export const misExportReport = async (
+  params: MisExportReportParams,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getMisExportReportUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisExportReportQueryKey = (params?: MisExportReportParams) => {
+  return [`/api/mis/reports/export`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisExportReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof misExportReport>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params: MisExportReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misExportReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisExportReportQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof misExportReport>>> = ({
+    signal,
+  }) => misExportReport(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misExportReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisExportReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misExportReport>>
+>;
+export type MisExportReportQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Export a permitted unified MIS report
+ */
+
+export function useMisExportReport<
+  TData = Awaited<ReturnType<typeof misExportReport>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params: MisExportReportParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misExportReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisExportReportQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Server-computed export of the same dashboard aggregates. Requires reports, financial and export permission for every included project.
+ * @summary Download the MIS Dashboard or MIS Overview Report as PDF or Excel
+ */
+export const getMisExportDashboardUrl = (params: MisExportDashboardParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/dashboard/export?${stringifiedParams}`
+    : `/api/mis/dashboard/export`;
+};
+
+export const misExportDashboard = async (
+  params: MisExportDashboardParams,
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(getMisExportDashboardUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisExportDashboardQueryKey = (
+  params?: MisExportDashboardParams,
+) => {
+  return [`/api/mis/dashboard/export`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisExportDashboardQueryOptions = <
+  TData = Awaited<ReturnType<typeof misExportDashboard>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params: MisExportDashboardParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misExportDashboard>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getMisExportDashboardQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misExportDashboard>>
+  > = ({ signal }) => misExportDashboard(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misExportDashboard>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisExportDashboardQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misExportDashboard>>
+>;
+export type MisExportDashboardQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Download the MIS Dashboard or MIS Overview Report as PDF or Excel
+ */
+
+export function useMisExportDashboard<
+  TData = Awaited<ReturnType<typeof misExportDashboard>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params: MisExportDashboardParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misExportDashboard>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisExportDashboardQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getMisListPercentageServicesUrl = (
+  id: string,
+  params: MisListPercentageServicesParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/projects/${id}/percentage-services?${stringifiedParams}`
+    : `/api/mis/projects/${id}/percentage-services`;
+};
+
+export const misListPercentageServices = async (
+  id: string,
+  params: MisListPercentageServicesParams,
+  options?: RequestInit,
+): Promise<MisPercentageService[]> => {
+  return customFetch<MisPercentageService[]>(
+    getMisListPercentageServicesUrl(id, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getMisListPercentageServicesQueryKey = (
+  id: string,
+  params?: MisListPercentageServicesParams,
+) => {
+  return [
+    `/api/mis/projects/${id}/percentage-services`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getMisListPercentageServicesQueryOptions = <
+  TData = Awaited<ReturnType<typeof misListPercentageServices>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  params: MisListPercentageServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListPercentageServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getMisListPercentageServicesQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof misListPercentageServices>>
+  > = ({ signal }) =>
+    misListPercentageServices(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof misListPercentageServices>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisListPercentageServicesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misListPercentageServices>>
+>;
+export type MisListPercentageServicesQueryError = ErrorType<MisErrorResponse>;
+
+export function useMisListPercentageServices<
+  TData = Awaited<ReturnType<typeof misListPercentageServices>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  id: string,
+  params: MisListPercentageServicesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misListPercentageServices>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisListPercentageServicesQueryOptions(
+    id,
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+export const getMisCreatePercentageServiceUrl = (id: string) => {
+  return `/api/mis/projects/${id}/percentage-services`;
+};
+
+export const misCreatePercentageService = async (
+  id: string,
+  misPercentageServiceInput: MisPercentageServiceInput,
+  options?: RequestInit,
+): Promise<MisPercentageService> => {
+  return customFetch<MisPercentageService>(
+    getMisCreatePercentageServiceUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(misPercentageServiceInput),
+    },
+  );
+};
+
+export const getMisCreatePercentageServiceMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreatePercentageService>>,
+    TError,
+    { id: string; data: BodyType<MisPercentageServiceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misCreatePercentageService>>,
+  TError,
+  { id: string; data: BodyType<MisPercentageServiceInput> },
+  TContext
+> => {
+  const mutationKey = ["misCreatePercentageService"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misCreatePercentageService>>,
+    { id: string; data: BodyType<MisPercentageServiceInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return misCreatePercentageService(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisCreatePercentageServiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misCreatePercentageService>>
+>;
+export type MisCreatePercentageServiceMutationBody =
+  BodyType<MisPercentageServiceInput>;
+export type MisCreatePercentageServiceMutationError =
+  ErrorType<MisErrorResponse>;
+
+export const useMisCreatePercentageService = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misCreatePercentageService>>,
+    TError,
+    { id: string; data: BodyType<MisPercentageServiceInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misCreatePercentageService>>,
+  TError,
+  { id: string; data: BodyType<MisPercentageServiceInput> },
+  TContext
+> => {
+  return useMutation(getMisCreatePercentageServiceMutationOptions(options));
+};
+
+export const getMisUpdatePercentageServiceUrl = (
+  id: string,
+  serviceId: string,
+) => {
+  return `/api/mis/projects/${id}/percentage-services/${serviceId}`;
+};
+
+export const misUpdatePercentageService = async (
+  id: string,
+  serviceId: string,
+  misPercentageServiceInput: MisPercentageServiceInput,
+  options?: RequestInit,
+): Promise<MisPercentageService> => {
+  return customFetch<MisPercentageService>(
+    getMisUpdatePercentageServiceUrl(id, serviceId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(misPercentageServiceInput),
+    },
+  );
+};
+
+export const getMisUpdatePercentageServiceMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdatePercentageService>>,
+    TError,
+    {
+      id: string;
+      serviceId: string;
+      data: BodyType<MisPercentageServiceInput>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misUpdatePercentageService>>,
+  TError,
+  { id: string; serviceId: string; data: BodyType<MisPercentageServiceInput> },
+  TContext
+> => {
+  const mutationKey = ["misUpdatePercentageService"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misUpdatePercentageService>>,
+    { id: string; serviceId: string; data: BodyType<MisPercentageServiceInput> }
+  > = (props) => {
+    const { id, serviceId, data } = props ?? {};
+
+    return misUpdatePercentageService(id, serviceId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisUpdatePercentageServiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misUpdatePercentageService>>
+>;
+export type MisUpdatePercentageServiceMutationBody =
+  BodyType<MisPercentageServiceInput>;
+export type MisUpdatePercentageServiceMutationError =
+  ErrorType<MisErrorResponse>;
+
+export const useMisUpdatePercentageService = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misUpdatePercentageService>>,
+    TError,
+    {
+      id: string;
+      serviceId: string;
+      data: BodyType<MisPercentageServiceInput>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misUpdatePercentageService>>,
+  TError,
+  { id: string; serviceId: string; data: BodyType<MisPercentageServiceInput> },
+  TContext
+> => {
+  return useMutation(getMisUpdatePercentageServiceMutationOptions(options));
+};
+
+export const getMisDeletePercentageServiceUrl = (
+  id: string,
+  serviceId: string,
+) => {
+  return `/api/mis/projects/${id}/percentage-services/${serviceId}`;
+};
+
+export const misDeletePercentageService = async (
+  id: string,
+  serviceId: string,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getMisDeletePercentageServiceUrl(id, serviceId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getMisDeletePercentageServiceMutationOptions = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misDeletePercentageService>>,
+    TError,
+    { id: string; serviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof misDeletePercentageService>>,
+  TError,
+  { id: string; serviceId: string },
+  TContext
+> => {
+  const mutationKey = ["misDeletePercentageService"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof misDeletePercentageService>>,
+    { id: string; serviceId: string }
+  > = (props) => {
+    const { id, serviceId } = props ?? {};
+
+    return misDeletePercentageService(id, serviceId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MisDeletePercentageServiceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof misDeletePercentageService>>
+>;
+
+export type MisDeletePercentageServiceMutationError =
+  ErrorType<MisErrorResponse>;
+
+export const useMisDeletePercentageService = <
+  TError = ErrorType<MisErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof misDeletePercentageService>>,
+    TError,
+    { id: string; serviceId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof misDeletePercentageService>>,
+  TError,
+  { id: string; serviceId: string },
+  TContext
+> => {
+  return useMutation(getMisDeletePercentageServiceMutationOptions(options));
+};
+
+/**
+ * @summary Get currency-safe MIS dashboard aggregates for permitted projects
+ */
+export const getMisGetDashboardUrl = (params?: MisGetDashboardParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/dashboard?${stringifiedParams}`
+    : `/api/mis/dashboard`;
+};
+
+export const misGetDashboard = async (
+  params?: MisGetDashboardParams,
+  options?: RequestInit,
+): Promise<MisDashboard> => {
+  return customFetch<MisDashboard>(getMisGetDashboardUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getMisGetDashboardQueryKey = (params?: MisGetDashboardParams) => {
+  return [`/api/mis/dashboard`, ...(params ? [params] : [])] as const;
+};
+
+export const getMisGetDashboardQueryOptions = <
+  TData = Awaited<ReturnType<typeof misGetDashboard>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisGetDashboardParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetDashboard>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getMisGetDashboardQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof misGetDashboard>>> = ({
+    signal,
+  }) => misGetDashboard(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof misGetDashboard>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type MisGetDashboardQueryResult = NonNullable<
+  Awaited<ReturnType<typeof misGetDashboard>>
+>;
+export type MisGetDashboardQueryError = ErrorType<MisErrorResponse>;
+
+/**
+ * @summary Get currency-safe MIS dashboard aggregates for permitted projects
+ */
+
+export function useMisGetDashboard<
+  TData = Awaited<ReturnType<typeof misGetDashboard>>,
+  TError = ErrorType<MisErrorResponse>,
+>(
+  params?: MisGetDashboardParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof misGetDashboard>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getMisGetDashboardQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get permission-scoped advanced MIS analytics
+ */
+export const getGetMisAnalyticsUrl = (params?: GetMisAnalyticsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/analytics?${stringifiedParams}`
+    : `/api/mis/analytics`;
+};
+
+export const getMisAnalytics = async (
+  params?: GetMisAnalyticsParams,
+  options?: RequestInit,
+): Promise<MisAnalyticsEnvelope> => {
+  return customFetch<MisAnalyticsEnvelope>(getGetMisAnalyticsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMisAnalyticsQueryKey = (params?: GetMisAnalyticsParams) => {
+  return [`/api/mis/analytics`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetMisAnalyticsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMisAnalytics>>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+>(
+  params?: GetMisAnalyticsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMisAnalytics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMisAnalyticsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMisAnalytics>>> = ({
+    signal,
+  }) => getMisAnalytics(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMisAnalytics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMisAnalyticsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMisAnalytics>>
+>;
+export type GetMisAnalyticsQueryError = ErrorType<
+  BadRequestResponse | ForbiddenResponse
+>;
+
+/**
+ * @summary Get permission-scoped advanced MIS analytics
+ */
+
+export function useGetMisAnalytics<
+  TData = Awaited<ReturnType<typeof getMisAnalytics>>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+>(
+  params?: GetMisAnalyticsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMisAnalytics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMisAnalyticsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Export all permission-scoped MIS analytics rows
+ */
+export const getExportMisAnalyticsUrl = (params: ExportMisAnalyticsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/mis/analytics/export?${stringifiedParams}`
+    : `/api/mis/analytics/export`;
+};
+
+export const exportMisAnalytics = async (
+  params: ExportMisAnalyticsParams,
+  options?: RequestInit,
+): Promise<string | Blob> => {
+  return customFetch<string | Blob>(getExportMisAnalyticsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getExportMisAnalyticsQueryKey = (
+  params?: ExportMisAnalyticsParams,
+) => {
+  return [`/api/mis/analytics/export`, ...(params ? [params] : [])] as const;
+};
+
+export const getExportMisAnalyticsQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportMisAnalytics>>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+>(
+  params: ExportMisAnalyticsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportMisAnalytics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getExportMisAnalyticsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof exportMisAnalytics>>
+  > = ({ signal }) => exportMisAnalytics(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportMisAnalytics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ExportMisAnalyticsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportMisAnalytics>>
+>;
+export type ExportMisAnalyticsQueryError = ErrorType<
+  BadRequestResponse | ForbiddenResponse
+>;
+
+/**
+ * @summary Export all permission-scoped MIS analytics rows
+ */
+
+export function useExportMisAnalytics<
+  TData = Awaited<ReturnType<typeof exportMisAnalytics>>,
+  TError = ErrorType<BadRequestResponse | ForbiddenResponse>,
+>(
+  params: ExportMisAnalyticsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof exportMisAnalytics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getExportMisAnalyticsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

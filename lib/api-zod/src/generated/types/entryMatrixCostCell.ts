@@ -5,6 +5,7 @@
  * COGS (Cost of Goods Sold) Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { ReportComponentCell } from "./reportComponentCell";
 
 /**
  * One service's cost contribution on a given entry.
@@ -14,4 +15,6 @@ export interface EntryMatrixCostCell {
   cost: number;
   mandayContribution: number;
   costPerManday: number;
+  /** Meal-type / sub-service breakdown for this cell (empty for standard services). */
+  components?: ReportComponentCell[];
 }

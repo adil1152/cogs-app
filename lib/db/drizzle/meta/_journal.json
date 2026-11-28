@@ -8,6 +8,13 @@
       "when": 1782713240526,
       "tag": "0000_freezing_chameleon",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795001904699,
+      "tag": "0001_round_dreaming_celestial",
+      "breakpoints": true
     }
   ]
 }

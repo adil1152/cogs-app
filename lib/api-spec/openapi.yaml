@@ -30,7 +30,59 @@ tags:
     description: Object storage upload and serving endpoints.
   - name: Settings
     description: Application-wide settings (SMTP email configuration).
+  - name: MIS
+    description: Management Information System operations. MIS authorization is separate from COGS.
 paths:
+  /admin/audit-log:
+    get:
+      operationId: listSystemAuditLog
+      tags: [Settings]
+      summary: Administrator-only system change history
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: search, in: query, schema: {type: string}}
+        - {name: module, in: query, schema: {type: string, enum: [COGS, MIS, System]}}
+        - {name: action, in: query, schema: {type: string, enum: [INSERT, UPDATE, DELETE]}}
+        - {name: from, in: query, schema: {type: string, format: date}}
+        - {name: to, in: query, schema: {type: string, format: date}}
+      responses:
+        "200":
+          description: Paginated immutable change history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, pageSize]
+                properties:
+                  total: {type: integer}
+                  page: {type: integer}
+                  pageSize: {type: integer}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, occurredAt, module, actorName, action, entityType, changedFields]
+                      properties:
+                        id: {type: string}
+                        occurredAt: {type: string}
+                        module: {type: string}
+                        actorId: {type: string, nullable: true}
+                        actorName: {type: string}
+                        action: {type: string}
+                        entityType: {type: string}
+                        entityId: {type: string, nullable: true}
+                        entityName: {type: string, nullable: true}
+                        projectId: {type: string, nullable: true}
+                        projectName: {type: string, nullable: true}
+                        requestId: {type: string, nullable: true}
+                        path: {type: string, nullable: true}
+                        changedFields: {type: array, items: {type: string}}
+                        oldValues: {type: object, additionalProperties: {}, nullable: true}
+                        newValues: {type: object, additionalProperties: {}, nullable: true}
+        "401":
+          description: Authentication required
+        "403":
+          description: Admin required
   /healthz:
     get:
       operationId: healthCheck
@@ -59,6 +111,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthUserEnvelope'
+        '409':
+          description: Stored account details are invalid. Administrator review is required before retrying; no account data is changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /auth/register:
     post:
       tags: [Auth]
@@ -107,6 +165,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthUserEnvelope'
+        '409':
+          description: Credentials verified but stored account details are invalid. Contact an administrator and retry after approved repair.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           description: Invalid credentials
           content:
@@ -1522,6 +1586,847 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ApprovalChainEntry'
+  /mis/me:
+    get:
+      tags: [MIS]
+      operationId: misGetCurrentAccess
+      summary: Get current user's effective MIS access and project grants
+      responses:
+        '200':
+          description: Effective MIS membership and permissions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisMe' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/users:
+    get:
+      tags: [MIS]
+      operationId: misListUsers
+      summary: List users available to an MIS administrator authority picker
+      parameters:
+        - $ref: '#/components/parameters/MisSearchQuery'
+        - $ref: '#/components/parameters/MisPageQuery'
+        - $ref: '#/components/parameters/MisPageSizeQuery'
+      responses:
+        '200':
+          description: Matching users.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisUserPickerPage' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/authorities:
+    get:
+      tags: [MIS]
+      operationId: misListAuthorities
+      summary: List MIS authority grants
+      parameters:
+        - $ref: '#/components/parameters/MisProjectIdQuery'
+        - $ref: '#/components/parameters/MisSearchQuery'
+        - $ref: '#/components/parameters/MisPageQuery'
+        - $ref: '#/components/parameters/MisPageSizeQuery'
+      responses:
+        '200':
+          description: Paginated authority grants.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisAuthorityPage' }
+        default: { $ref: '#/components/responses/MisError' }
+    post:
+      tags: [MIS]
+      operationId: misCreateAuthority
+      summary: Grant an MIS role globally or for one project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisAuthorityInput' }
+      responses:
+        '201':
+          description: Authority grant created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisAuthority' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/authorities/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    patch:
+      tags: [MIS]
+      operationId: misUpdateAuthority
+      summary: Replace the writable values of an MIS authority grant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisAuthorityInput' }
+      responses:
+        '200':
+          description: Authority grant updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisAuthority' }
+        default: { $ref: '#/components/responses/MisError' }
+    delete:
+      tags: [MIS]
+      operationId: misDeleteAuthority
+      summary: Revoke an MIS authority grant
+      responses:
+        '200':
+          description: Authority grant revoked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/projects:
+    get:
+      tags: [MIS]
+      operationId: misListProjects
+      summary: List MIS projects visible to the current user
+      parameters:
+        - $ref: '#/components/parameters/MisSearchQuery'
+        - $ref: '#/components/parameters/MisProjectStatusQuery'
+        - $ref: '#/components/parameters/MisPageQuery'
+        - $ref: '#/components/parameters/MisPageSizeQuery'
+      responses:
+        '200':
+          description: Paginated permitted projects.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisProjectPage' }
+        default: { $ref: '#/components/responses/MisError' }
+    post:
+      tags: [MIS]
+      operationId: misCreateProject
+      summary: Create an MIS project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisProjectInput' }
+      responses:
+        '201':
+          description: Project created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisProject' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/projects/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    get:
+      tags: [MIS]
+      operationId: misGetProject
+      summary: Get a permitted MIS project with effective project permissions
+      responses:
+        '200':
+          description: Project.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisProject' }
+        default: { $ref: '#/components/responses/MisError' }
+    patch:
+      tags: [MIS]
+      operationId: misUpdateProject
+      summary: Replace writable MIS project values
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisProjectInput' }
+      responses:
+        '200':
+          description: Project updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisProject' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/tabs:
+    get:
+      tags: [MIS]
+      operationId: misListTabs
+      summary: List MIS tab/category master records
+      parameters:
+        - $ref: '#/components/parameters/MisSearchQuery'
+        - $ref: '#/components/parameters/MisActiveQuery'
+      responses:
+        '200':
+          description: Tabs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MisTab' }
+        default: { $ref: '#/components/responses/MisError' }
+    post:
+      tags: [MIS]
+      operationId: misCreateTab
+      summary: Create an MIS tab/category master record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisTabInput' }
+      responses:
+        '201':
+          description: Tab created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisTab' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/tabs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    patch:
+      tags: [MIS]
+      operationId: misUpdateTab
+      summary: Replace writable MIS tab/category master values
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisTabInput' }
+      responses:
+        '200':
+          description: Tab updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisTab' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/projects/{id}/tabs:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    get:
+      tags: [MIS]
+      operationId: misListProjectTabs
+      summary: List master tabs and their assignments for a project
+      responses:
+        '200':
+          description: Project tab assignments.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MisProjectTabAssignment' }
+        default: { $ref: '#/components/responses/MisError' }
+    put:
+      tags: [MIS]
+      operationId: misReplaceProjectTabs
+      summary: Replace a project's tab assignment set and display sequence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisProjectTabAssignmentsInput' }
+      responses:
+        '200':
+          description: Project tab assignments replaced.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MisProjectTabAssignment' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/projects/{id}/services:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    get:
+      tags: [MIS]
+      operationId: misListProjectServices
+      summary: List project-local MIS services
+      parameters:
+        - $ref: '#/components/parameters/MisTabIdQuery'
+        - $ref: '#/components/parameters/MisActiveQuery'
+      responses:
+        '200':
+          description: Services.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MisService' }
+        default: { $ref: '#/components/responses/MisError' }
+    post:
+      tags: [MIS]
+      operationId: misCreateProjectService
+      summary: Create a project-local service under an enabled project tab
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisServiceInput' }
+      responses:
+        '201':
+          description: Service created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisService' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/projects/{id}/services/reorder:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    post:
+      tags: [MIS]
+      operationId: misReorderProjectServices
+      summary: Replace a project's service display order atomically
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisServiceReorderInput' }
+      responses:
+        '200':
+          description: Services in their new persistent order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MisService' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/projects/{id}/entry-services:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    get:
+      tags: [MIS]
+      operationId: misListEntryServices
+      summary: List every active service eligible for a project period
+      parameters:
+        - $ref: '#/components/parameters/MisFromQuery'
+        - $ref: '#/components/parameters/MisToQuery'
+      responses:
+        '200':
+          description: Unpaginated eligible services with tab display metadata.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MisService' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/services/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    patch:
+      tags: [MIS]
+      operationId: misUpdateService
+      summary: Replace writable project-local MIS service values
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisServiceInput' }
+      responses:
+        '200':
+          description: Service updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisService' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries:
+    get:
+      tags: [MIS]
+      operationId: misListEntries
+      summary: List permitted period-based MIS entries
+      parameters:
+        - $ref: '#/components/parameters/MisProjectIdsQuery'
+        - $ref: '#/components/parameters/MisTabIdQuery'
+        - $ref: '#/components/parameters/MisServiceIdQuery'
+        - $ref: '#/components/parameters/MisFromQuery'
+        - $ref: '#/components/parameters/MisToQuery'
+        - $ref: '#/components/parameters/MisStartFromQuery'
+        - $ref: '#/components/parameters/MisStartToQuery'
+        - $ref: '#/components/parameters/MisEntryCurrencyQuery'
+        - $ref: '#/components/parameters/MisEntryStatusQuery'
+        - $ref: '#/components/parameters/MisEntryStatusesQuery'
+        - $ref: '#/components/parameters/MisEntryTypeQuery'
+        - $ref: '#/components/parameters/MisSearchQuery'
+        - $ref: '#/components/parameters/MisPageQuery'
+        - $ref: '#/components/parameters/MisPageSizeQuery'
+      responses:
+        '200':
+          description: Paginated permitted entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisEntryPage' }
+        default: { $ref: '#/components/responses/MisError' }
+    post:
+      tags: [MIS]
+      operationId: misCreateEntry
+      summary: Create an MIS entry in draft status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisEntryInput' }
+      responses:
+        '201':
+          description: Draft entry created; amount is computed by the server.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisEntry' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries/bulk:
+    post:
+      tags: [MIS]
+      operationId: misCreateBulkEntries
+      summary: Create all non-blank service lines for a project period atomically
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisBulkEntriesInput' }
+      responses:
+        '201':
+          description: All saved lines, in input order. Blank lines are omitted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisBulkEntriesResponse' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries/creators:
+    get:
+      tags: [MIS]
+      operationId: misListEntryCreators
+      summary: List distinct creators of permitted MIS bulk parents
+      description: Returns only accounts that created a bulk parent in a project where the caller has view_entries permission.
+      parameters:
+        - { $ref: '#/components/parameters/MisSearchQuery' }
+        - { $ref: '#/components/parameters/MisPageQuery' }
+        - { $ref: '#/components/parameters/MisPageSizeQuery' }
+      responses:
+        '200':
+          description: Creators of permitted bulk parents.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisUserPickerPage' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries/parents:
+    get:
+      tags: [MIS]
+      operationId: misListEntryParents
+      summary: Search permitted atomic MIS bulk parents
+      parameters:
+        - { name: bulkNumber, in: query, schema: { type: string, maxLength: 32 } }
+        - { name: projectId, in: query, schema: { type: string } }
+        - { name: projectNumber, in: query, schema: { type: string, maxLength: 32 } }
+        - { name: fromDate, in: query, schema: { type: string, format: date } }
+        - { name: toDate, in: query, schema: { type: string, format: date } }
+        - { name: createdById, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/MisEntryStatusQuery' }
+        - { name: entryType, in: query, schema: { type: string, enum: [bulk] } }
+        - { $ref: '#/components/parameters/MisSearchQuery' }
+        - { $ref: '#/components/parameters/MisPageQuery' }
+        - { $ref: '#/components/parameters/MisPageSizeQuery' }
+      responses:
+        '200':
+          description: Paginated permitted bulk parents.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisParentPage' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries/parents/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    get:
+      tags: [MIS]
+      operationId: misGetEntryParent
+      summary: Get one permitted bulk parent and all children
+      responses:
+        '200':
+          description: Atomic bulk parent and child service lines.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisParentDetail' }
+        default: { $ref: '#/components/responses/MisError' }
+    patch:
+      tags: [MIS]
+      operationId: misUpdateEntryParent
+      summary: Replace all child lines in a bulk parent atomically
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisParentEditInput' }
+      responses:
+        '200':
+          description: Updated parent and synchronized children.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisParentMutationResponse' }
+        default: { $ref: '#/components/responses/MisError' }
+    delete:
+      tags: [MIS]
+      operationId: misDeleteEntryParent
+      summary: Delete a permitted bulk parent and all children atomically
+      responses:
+        '200':
+          description: Bulk parent deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisParentDeleteResponse' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries/parents/{id}/action:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    post:
+      tags: [MIS]
+      operationId: misActOnEntryParent
+      summary: Apply one workflow action to a bulk parent and every child
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisParentActionInput' }
+      responses:
+        '200':
+          description: Workflow action completed atomically.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisParentMutationResponse' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries/parents/{id}/history:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    get:
+      tags: [MIS]
+      operationId: misGetEntryParentHistory
+      summary: Get append-only audit history for a bulk parent
+      responses:
+        '200':
+          description: Parent history, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MisParentHistoryItem' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    get:
+      tags: [MIS]
+      operationId: misGetEntry
+      summary: Get one permitted MIS entry
+      responses:
+        '200':
+          description: Entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisEntry' }
+        default: { $ref: '#/components/responses/MisError' }
+    patch:
+      tags: [MIS]
+      operationId: misUpdateEntry
+      summary: Replace writable MIS entry values
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisEntryInput' }
+      responses:
+        '200':
+          description: Entry updated; amount and snapshots are recomputed by the server.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisEntry' }
+        default: { $ref: '#/components/responses/MisError' }
+    delete:
+      tags: [MIS]
+      operationId: misDeleteEntry
+      summary: Delete an MIS entry when the caller has the required permission
+      responses:
+        '200':
+          description: Entry deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries/{id}/action:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    post:
+      tags: [MIS]
+      operationId: misActOnEntry
+      summary: Submit, approve, reject, reset, or cancel an MIS entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisEntryActionInput' }
+      responses:
+        '200':
+          description: Entry workflow action completed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisEntry' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/entries/{id}/history:
+    parameters:
+      - $ref: '#/components/parameters/MisIdPath'
+    get:
+      tags: [MIS]
+      operationId: misGetEntryHistory
+      summary: Get the permission-gated audit history for an MIS entry
+      responses:
+        '200':
+          description: Entry history, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MisEntryHistoryItem' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/reports:
+    get:
+      tags: [MIS]
+      operationId: misGetReport
+      summary: Run a currency-safe unified MIS report over permitted projects
+      parameters:
+        - $ref: '#/components/parameters/MisProjectIdsQuery'
+        - $ref: '#/components/parameters/MisTabIdQuery'
+        - $ref: '#/components/parameters/MisServiceIdQuery'
+        - $ref: '#/components/parameters/MisFromQuery'
+        - $ref: '#/components/parameters/MisToQuery'
+        - $ref: '#/components/parameters/MisEntryStatusDefaultApprovedQuery'
+        - $ref: '#/components/parameters/MisEntryTypeQuery'
+        - $ref: '#/components/parameters/MisSearchQuery'
+        - $ref: '#/components/parameters/MisReportTypeQuery'
+        - $ref: '#/components/parameters/MisCompareFromQuery'
+        - $ref: '#/components/parameters/MisCompareToQuery'
+        - $ref: '#/components/parameters/MisCurrencyQuery'
+      responses:
+        '200':
+          description: Currency-separated totals, comparison totals, and grouping rows.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisReport' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/reports/export:
+    get:
+      tags: [MIS]
+      operationId: misExportReport
+      summary: Export a permitted unified MIS report
+      parameters:
+        - $ref: '#/components/parameters/MisProjectIdsQuery'
+        - $ref: '#/components/parameters/MisTabIdQuery'
+        - $ref: '#/components/parameters/MisServiceIdQuery'
+        - $ref: '#/components/parameters/MisFromQuery'
+        - $ref: '#/components/parameters/MisToQuery'
+        - $ref: '#/components/parameters/MisEntryStatusDefaultApprovedQuery'
+        - $ref: '#/components/parameters/MisEntryTypeQuery'
+        - $ref: '#/components/parameters/MisSearchQuery'
+        - $ref: '#/components/parameters/MisReportTypeQuery'
+        - $ref: '#/components/parameters/MisCompareFromQuery'
+        - $ref: '#/components/parameters/MisCompareToQuery'
+        - $ref: '#/components/parameters/MisCurrencyQuery'
+        - $ref: '#/components/parameters/MisExportFormatQuery'
+      responses:
+        '200':
+          description: Binary report export in the requested format.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/dashboard/export:
+    get:
+      tags: [MIS]
+      operationId: misExportDashboard
+      summary: Download the MIS Dashboard or MIS Overview Report as PDF or Excel
+      description: Server-computed export of the same dashboard aggregates. Requires reports, financial and export permission for every included project.
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema: { type: string, enum: [pdf, xlsx] }
+        - name: view
+          in: query
+          required: true
+          schema: { type: string, enum: [dashboard, overview] }
+        - $ref: '#/components/parameters/MisProjectIdsQuery'
+        - $ref: '#/components/parameters/MisTabIdQuery'
+        - $ref: '#/components/parameters/MisServiceIdQuery'
+        - $ref: '#/components/parameters/MisFromQuery'
+        - $ref: '#/components/parameters/MisToQuery'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, draft, submitted, approved, rejected, returned, cancelled]
+            default: all
+      responses:
+        '200':
+          description: Binary PDF or XLSX document.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/projects/{id}/percentage-services:
+    get:
+      tags: [MIS]
+      operationId: misListPercentageServices
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: kind, in: query, required: true, schema: { $ref: '#/components/schemas/MisPercentageKind' } }
+      responses:
+        '200':
+          description: Permission-protected project percentage services.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/MisPercentageService' } }
+        default: { $ref: '#/components/responses/MisError' }
+    post:
+      tags: [MIS]
+      operationId: misCreatePercentageService
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisPercentageServiceInput' }
+      responses:
+        '201':
+          description: Created percentage service.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisPercentageService' }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/projects/{id}/percentage-services/{serviceId}:
+    patch:
+      tags: [MIS]
+      operationId: misUpdatePercentageService
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: serviceId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MisPercentageServiceInput' }
+      responses:
+        '200':
+          description: Updated percentage service.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisPercentageService' }
+        default: { $ref: '#/components/responses/MisError' }
+    delete:
+      tags: [MIS]
+      operationId: misDeletePercentageService
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: serviceId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Deleted percentage service. }
+        default: { $ref: '#/components/responses/MisError' }
+  /mis/dashboard:
+    get:
+      tags: [MIS]
+      operationId: misGetDashboard
+      summary: Get currency-safe MIS dashboard aggregates for permitted projects
+      parameters:
+        - name: includeServices
+          in: query
+          description: Include service-level financial breakdowns for the separate overview report.
+          schema:
+            type: string
+            enum: ["true", "false"]
+        - $ref: '#/components/parameters/MisProjectIdsQuery'
+        - $ref: '#/components/parameters/MisTabIdQuery'
+        - $ref: '#/components/parameters/MisServiceIdQuery'
+        - $ref: '#/components/parameters/MisFromQuery'
+        - $ref: '#/components/parameters/MisToQuery'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, draft, submitted, approved, rejected, returned, cancelled]
+            default: all
+        - $ref: '#/components/parameters/MisEntryTypeQuery'
+        - $ref: '#/components/parameters/MisSearchQuery'
+      responses:
+        '200':
+          description: Currency-separated dashboard totals, breakdowns, and recent permitted entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisDashboard' }
+        default: { $ref: '#/components/responses/MisError' }
+
+  /mis/analytics:
+    get:
+      operationId: getMisAnalytics
+      tags: [MIS]
+      summary: Get permission-scoped advanced MIS analytics
+      parameters:
+        - $ref: '#/components/parameters/MisAnalyticsProjectIds'
+        - $ref: '#/components/parameters/MisAnalyticsProjectCode'
+        - $ref: '#/components/parameters/MisAnalyticsTabIds'
+        - $ref: '#/components/parameters/MisAnalyticsServiceIds'
+        - $ref: '#/components/parameters/MisAnalyticsServiceCodes'
+        - $ref: '#/components/parameters/MisAnalyticsTypes'
+        - $ref: '#/components/parameters/MisAnalyticsReportType'
+        - $ref: '#/components/parameters/MisAnalyticsSearch'
+        - $ref: '#/components/parameters/MisAnalyticsCurrency'
+        - $ref: '#/components/parameters/MisAnalyticsFrom'
+        - $ref: '#/components/parameters/MisAnalyticsTo'
+        - $ref: '#/components/parameters/MisAnalyticsStatus'
+        - $ref: '#/components/parameters/MisAnalyticsCompareFrom'
+        - $ref: '#/components/parameters/MisAnalyticsCompareTo'
+        - $ref: '#/components/parameters/MisAnalyticsGroupBy'
+        - $ref: '#/components/parameters/MisAnalyticsView'
+        - $ref: '#/components/parameters/MisAnalyticsMode'
+        - $ref: '#/components/parameters/MisAnalyticsPage'
+        - $ref: '#/components/parameters/MisAnalyticsPageSize'
+        - $ref: '#/components/parameters/MisAnalyticsPeriodComparison'
+        - $ref: '#/components/parameters/MisAnalyticsPeriods'
+      responses:
+        '200':
+          description: Currency-safe aggregate analytics response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MisAnalyticsEnvelope' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /mis/analytics/export:
+    get:
+      operationId: exportMisAnalytics
+      tags: [MIS]
+      summary: Export all permission-scoped MIS analytics rows
+      parameters:
+        - $ref: '#/components/parameters/MisAnalyticsProjectIds'
+        - $ref: '#/components/parameters/MisAnalyticsProjectCode'
+        - $ref: '#/components/parameters/MisAnalyticsTabIds'
+        - $ref: '#/components/parameters/MisAnalyticsServiceIds'
+        - $ref: '#/components/parameters/MisAnalyticsServiceCodes'
+        - $ref: '#/components/parameters/MisAnalyticsTypes'
+        - $ref: '#/components/parameters/MisAnalyticsReportType'
+        - $ref: '#/components/parameters/MisAnalyticsSearch'
+        - $ref: '#/components/parameters/MisAnalyticsCurrency'
+        - $ref: '#/components/parameters/MisAnalyticsFrom'
+        - $ref: '#/components/parameters/MisAnalyticsTo'
+        - $ref: '#/components/parameters/MisAnalyticsStatus'
+        - $ref: '#/components/parameters/MisAnalyticsCompareFrom'
+        - $ref: '#/components/parameters/MisAnalyticsCompareTo'
+        - $ref: '#/components/parameters/MisAnalyticsGroupBy'
+        - $ref: '#/components/parameters/MisAnalyticsView'
+        - $ref: '#/components/parameters/MisAnalyticsMode'
+        - $ref: '#/components/parameters/MisAnalyticsPeriodComparison'
+        - $ref: '#/components/parameters/MisAnalyticsPeriods'
+        - name: format
+          in: query
+          required: true
+          schema: { type: string, enum: [csv, xlsx, pdf] }
+      responses:
+        '200':
+          description: Complete export using the requested format
+          content:
+            text/csv: { schema: { type: string } }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+            application/pdf:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
 components:
   parameters:
     AuthorizationSessionHeader:
@@ -1538,7 +2443,345 @@ components:
       description: Browser session cookie.
       schema:
         type: string
+    MisIdPath:
+      name: id
+      in: path
+      required: true
+      description: MIS record identifier.
+      schema: { type: string }
+    MisProjectIdQuery:
+      name: projectId
+      in: query
+      schema: { type: string }
+    MisProjectIdsQuery:
+      name: projectIds
+      in: query
+      description: Comma-separated MIS project identifiers.
+      schema: { type: string }
+    MisTabIdQuery:
+      name: tabId
+      in: query
+      schema: { type: string }
+    MisServiceIdQuery:
+      name: serviceId
+      in: query
+      schema: { type: string }
+    MisFromQuery:
+      name: from
+      in: query
+      schema: { type: string, format: date }
+    MisToQuery:
+      name: to
+      in: query
+      schema: { type: string, format: date }
+    MisStartFromQuery:
+      name: startFrom
+      in: query
+      description: Inclusive lower bound for the entry period start date. Unlike `from`, this does not require full period containment.
+      schema: { type: string, format: date }
+    MisStartToQuery:
+      name: startTo
+      in: query
+      description: Inclusive upper bound for the entry period start date. Unlike `to`, this does not require full period containment.
+      schema: { type: string, format: date }
+    MisCompareFromQuery:
+      name: compareFrom
+      in: query
+      schema: { type: string, format: date }
+    MisCompareToQuery:
+      name: compareTo
+      in: query
+      schema: { type: string, format: date }
+    MisSearchQuery:
+      name: search
+      in: query
+      schema: { type: string, maxLength: 200 }
+    MisPageQuery:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    MisPageSizeQuery:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    MisActiveQuery:
+      name: active
+      in: query
+      schema: { type: boolean }
+    MisProjectStatusQuery:
+      name: status
+      in: query
+      schema: { $ref: '#/components/schemas/MisProjectStatus' }
+    MisEntryStatusQuery:
+      name: status
+      in: query
+      schema: { $ref: '#/components/schemas/MisEntryStatus' }
+    MisEntryStatusesQuery:
+      name: statuses
+      in: query
+      description: Comma-separated exact subset of entry statuses. Takes precedence over the scalar status filter when supplied.
+      schema:
+        type: string
+        pattern: '^(draft|submitted|approved|rejected|returned|cancelled)(,(draft|submitted|approved|rejected|returned|cancelled))*$'
+    MisEntryStatusDefaultApprovedQuery:
+      name: status
+      in: query
+      description: Entry status filter. Defaults to approved for report and dashboard aggregates.
+      schema: { $ref: '#/components/schemas/MisEntryStatus', default: approved }
+    MisEntryTypeQuery:
+      name: entryType
+      in: query
+      schema: { $ref: '#/components/schemas/MisTabType' }
+    MisReportTypeQuery:
+      name: reportType
+      in: query
+      required: true
+      schema: { $ref: '#/components/schemas/MisReportType' }
+    MisCurrencyQuery:
+      name: currency
+      in: query
+      description: Optional ISO 4217 currency. Omit to receive separate currency groups.
+      schema: { type: string, minLength: 3, maxLength: 3 }
+    MisEntryCurrencyQuery:
+      name: currency
+      in: query
+      description: Optional ISO 4217 currency filter for entry snapshots.
+      schema: { type: string, minLength: 3, maxLength: 3 }
+    MisExportFormatQuery:
+      name: format
+      in: query
+      required: true
+      schema: { $ref: '#/components/schemas/MisExportFormat' }
+    MisAnalyticsProjectIds: { name: projectIds, in: query, schema: { type: string } }
+    MisAnalyticsProjectCode: { name: projectCode, in: query, schema: { type: string } }
+    MisAnalyticsTabIds: { name: tabIds, in: query, schema: { type: string } }
+    MisAnalyticsServiceIds: { name: serviceIds, in: query, schema: { type: string } }
+    MisAnalyticsServiceCodes: { name: serviceCodes, in: query, schema: { type: string } }
+    MisAnalyticsTypes: { name: types, in: query, schema: { type: string } }
+    MisAnalyticsReportType:
+      name: reportType
+      in: query
+      schema:
+        type: string
+        enum: [income, cost, expense, salary, summary, project-profitability, project-comparison, period-comparison, service-tab-comparison]
+        default: summary
+      description: >
+        Report category. Category report types filter to that financial class;
+        summary and comparison report types retain all configured classes.
+    MisAnalyticsSearch:
+      name: search
+      in: query
+      schema: { type: string, maxLength: 200 }
+      description: Case-insensitive search over scoped project, tab, service, and entry snapshot text.
+    MisAnalyticsCurrency:
+      name: currency
+      in: query
+      schema: { type: string, pattern: '^[A-Za-z]{3}$' }
+      description: Optional ISO 4217 currency filter. Omit to retain separate currency groups.
+    MisAnalyticsFrom: { name: from, in: query, schema: { type: string, format: date } }
+    MisAnalyticsTo: { name: to, in: query, schema: { type: string, format: date } }
+    MisAnalyticsStatus:
+      name: status
+      in: query
+      schema: { type: string, enum: [draft, submitted, approved, rejected, returned, cancelled, all], default: approved }
+      description: >
+        Explicit status selection. Comma-separated and repeated values are
+        accepted. Use all to include every status. If absent, approved remains
+        the backwards-compatible default.
+    MisAnalyticsCompareFrom: { name: compareFrom, in: query, schema: { type: string, format: date } }
+    MisAnalyticsCompareTo: { name: compareTo, in: query, schema: { type: string, format: date } }
+    MisAnalyticsGroupBy:
+      name: groupBy
+      in: query
+      schema: { type: string, example: "project,type" }
+      description: Ordered comma-separated date, project, projectCode, type, service, month, or year.
+    MisAnalyticsView:
+      name: view
+      in: query
+      schema: { type: string, enum: [daily, weekly, monthly, custom], default: monthly }
+    MisAnalyticsMode:
+      name: mode
+      in: query
+      schema: { type: string, enum: [analytics, project, service, type, dynamic], default: analytics }
+    MisAnalyticsPage: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    MisAnalyticsPageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 50 } }
+    MisAnalyticsPeriodComparison:
+      name: periodComparison
+      in: query
+      schema: { type: boolean, default: false }
+      description: Enable additive comparison of three or more selected periods.
+    MisAnalyticsPeriods:
+      name: periods
+      in: query
+      required: false
+      schema: { type: string }
+      description: >
+        JSON array of {id,label?,from,to} period objects. Required when
+        periodComparison=true; minimum 3 and maximum 24 periods.
+  responses:
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: The caller is not allowed to view the requested analytics scope.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    MisError:
+      description: Authentication, authorization, validation, conflict, or not-found error.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   schemas:
+    MisAnalyticsEnvelope:
+      type: object
+      required: [filters, dateBasis, totalsByCurrency, rows, trend, pagination]
+      properties:
+        filters: { type: object }
+        dateBasis: { type: string, enum: [period_start] }
+        totalsByCurrency:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsCurrencyTotals' }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsRow' }
+        trend:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsRow' }
+        pagination: { $ref: '#/components/schemas/MisAnalyticsPagination' }
+        periods:
+          type: array
+          description: >
+            Additive multi-period results. Each item is a period descriptor
+            and the exact non-recursive analytics result fields for that period.
+          items: { $ref: '#/components/schemas/MisAnalyticsPeriodResult' }
+    MisAnalyticsPeriod:
+      type: object
+      required: [id, label, from, to]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+    MisAnalyticsPeriodResult:
+      type: object
+      required: [period, totalsByCurrency, rows, trend, pagination]
+      properties:
+        period: { $ref: '#/components/schemas/MisAnalyticsPeriod' }
+        totalsByCurrency:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsCurrencyTotals' }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsRow' }
+        trend:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsRow' }
+        pagination: { $ref: '#/components/schemas/MisAnalyticsPagination' }
+    MisAnalyticsCurrencyTotals:
+      type: object
+      required: [currency, current, previous, difference, percentageDifference]
+      properties:
+        currency: { type: string }
+        current: { $ref: '#/components/schemas/MisAnalyticsMetricSet' }
+        previous: { allOf: [{ $ref: '#/components/schemas/MisAnalyticsMetricSet' }], nullable: true }
+        difference: { type: object, nullable: true }
+        percentageDifference: { type: object, nullable: true }
+    MisAnalyticsRow:
+      type: object
+      required: [currency, current, previous, difference, percentageDifference, drilldownFilters]
+      properties:
+        currency: { type: string }
+        projectId: { type: string, nullable: true }
+        projectIds: { type: array, items: { type: string } }
+        projectName: { type: string, nullable: true }
+        projectCode: { type: string, nullable: true }
+        tabId: { type: string, nullable: true }
+        tabIds: { type: array, items: { type: string } }
+        tabName:
+          type: string
+          nullable: true
+          description: Configured tab label; type groups are separated by tab ID.
+        type: { type: string, nullable: true }
+        serviceId: { type: string, nullable: true }
+        serviceIds: { type: array, items: { type: string } }
+        serviceCode: { type: string, nullable: true }
+        serviceName: { type: string, nullable: true }
+        serviceOrder: { type: integer, nullable: true }
+        calculatePercentAgainstIncome: { type: boolean, nullable: true }
+        periodId: { type: string, nullable: true }
+        periodLabel: { type: string, nullable: true }
+        periodStart: { type: string, format: date, nullable: true }
+        periodEnd: { type: string, format: date, nullable: true }
+        current: { $ref: '#/components/schemas/MisAnalyticsMetricSet' }
+        previous: { allOf: [{ $ref: '#/components/schemas/MisAnalyticsMetricSet' }], nullable: true }
+        difference: { type: object, nullable: true }
+        percentageDifference: { type: object, nullable: true }
+        drilldownFilters: { $ref: '#/components/schemas/MisAnalyticsDrilldownFilters' }
+        previousDrilldownFilters:
+          allOf: [{ $ref: '#/components/schemas/MisAnalyticsDrilldownFilters' }]
+          nullable: true
+    MisAnalyticsMetricSet:
+      type: object
+      required: [totalIncome, totalCost, totalExpenses, totalSalaries, grossProfit, netProfit, profitMargin, totalAmount, quantity, weightedRate, rateMin, rateMax, rateVaried, units, unitVaried, entryCount]
+      properties:
+        totalIncome: { type: number }
+        totalCost: { type: number }
+        totalExpenses: { type: number }
+        totalSalaries: { type: number }
+        grossProfit: { type: number }
+        netProfit: { type: number }
+        profitMargin: { type: number }
+        totalAmount: { type: number }
+        quantity: { type: number }
+        weightedRate: { type: number, nullable: true }
+        rateMin: { type: number, nullable: true }
+        rateMax: { type: number, nullable: true }
+        rateVaried: { type: boolean }
+        units: { type: array, items: { type: string } }
+        unitVaried: { type: boolean }
+        entryCount: { type: integer }
+        contributionPercent: { type: number }
+        incomeContributionPercent: { type: number }
+        costContributionPercent: { type: number }
+        expensesContributionPercent: { type: number }
+        salariesContributionPercent: { type: number }
+        percentageAgainstIncome:
+          type: number
+          nullable: true
+          description: >
+            Amount divided by the period/currency total income when the
+            effective category/service configuration enables it; null when disabled.
+    MisAnalyticsPagination:
+      type: object
+      required: [page, pageSize, total, pageCount]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        pageCount: { type: integer }
+    MisAnalyticsDrilldownFilters:
+      type: object
+      description: >
+        Safe filters for the Entries screen. from/to preserve the complete
+        report range; startFrom/startTo constrain from_date to the displayed
+        period-start bucket. Disabled project-tab assignments are never
+        represented by aggregate rows.
+      required: [projectIds, tabIds, serviceIds, entryType, status, statuses, currency, from, to, startFrom, startTo]
+      properties:
+        projectIds: { type: array, items: { type: string } }
+        tabIds: { type: array, items: { type: string } }
+        serviceIds: { type: array, items: { type: string } }
+        entryType: { type: string, nullable: true }
+        status: { type: string }
+        statuses: { type: array, items: { type: string, enum: [draft, submitted, approved, rejected, returned, cancelled] } }
+        currency: { type: string }
+        from: { type: string, format: date, nullable: true }
+        to: { type: string, format: date, nullable: true }
+        startFrom: { type: string, format: date, nullable: true }
+        startTo: { type: string, format: date, nullable: true }
     HealthStatus:
       type: object
       required: [status]
@@ -1796,6 +3039,9 @@ components:
         disabled:
           type: boolean
           description: When true, the project is hidden from all non-admin users, even those with explicit access. Admins still see it.
+        allowDuplicateDates:
+          type: boolean
+          description: When true, multiple daily entries may share the same date on this project. When false (default), creating a second entry for a date is rejected.
         backdatedDays:
           type: [integer, 'null']
           minimum: 0
@@ -1838,6 +3084,7 @@ components:
         contractEnd: { type: string, format: date }
         notes: { type: string }
         pdfRequired: { type: boolean }
+        allowDuplicateDates: { type: boolean }
         backdatedDays:
           type: [integer, 'null']
           minimum: 0
@@ -1857,6 +3104,7 @@ components:
         notes: { type: string }
         pdfRequired: { type: boolean }
         disabled: { type: boolean }
+        allowDuplicateDates: { type: boolean }
         backdatedDays:
           type: [integer, 'null']
           minimum: 0
@@ -2592,6 +3840,15 @@ components:
             expand the row inline. Empty / omitted for non-group services.
           items:
             $ref: '#/components/schemas/SubServiceTotal'
+        components:
+          type: array
+          description: |
+            Full breakdown of this service for the range: meal types
+            (kind=meal, qty + mandays) for food services, sub-services
+            (kind=sub, cost + mandays) for group services. Empty for
+            standard services.
+          items:
+            $ref: '#/components/schemas/ReportComponentCell'
     ServiceEntryRow:
       type: object
       description: |
@@ -2627,6 +3884,26 @@ components:
         costPerManday: { type: number }
         sequenceCode:
           type: [string, 'null']
+    ReportComponentCell:
+      type: object
+      description: |
+        One sub-component of a service inside a report cell: a meal type
+        (kind=meal, from the entry's saved meal snapshots — qty + mandays,
+        no per-meal cost) or a group sub-service (kind=sub — cost + mandays,
+        no qty). `key` is stable across rows ("meal:<name>" / "sub:<id>")
+        so the UI can align columns.
+      required: [key, name, kind, mandays]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        kind:
+          type: string
+          enum: [meal, sub]
+        qty:
+          type: [number, 'null']
+        cost:
+          type: [number, 'null']
+        mandays: { type: number }
     EntryMatrixCostCell:
       type: object
       description: One service's cost contribution on a given entry.
@@ -2636,6 +3913,11 @@ components:
         cost: { type: number }
         mandayContribution: { type: number }
         costPerManday: { type: number }
+        components:
+          type: array
+          description: Meal-type / sub-service breakdown for this cell (empty for standard services).
+          items:
+            $ref: '#/components/schemas/ReportComponentCell'
     EntryMatrixRow:
       type: object
       required:
@@ -2674,6 +3956,13 @@ components:
         totalCost: { type: number }
         totalMandayContribution: { type: number }
         costPerManday: { type: number }
+        components:
+          type: array
+          description: |
+            Per-component totals across the range, in display order. Also
+            serves as the union of component columns for the UI.
+          items:
+            $ref: '#/components/schemas/ReportComponentCell'
     EntryMatrixReport:
       type: object
       description: |
@@ -2703,6 +3992,687 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EntryMatrixServiceTotal'
+
+    MisRole:
+      type: string
+      enum: [mis_admin, mis_manager, project_manager, finance, data_entry, viewer, custom]
+    MisPermission:
+      type: string
+      description: A grantable MIS permission. Effective permissions are role permissions plus extraPermissions.
+      enum: [authorities, projects, configuration, project_config, tabs, services, entries, submit, approve, reports, export, financial, history, reset, rate_override, delete_approved, edit_approved, view_project, view_entries, create_entries, edit_entries, delete_entries, overhead, op_expense]
+    MisProjectStatus:
+      type: string
+      enum: [active, inactive]
+    MisTabType:
+      type: string
+      enum: [income, cost, expense, salary, other]
+    MisFinancialClass:
+      type: string
+      description: How the tab contributes to financial totals; excluded has no profit impact.
+      enum: [income, cost, expense, salary, excluded]
+    MisEntryStatus:
+      type: string
+      enum: [draft, submitted, approved, rejected, returned, cancelled]
+    MisEntryAction:
+      type: string
+      enum: [submit, approve, reject, return, reset, cancel]
+    MisReportType:
+      type: string
+      enum: [income, cost, expense, salary, summary, project-profitability, project-comparison, period-comparison, service-tab-comparison]
+    MisExportFormat:
+      type: string
+      enum: [xlsx, pdf, csv]
+
+    MisProjectPermissionGrant:
+      type: object
+      required: [projectId, permissions]
+      properties:
+        projectId: { type: string }
+        permissions:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/MisPermission' }
+    MisMe:
+      type: object
+      description: |
+        The current user's MIS membership. A caller has no MIS access when
+        hasAccess is false. `projectPermissions` is the effective grant per
+        project and is the source of truth for project-scoped UI gates.
+      required: [hasAccess, roles, permissions, projectIds, globalAccess, projectPermissions]
+      properties:
+        hasAccess: { type: boolean }
+        roles:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/MisRole' }
+        permissions:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/MisPermission' }
+        projectIds:
+          type: array
+          uniqueItems: true
+          items: { type: string }
+        globalAccess: { type: boolean }
+        projectPermissions:
+          type: array
+          description: Empty for a global-only membership without project-specific grants.
+          items: { $ref: '#/components/schemas/MisProjectPermissionGrant' }
+    MisUserPickerItem:
+      type: object
+      required: [id, email, firstName, lastName, displayName]
+      properties:
+        id: { type: string }
+        email: { type: [string, 'null'], format: email }
+        firstName: { type: [string, 'null'] }
+        lastName: { type: [string, 'null'] }
+        displayName: { type: string }
+    MisUserPickerPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MisUserPickerItem' }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+    MisAuthorityInput:
+      type: object
+      description: A full authority grant. projectId null grants the role globally.
+      required: [userId, projectId, role, extraPermissions]
+      properties:
+        userId: { type: string }
+        projectId: { type: [string, 'null'] }
+        role: { $ref: '#/components/schemas/MisRole' }
+        extraPermissions:
+          type: array
+          uniqueItems: true
+          description: Explicit permissions added to, never subtracted from, the role's standard permissions.
+          items: { $ref: '#/components/schemas/MisPermission' }
+    MisAuthority:
+      allOf:
+        - $ref: '#/components/schemas/MisAuthorityInput'
+        - type: object
+          required: [id, user, createdAt, updatedAt]
+          properties:
+            id: { type: string }
+            user: { $ref: '#/components/schemas/MisUserPickerItem' }
+            projectName: { type: [string, 'null'] }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    MisAuthorityPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MisAuthority' }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+
+    MisReportingSettings:
+      type: object
+      description: Explicit, small project reporting controls; no untyped settings blob is used.
+      required: [defaultEntryStatus, preventDuplicatePeriods]
+      properties:
+        defaultEntryStatus:
+          $ref: '#/components/schemas/MisEntryStatus'
+          default: approved
+          description: Default status filter for project reporting; entries still begin as draft.
+        preventDuplicatePeriods:
+          type: boolean
+          description: Reject overlapping entries for the same project, tab, and service when true.
+        allowMultipleEntries:
+          type: boolean
+          default: false
+          description: Permit more than one MIS parent in a project period.
+        overlapPolicy:
+          type: string
+          enum: [nonoverlap, overlap, unlimited]
+          default: nonoverlap
+          description: Period policy when multiple MIS entries are enabled.
+        maxEntriesPerPeriod:
+          type: [integer, 'null']
+          minimum: 1
+          description: Optional maximum number of entries that may cover a period.
+    MisProjectInput:
+      type: object
+      description: Full writable MIS project values accepted by both create and PATCH.
+      required: [name, code, managerId, status, startDate, endDate, currency, reportingSettings]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        code: { type: string, minLength: 1, maxLength: 32 }
+        managerId: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/MisProjectStatus' }
+        startDate: { type: [string, 'null'], format: date }
+        endDate: { type: [string, 'null'], format: date }
+        currency: { type: string, minLength: 3, maxLength: 3, description: ISO 4217 currency code. }
+        reportingSettings: { $ref: '#/components/schemas/MisReportingSettings' }
+    MisProject:
+      allOf:
+        - $ref: '#/components/schemas/MisProjectInput'
+        - type: object
+          required: [id, manager, effectivePermissions, createdAt, updatedAt]
+          properties:
+            id: { type: string }
+            manager:
+              oneOf:
+                - $ref: '#/components/schemas/MisUserPickerItem'
+                - type: 'null'
+            effectivePermissions:
+              type: array
+              description: Current caller's effective permissions for this project.
+              uniqueItems: true
+              items: { $ref: '#/components/schemas/MisPermission' }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    MisProjectPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MisProject' }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+
+    MisTabInput:
+      type: object
+      description: Full writable MIS tab/category master values accepted by both create and PATCH.
+      required: [name, code, description, type, financialClass, sequence, active, allowEntry, allowReporting]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        code: { type: string, minLength: 1, maxLength: 32 }
+        description: { type: [string, 'null'], maxLength: 1000 }
+        type: { $ref: '#/components/schemas/MisTabType' }
+        financialClass: { $ref: '#/components/schemas/MisFinancialClass' }
+        rateEnabled:
+          type: boolean
+          default: true
+          description: Whether new custom-type entries use quantity × rate.
+        calculatePercentAgainstIncome:
+          type: boolean
+          default: false
+          description: Type default for percentage against total income.
+        sequence: { type: integer, minimum: 0 }
+        active: { type: boolean }
+        allowEntry: { type: boolean }
+        allowReporting: { type: boolean }
+    MisTab:
+      allOf:
+        - $ref: '#/components/schemas/MisTabInput'
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    MisProjectTabAssignmentInput:
+      type: object
+      required: [tabId, enabled, sequence]
+      properties:
+        tabId: { type: string }
+        enabled: { type: boolean }
+        sequence: { type: integer, minimum: 0 }
+        calculatePercentAgainstIncome:
+          type: [boolean, 'null']
+          description: Optional project-tab override; null inherits the type default.
+    MisProjectTabAssignmentsInput:
+      type: object
+      required: [assignments]
+      properties:
+        assignments:
+          type: array
+          items: { $ref: '#/components/schemas/MisProjectTabAssignmentInput' }
+    MisProjectTabAssignment:
+      allOf:
+        - $ref: '#/components/schemas/MisProjectTabAssignmentInput'
+        - type: object
+          required: [projectId, tab]
+          properties:
+            projectId: { type: string }
+            tab: { $ref: '#/components/schemas/MisTab' }
+
+    MisServiceInput:
+      type: object
+      description: Full writable project-local service values accepted by both create and PATCH.
+      required: [tabId, name, description, unit, defaultRate, active, sequence, effectiveFrom, effectiveTo]
+      properties:
+        tabId: { type: string }
+        quantitySourceServiceId:
+          type: [string, 'null']
+          description: Optional same-project Income service whose quantity defaults into this Cost service. Null removes the link.
+        code:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: Project-local service code. Omit on create to generate a safe code.
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: [string, 'null'], maxLength: 1000 }
+        unit: { type: string, minLength: 1, maxLength: 40 }
+        defaultRate: { type: number, minimum: 0, description: API number; persisted as an exact database decimal. }
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 service currency. Defaults to the project currency.
+        active: { type: boolean }
+        sequence: { type: integer, minimum: 0 }
+        effectiveFrom: { type: [string, 'null'], format: date }
+        effectiveTo: { type: [string, 'null'], format: date }
+    MisService:
+      allOf:
+        - $ref: '#/components/schemas/MisServiceInput'
+        - type: object
+          required: [id, projectId, code, currency, tabName, tabType, financialClass, rateEnabled, calculatePercentAgainstIncome, calculationMode, createdAt, updatedAt]
+          properties:
+            id: { type: string }
+            projectId: { type: string }
+            code: { type: string }
+            currency: { type: string }
+            tabName: { type: string }
+            tabType: { $ref: '#/components/schemas/MisTabType' }
+            financialClass: { $ref: '#/components/schemas/MisFinancialClass' }
+            rateEnabled: { type: boolean, description: Effective rate behavior for new entries. }
+            calculatePercentAgainstIncome: { type: boolean, description: Effective percentage behavior for new entries. }
+            calculationMode:
+              type: string
+              enum: [quantity_rate, amount]
+              description: Effective mode for a new entry.
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+
+    MisEntryInput:
+      type: object
+      description: Full writable transaction values. amount and all snapshot fields are server-owned.
+      required: [projectId, tabId, serviceId, fromDate, toDate, remarks]
+      properties:
+        projectId: { type: string }
+        tabId: { type: string }
+        serviceId: { type: string }
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+        quantity: { type: [number, 'null'], minimum: 0, description: Required for quantity_rate mode; explicit zero is valid. }
+        rate: { type: [number, 'null'], minimum: 0, description: Required for quantity_rate mode; authorization-gated for overrides. }
+        amount: { type: [number, 'null'], minimum: 0, description: Required for amount mode; actual amount, not quantity × rate. }
+        calculationMode:
+          type: string
+          enum: [quantity_rate, amount]
+          description: Optional explicit mode for an intentional legacy Salary/Expense transition.
+        remarks: { type: [string, 'null'], maxLength: 2000 }
+        rateReason:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Required for a rate override; retained only in the audit trail.
+    MisBulkEntryLine:
+      type: object
+      required: [serviceId]
+      properties:
+        id: { type: string, description: Existing child ID when replacing a parent line; required to preserve line identity during edits. }
+        serviceId: { type: string }
+        quantity:
+          type: [number, 'null']
+          minimum: 0
+          description: Omit or null to skip a blank client line; zero is explicit and is saved.
+        rate: { type: [number, 'null'], minimum: 0 }
+        amount: { type: [number, 'null'], minimum: 0 }
+        calculationMode: { type: string, enum: [quantity_rate, amount] }
+        remarks: { type: [string, 'null'], maxLength: 2000 }
+        rateReason: { type: [string, 'null'], maxLength: 1000 }
+        fromDate: { type: [string, 'null'], format: date }
+        toDate: { type: [string, 'null'], format: date }
+    MisBulkEntriesInput:
+      type: object
+      required: [projectId, fromDate, toDate, lines, action]
+      properties:
+        projectId: { type: string }
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+        lines:
+          type: array
+          maxItems: 1000
+          items: { $ref: '#/components/schemas/MisBulkEntryLine' }
+        action:
+          type: string
+          enum: [draft, submit]
+    MisBulkEntriesResponse:
+      type: object
+      required: [parent, items]
+      properties:
+        parent: { $ref: '#/components/schemas/MisParent' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MisEntry' }
+    MisEntry:
+      allOf:
+        - $ref: '#/components/schemas/MisEntryInput'
+        - type: object
+          required: [id, amount, calculationMode, rateEnabled, calculatePercentAgainstIncome, projectName, tabName, serviceName, type, financialClass, unit, currency, status, createdById, createdAt, updatedAt, parentId, bulkNumber]
+          properties:
+            id: { type: string }
+            parentId: { type: [string, 'null'], description: Parent bulk transaction ID; null for legacy standalone entries. }
+            bulkNumber: { type: [string, 'null'], description: Immutable MIS-BULK number; null for legacy standalone entries. }
+            amount: { type: number, description: Server-computed or direct actual amount; persisted as an exact database decimal. }
+            calculationMode: { type: string, enum: [quantity_rate, amount] }
+            rateEnabled: { type: boolean }
+            calculatePercentAgainstIncome: { type: boolean }
+            projectName: { type: string }
+            tabName: { type: string }
+            serviceName: { type: string }
+            type: { $ref: '#/components/schemas/MisTabType' }
+            financialClass: { $ref: '#/components/schemas/MisFinancialClass' }
+            unit: { type: string }
+            currency: { type: string }
+            status: { $ref: '#/components/schemas/MisEntryStatus' }
+            createdById: { type: string }
+            createdByName: { type: [string, 'null'] }
+            updatedById: { type: [string, 'null'] }
+            updatedByName: { type: [string, 'null'] }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+    MisEntryPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MisEntry' }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+    MisServiceReorderInput:
+      type: object
+      required: [serviceIds]
+      properties:
+        serviceIds:
+          type: array
+          description: Complete permutation of every service ID in the project.
+          items: { type: string }
+    MisEntryActionInput:
+      type: object
+      required: [action, remarks]
+      properties:
+        action: { $ref: '#/components/schemas/MisEntryAction' }
+        remarks: { type: [string, 'null'], maxLength: 2000 }
+    MisEntryHistoryItem:
+      type: object
+      required: [id, entryId, action, actorId, occurredAt]
+      properties:
+        id: { type: string }
+        entryId: { type: string }
+        action: { type: string, description: CREATE, UPDATE, DELETE, SUBMIT, APPROVE, REJECT, RETURN, RESET, CANCEL, or EDIT_APPROVED. }
+        actorId: { type: [string, 'null'] }
+        actorName: { type: [string, 'null'] }
+        remarks: { type: [string, 'null'] }
+        oldValues:
+          type: [object, 'null']
+          description: Audit-only untyped prior-value snapshot.
+          additionalProperties: true
+        newValues:
+          type: [object, 'null']
+          description: Audit-only untyped resulting-value snapshot.
+          additionalProperties: true
+        occurredAt: { type: string, format: date-time }
+
+    MisParentStatus:
+      $ref: '#/components/schemas/MisEntryStatus'
+    MisParent:
+      type: object
+      required: [id, bulkNumber, projectId, projectName, projectNumber, fromDate, toDate, status, entryType, createdById, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        bulkNumber: { type: string }
+        projectId: { type: string }
+        projectName: { type: string }
+        projectNumber: { type: string }
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+        status: { $ref: '#/components/schemas/MisParentStatus' }
+        entryType: { type: string, enum: [bulk] }
+        createdById: { type: string }
+        createdByName: { type: [string, 'null'] }
+        childCount: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    MisParentDetail:
+      type: object
+      required: [parent, items]
+      properties:
+        parent: { $ref: '#/components/schemas/MisParent' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MisEntry' }
+    MisParentPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MisParent' }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1 }
+    MisParentEditInput:
+      type: object
+      required: [fromDate, toDate, lines]
+      properties:
+        projectId: { type: string, description: Optional; the path parent project is used when omitted. }
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+        lines:
+          type: array
+          maxItems: 1000
+          items: { $ref: '#/components/schemas/MisBulkEntryLine' }
+        action:
+          type: string
+          enum: [draft, submit]
+          description: Optional status transition; omitted preserves the current parent status.
+        reason: { type: [string, 'null'], maxLength: 2000, description: Required when editing an approved parent. }
+    MisParentActionInput:
+      type: object
+      required: [action, remarks]
+      properties:
+        action:
+          type: string
+          enum: [submit, approve, reject, return, reset, cancel]
+        remarks: { type: [string, 'null'], maxLength: 2000 }
+    MisParentMutationResponse:
+      $ref: '#/components/schemas/MisParentDetail'
+    MisParentDeleteResponse:
+      type: object
+      required: [success, parentId, bulkNumber]
+      properties:
+        success: { type: boolean }
+        parentId: { type: string }
+        bulkNumber: { type: string }
+    MisParentHistoryItem:
+      allOf:
+        - $ref: '#/components/schemas/MisEntryHistoryItem'
+        - type: object
+          required: [parentId, bulkNumber]
+          properties:
+            parentId: { type: string }
+            bulkNumber: { type: string }
+
+    MisFinancialTotals:
+      type: object
+      description: Totals are always scoped to one currency group and never sum currencies together.
+      required: [income, cost, expenses, salaries, totalAmount, grossProfit, netProfit, profitMargin, entryCount]
+      properties:
+        income: { type: number }
+        cost: { type: number }
+        expenses: { type: number }
+        salaries: { type: number }
+        totalAmount: { type: number, description: Sum of all entry amounts in this aggregate, including custom/other types. }
+        grossProfit: { type: number, description: Income minus cost. }
+        netProfit: { type: number, description: Income minus cost, expenses, and salaries. }
+        profitMargin: { type: number, description: Net profit ÷ income × 100; 0 when income is zero. }
+        entryCount: { type: integer, minimum: 0 }
+    MisReportGroupRow:
+      type: object
+      description: A report grouping row. Identity fields vary with reportType; null means that dimension is not grouped.
+      required: [projectId, projectName, tabId, tabName, serviceId, serviceName, periodStart, periodEnd, currentTotals, comparisonTotals]
+      properties:
+        projectId: { type: [string, 'null'] }
+        projectName: { type: [string, 'null'] }
+        projectCode: { type: [string, 'null'] }
+        tabId: { type: [string, 'null'] }
+        tabName: { type: [string, 'null'] }
+        type: { type: [string, 'null'] }
+        serviceId: { type: [string, 'null'] }
+        serviceCode: { type: [string, 'null'] }
+        serviceName: { type: [string, 'null'] }
+        serviceOrder: { type: [integer, 'null'], description: Persisted service sequence used for stable ordering. }
+        calculatePercentAgainstIncome:
+          type: [boolean, 'null']
+          description: Effective entry snapshot configuration. Null means this aggregate mixes enabled and disabled rows.
+        periodStart: { type: [string, 'null'], format: date }
+        periodEnd: { type: [string, 'null'], format: date }
+        currentTotals: { $ref: '#/components/schemas/MisFinancialTotals' }
+        comparisonTotals:
+          oneOf:
+            - $ref: '#/components/schemas/MisFinancialTotals'
+            - type: 'null'
+    MisCurrencyReportGroup:
+      type: object
+      required: [currency, currentTotals, comparisonTotals, groups]
+      properties:
+        currency: { type: string }
+        currentTotals: { $ref: '#/components/schemas/MisFinancialTotals' }
+        comparisonTotals:
+          oneOf:
+            - $ref: '#/components/schemas/MisFinancialTotals'
+            - type: 'null'
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/MisReportGroupRow' }
+    MisReport:
+      type: object
+      required: [reportType, currencyGroups]
+      properties:
+        reportType: { $ref: '#/components/schemas/MisReportType' }
+        currencyGroups:
+          type: array
+          description: One group per currency, preventing invalid cross-currency totals.
+          items: { $ref: '#/components/schemas/MisCurrencyReportGroup' }
+    MisDashboardProjectRow:
+      type: object
+      required: [projectId, projectName, totals]
+      properties:
+        projectId: { type: string }
+        projectName: { type: string }
+        totals: { $ref: '#/components/schemas/MisFinancialTotals' }
+    MisDashboardTabRow:
+      type: object
+      required: [tabId, tabName, type, financialClass, totals]
+      properties:
+        tabId: { type: string }
+        tabName: { type: string }
+        type: { $ref: '#/components/schemas/MisTabType' }
+        financialClass: { $ref: '#/components/schemas/MisFinancialClass' }
+        totals: { $ref: '#/components/schemas/MisFinancialTotals' }
+    MisDashboardPeriodRow:
+      type: object
+      required: [fromDate, toDate, totals]
+      properties:
+        fromDate: { type: string, format: date }
+        toDate: { type: string, format: date }
+        totals: { $ref: '#/components/schemas/MisFinancialTotals' }
+    MisDashboardCurrencyGroup:
+      type: object
+      required: [currency, totals, byProject, byTab, byPeriod]
+      properties:
+        currency: { type: string }
+        byService:
+          type: array
+          items: { $ref: '#/components/schemas/MisDashboardServiceRow' }
+        adjustedNetProfit:
+          type: number
+          description: Net profit after combined selected-project percentage charges. Omitted unless both charge permissions cover every selected project.
+        totals: { $ref: '#/components/schemas/MisFinancialTotals' }
+        byProject:
+          type: array
+          items: { $ref: '#/components/schemas/MisDashboardProjectRow' }
+        byTab:
+          type: array
+          items: { $ref: '#/components/schemas/MisDashboardTabRow' }
+        byPeriod:
+          type: array
+          items: { $ref: '#/components/schemas/MisDashboardPeriodRow' }
+    MisDashboardServiceRow:
+      type: object
+      required: [serviceId, serviceName, tabId, tabName, financialClass, totals]
+      properties:
+        serviceId: { type: string }
+        serviceName: { type: string }
+        tabId: { type: string }
+        tabName: { type: string }
+        financialClass: { $ref: '#/components/schemas/MisFinancialClass' }
+        totals: { $ref: '#/components/schemas/MisFinancialTotals' }
+    MisPercentageKind:
+      type: string
+      enum: [overhead, op_expense]
+    MisPercentageServiceInput:
+      type: object
+      required: [kind, name, percentage, active]
+      properties:
+        kind: { $ref: '#/components/schemas/MisPercentageKind' }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        percentage: { type: number, minimum: 0, maximum: 100 }
+        active: { type: boolean }
+    MisPercentageService:
+      allOf:
+        - $ref: '#/components/schemas/MisPercentageServiceInput'
+        - type: object
+          required: [id, projectId]
+          properties:
+            id: { type: string }
+            projectId: { type: string }
+    MisPercentageCharge:
+      type: object
+      required: [id, name, percentage, amount]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        percentage: { type: number }
+        amount: { type: number }
+    MisPercentageSection:
+      type: object
+      required: [total, services]
+      properties:
+        total: { type: number }
+        services: { type: array, items: { $ref: '#/components/schemas/MisPercentageCharge' } }
+    MisDashboardAdjustment:
+      type: object
+      required: [projectId, projectName, currency, income, baseProfit]
+      description: Charges configured by this project applied to combined selected-project income for this currency and period/statuses. Restricted sections are omitted. Legacy adjustedProfit is not emitted.
+      properties:
+        projectId: { type: string }
+        projectName: { type: string }
+        currency: { type: string }
+        income: { type: number }
+        baseProfit: { type: number }
+        overhead: { $ref: '#/components/schemas/MisPercentageSection' }
+        opExpense: { $ref: '#/components/schemas/MisPercentageSection' }
+        adjustedProfit: { type: number }
+    MisDashboard:
+      type: object
+      required: [currencyGroups, recentEntries]
+      properties:
+        percentageAdjustments:
+          type: array
+          items: { $ref: '#/components/schemas/MisDashboardAdjustment' }
+        currencyGroups:
+          type: array
+          description: Currency-separated totals and breakdown rows; values must not be aggregated across groups.
+          items: { $ref: '#/components/schemas/MisDashboardCurrencyGroup' }
+        recentEntries:
+          type: array
+          description: Recent entries limited to records the current user may access.
+          items: { $ref: '#/components/schemas/MisEntry' }
     ProjectTotal:
       type: object
       required: [projectId, projectName, location, totalCost, totalMandays, costPerManday]

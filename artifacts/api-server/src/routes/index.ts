@@ -14,10 +14,14 @@ import reportsRouter from "./reports";
 import storageRouter from "./storage";
 import attachmentsRouter from "./attachments";
 import settingsRouter from "./settings";
+import misRouter from "./mis";
+import misAnalyticsRouter from "./mis/analytics";
+import systemAuditRouter from "./systemAudit";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(systemAuditRouter);
 router.use(authRouter);
 router.use(usersRouter);
 router.use(projectsRouter);
@@ -32,5 +36,7 @@ router.use(reportsRouter);
 router.use(storageRouter);
 router.use(attachmentsRouter);
 router.use(settingsRouter);
+router.use(misRouter);
+router.use(misAnalyticsRouter);
 
 export default router;

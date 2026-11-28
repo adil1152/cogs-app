@@ -3,26 +3,22 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "start": "pnpm run build && pnpm --filter @workspace/api-server run start",
-    "dev": "pnpm --filter @workspace/api-server --filter @workspace/cogs-tracker --parallel run dev",
-    "preinstall": "node -e \"if (process.env.npm_config_user_agent && !process.env.npm_config_user_agent.startsWith('pnpm/')) { console.error('Use pnpm instead'); process.exit(1); }\"",
+    "preinstall": "node -e \"const fs=require('fs');['package-lock.json','yarn.lock'].forEach(f=>fs.rmSync(f,{force:true}));if(!/^pnpm\\//.test(process.env.npm_config_user_agent||'')){console.error('Use pnpm instead');process.exit(1)}\"",
+    "dev:api": "pnpm --filter @workspace/api-server run build && node --enable-source-maps --env-file=.env ./artifacts/api-server/dist/index.mjs",
+    "dev:web": "node -e \"process.env.PORT=process.env.FRONTEND_PORT||'5173';process.env.BASE_PATH=process.env.BASE_PATH||'/';require('child_process').execSync('pnpm --filter @workspace/cogs-tracker run dev',{stdio:'inherit'})\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
   "devDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.62.2",
-    "@tailwindcss/oxide-win32-x64-msvc": "^4.3.3",
-    "lightningcss-win32-x64-msvc": "^1.33.0",
-    "prettier": "^3.8.1",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "prettier": "^3.8.1"
   },
-  "overrides": {
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
-  },
-  "pnpm.onlyBuiltDependencies": [
-    "esbuild"
-  ]
+  "pnpm": {
+    "overrides": {
+      "react": "19.1.0",
+      "react-dom": "19.1.0"
+    }
+  }
 }

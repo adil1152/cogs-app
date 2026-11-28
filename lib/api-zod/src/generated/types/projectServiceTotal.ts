@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ProjectServiceTotalKind } from "./projectServiceTotalKind";
+import type { ReportComponentCell } from "./reportComponentCell";
 import type { SubServiceTotal } from "./subServiceTotal";
 
 /**
@@ -28,4 +29,10 @@ export interface ProjectServiceTotal {
 expand the row inline. Empty / omitted for non-group services.
  */
   subBreakdown?: SubServiceTotal[];
+  /** Full breakdown of this service for the range: meal types
+(kind=meal, qty + mandays) for food services, sub-services
+(kind=sub, cost + mandays) for group services. Empty for
+standard services.
+ */
+  components?: ReportComponentCell[];
 }

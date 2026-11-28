@@ -1,0 +1,308 @@
+# Additive OpenAPI fragment.  The core MIS openapi file is intentionally not
+# edited by the analytics implementation task; merge these paths/schemas into
+# lib/api-spec/openapi.yaml when the route is registered.
+paths:
+  /mis/analytics:
+    get:
+      operationId: getMisAnalytics
+      tags: [MIS]
+      summary: Get permission-scoped advanced MIS analytics
+      parameters:
+        - $ref: '#/components/parameters/MisAnalyticsProjectIds'
+        - $ref: '#/components/parameters/MisAnalyticsProjectCode'
+        - $ref: '#/components/parameters/MisAnalyticsTabIds'
+        - $ref: '#/components/parameters/MisAnalyticsServiceIds'
+        - $ref: '#/components/parameters/MisAnalyticsServiceCodes'
+        - $ref: '#/components/parameters/MisAnalyticsTypes'
+        - $ref: '#/components/parameters/MisAnalyticsReportType'
+        - $ref: '#/components/parameters/MisAnalyticsSearch'
+        - $ref: '#/components/parameters/MisAnalyticsCurrency'
+        - $ref: '#/components/parameters/MisAnalyticsFrom'
+        - $ref: '#/components/parameters/MisAnalyticsTo'
+        - $ref: '#/components/parameters/MisAnalyticsStatus'
+        - $ref: '#/components/parameters/MisAnalyticsCompareFrom'
+        - $ref: '#/components/parameters/MisAnalyticsCompareTo'
+        - $ref: '#/components/parameters/MisAnalyticsGroupBy'
+        - $ref: '#/components/parameters/MisAnalyticsView'
+        - $ref: '#/components/parameters/MisAnalyticsMode'
+        - $ref: '#/components/parameters/MisAnalyticsPage'
+        - $ref: '#/components/parameters/MisAnalyticsPageSize'
+        - $ref: '#/components/parameters/MisAnalyticsPeriodComparison'
+        - $ref: '#/components/parameters/MisAnalyticsPeriods'
+      responses:
+        '200':
+          description: Currency-safe aggregate analytics response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MisAnalyticsEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /mis/analytics/export:
+    get:
+      operationId: exportMisAnalytics
+      tags: [MIS]
+      summary: Export all permission-scoped MIS analytics rows
+      parameters:
+        - $ref: '#/components/parameters/MisAnalyticsProjectIds'
+        - $ref: '#/components/parameters/MisAnalyticsProjectCode'
+        - $ref: '#/components/parameters/MisAnalyticsTabIds'
+        - $ref: '#/components/parameters/MisAnalyticsServiceIds'
+        - $ref: '#/components/parameters/MisAnalyticsServiceCodes'
+        - $ref: '#/components/parameters/MisAnalyticsTypes'
+        - $ref: '#/components/parameters/MisAnalyticsReportType'
+        - $ref: '#/components/parameters/MisAnalyticsSearch'
+        - $ref: '#/components/parameters/MisAnalyticsCurrency'
+        - $ref: '#/components/parameters/MisAnalyticsFrom'
+        - $ref: '#/components/parameters/MisAnalyticsTo'
+        - $ref: '#/components/parameters/MisAnalyticsStatus'
+        - $ref: '#/components/parameters/MisAnalyticsCompareFrom'
+        - $ref: '#/components/parameters/MisAnalyticsCompareTo'
+        - $ref: '#/components/parameters/MisAnalyticsGroupBy'
+        - $ref: '#/components/parameters/MisAnalyticsView'
+        - $ref: '#/components/parameters/MisAnalyticsMode'
+        - $ref: '#/components/parameters/MisAnalyticsPeriodComparison'
+        - $ref: '#/components/parameters/MisAnalyticsPeriods'
+        - name: format
+          in: query
+          required: true
+          schema: { type: string, enum: [csv, xlsx, pdf] }
+      responses:
+        '200':
+          description: Complete export using the requested format
+          content:
+            text/csv: { schema: { type: string } }
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+            application/pdf:
+              schema: { type: string, format: binary }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  parameters:
+    MisAnalyticsProjectIds: { name: projectIds, in: query, schema: { type: string } }
+    MisAnalyticsProjectCode: { name: projectCode, in: query, schema: { type: string } }
+    MisAnalyticsTabIds: { name: tabIds, in: query, schema: { type: string } }
+    MisAnalyticsServiceIds: { name: serviceIds, in: query, schema: { type: string } }
+    MisAnalyticsServiceCodes: { name: serviceCodes, in: query, schema: { type: string } }
+    MisAnalyticsTypes: { name: types, in: query, schema: { type: string } }
+    MisAnalyticsReportType:
+      name: reportType
+      in: query
+      schema:
+        type: string
+        enum: [income, cost, expense, salary, summary, project-profitability, project-comparison, period-comparison, service-tab-comparison]
+        default: summary
+      description: >
+        Report category. Category report types filter to that financial class;
+        summary and comparison report types retain all configured classes.
+    MisAnalyticsSearch:
+      name: search
+      in: query
+      schema: { type: string, maxLength: 200 }
+      description: Case-insensitive search over scoped project, tab, service, and entry snapshot text.
+    MisAnalyticsCurrency:
+      name: currency
+      in: query
+      schema: { type: string, pattern: '^[A-Za-z]{3}$' }
+      description: Optional ISO 4217 currency filter. Omit to retain separate currency groups.
+    MisAnalyticsFrom: { name: from, in: query, schema: { type: string, format: date } }
+    MisAnalyticsTo: { name: to, in: query, schema: { type: string, format: date } }
+    MisAnalyticsStatus:
+      name: status
+      in: query
+      schema: { type: string, enum: [draft, submitted, approved, rejected, returned, cancelled, all], default: approved }
+      description: >
+        Explicit status selection. Comma-separated and repeated values are
+        accepted. Use all to include every status. If absent, approved remains
+        the backwards-compatible default.
+    MisAnalyticsCompareFrom: { name: compareFrom, in: query, schema: { type: string, format: date } }
+    MisAnalyticsCompareTo: { name: compareTo, in: query, schema: { type: string, format: date } }
+    MisAnalyticsGroupBy:
+      name: groupBy
+      in: query
+      schema: { type: string, example: "project,type" }
+      description: Ordered comma-separated date, project, projectCode, type, service, month, or year.
+    MisAnalyticsView:
+      name: view
+      in: query
+      schema: { type: string, enum: [daily, weekly, monthly, custom], default: monthly }
+    MisAnalyticsMode:
+      name: mode
+      in: query
+      schema: { type: string, enum: [analytics, project, service, type, dynamic], default: analytics }
+    MisAnalyticsPage: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    MisAnalyticsPageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 50 } }
+    MisAnalyticsPeriodComparison:
+      name: periodComparison
+      in: query
+      schema: { type: boolean, default: false }
+      description: Enable additive comparison of three or more selected periods.
+    MisAnalyticsPeriods:
+      name: periods
+      in: query
+      required: false
+      schema: { type: string }
+      description: >
+        JSON array of {id,label?,from,to} period objects. Required when
+        periodComparison=true; minimum 3 and maximum 24 periods.
+  schemas:
+    MisAnalyticsEnvelope:
+      type: object
+      required: [filters, dateBasis, totalsByCurrency, rows, trend, pagination]
+      properties:
+        filters: { type: object }
+        dateBasis: { type: string, enum: [period_start] }
+        totalsByCurrency:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsCurrencyTotals' }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsRow' }
+        trend:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsRow' }
+        pagination: { $ref: '#/components/schemas/MisAnalyticsPagination' }
+        periods:
+          type: array
+          description: >
+            Additive multi-period results. Each item is a period descriptor
+            and the exact non-recursive analytics result fields for that period.
+          items: { $ref: '#/components/schemas/MisAnalyticsPeriodResult' }
+    MisAnalyticsPeriod:
+      type: object
+      required: [id, label, from, to]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+    MisAnalyticsPeriodResult:
+      type: object
+      required: [period, totalsByCurrency, rows, trend, pagination]
+      properties:
+        period: { $ref: '#/components/schemas/MisAnalyticsPeriod' }
+        totalsByCurrency:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsCurrencyTotals' }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsRow' }
+        trend:
+          type: array
+          items: { $ref: '#/components/schemas/MisAnalyticsRow' }
+        pagination: { $ref: '#/components/schemas/MisAnalyticsPagination' }
+    MisAnalyticsCurrencyTotals:
+      type: object
+      required: [currency, current, previous, difference, percentageDifference]
+      properties:
+        currency: { type: string }
+        current: { $ref: '#/components/schemas/MisAnalyticsMetricSet' }
+        previous: { allOf: [{ $ref: '#/components/schemas/MisAnalyticsMetricSet' }], nullable: true }
+        difference: { type: object, nullable: true }
+        percentageDifference: { type: object, nullable: true }
+    MisAnalyticsRow:
+      type: object
+      required: [currency, current, previous, difference, percentageDifference, drilldownFilters]
+      properties:
+        currency: { type: string }
+        projectId: { type: string, nullable: true }
+        projectIds: { type: array, items: { type: string } }
+        projectName: { type: string, nullable: true }
+        projectCode: { type: string, nullable: true }
+        tabId: { type: string, nullable: true }
+        tabIds: { type: array, items: { type: string } }
+        tabName:
+          type: string
+          nullable: true
+          description: Configured tab label; type groups are separated by tab ID.
+        type: { type: string, nullable: true }
+        serviceId: { type: string, nullable: true }
+        serviceIds: { type: array, items: { type: string } }
+        serviceCode: { type: string, nullable: true }
+        serviceName: { type: string, nullable: true }
+        serviceOrder: { type: integer, nullable: true }
+        calculatePercentAgainstIncome: { type: boolean, nullable: true }
+        periodId: { type: string, nullable: true }
+        periodLabel: { type: string, nullable: true }
+        periodStart: { type: string, format: date, nullable: true }
+        periodEnd: { type: string, format: date, nullable: true }
+        current: { $ref: '#/components/schemas/MisAnalyticsMetricSet' }
+        previous: { allOf: [{ $ref: '#/components/schemas/MisAnalyticsMetricSet' }], nullable: true }
+        difference: { type: object, nullable: true }
+        percentageDifference: { type: object, nullable: true }
+        drilldownFilters:
+          $ref: '#/components/schemas/MisAnalyticsDrilldownFilters'
+        previousDrilldownFilters:
+          allOf: [{ $ref: '#/components/schemas/MisAnalyticsDrilldownFilters' }]
+          nullable: true
+    MisAnalyticsMetricSet:
+      type: object
+      required: [totalIncome, totalCost, totalExpenses, totalSalaries, grossProfit, netProfit, profitMargin, totalAmount, quantity, weightedRate, rateMin, rateMax, rateVaried, units, unitVaried, entryCount]
+      properties:
+        totalIncome: { type: number }
+        totalCost: { type: number }
+        totalExpenses: { type: number }
+        totalSalaries: { type: number }
+        grossProfit: { type: number }
+        netProfit: { type: number }
+        profitMargin: { type: number }
+        totalAmount: { type: number }
+        quantity: { type: number }
+        weightedRate: { type: number, nullable: true }
+        rateMin: { type: number, nullable: true }
+        rateMax: { type: number, nullable: true }
+        rateVaried: { type: boolean }
+        units: { type: array, items: { type: string } }
+        unitVaried: { type: boolean }
+        entryCount: { type: integer }
+        contributionPercent: { type: number }
+        incomeContributionPercent: { type: number }
+        costContributionPercent: { type: number }
+        expensesContributionPercent: { type: number }
+        salariesContributionPercent: { type: number }
+        percentageAgainstIncome:
+          type: number
+          nullable: true
+          description: >
+            Amount divided by the period/currency total income when the
+            effective category/service configuration enables it; null when disabled.
+    MisAnalyticsPagination:
+      type: object
+      required: [page, pageSize, total, pageCount]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        pageCount: { type: integer }
+    MisAnalyticsDrilldownFilters:
+      type: object
+      description: >
+        Safe filters for the Entries screen. from/to preserve the complete
+        report range; startFrom/startTo constrain from_date to the displayed
+        period-start bucket. Disabled project-tab assignments are never
+        represented by aggregate rows.
+      required: [projectIds, tabIds, serviceIds, entryType, status, statuses, currency, search, from, to, startFrom, startTo]
+      properties:
+        projectIds: { type: array, items: { type: string } }
+        tabIds: { type: array, items: { type: string } }
+        serviceIds: { type: array, items: { type: string } }
+        entryType: { type: string, nullable: true }
+        status:
+          type: string
+          description: Legacy scalar status. For Entries drilldowns, the statuses array is authoritative.
+        statuses:
+          type: array
+          items: { type: string, enum: [draft, submitted, approved, rejected, returned, cancelled] }
+          description: Authoritative status set for Entries drilldowns; use this list rather than the legacy scalar when multiple statuses are selected.
+        currency: { type: string }
+        search: { type: string, nullable: true, maxLength: 200 }
+        from: { type: string, format: date, nullable: true }
+        to: { type: string, format: date, nullable: true }
+        startFrom: { type: string, format: date, nullable: true }
+        startTo: { type: string, format: date, nullable: true }

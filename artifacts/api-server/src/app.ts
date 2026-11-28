@@ -7,6 +7,8 @@ import { fileURLToPath } from "url";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./middlewares/authMiddleware";
+import { auditContext } from "@workspace/db";
+import { randomUUID } from "node:crypto";
 
 const app: Express = express();
 
@@ -37,6 +39,15 @@ app.use(authMiddleware);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+app.use((req, _res, next) => {
+  auditContext.run({
+    actorId: req.user?.id,
+    actorName: req.user ? ([req.user.firstName, req.user.lastName].filter(Boolean).join(" ") || req.user.email || req.user.id) : undefined,
+    requestId: randomUUID(),
+    path: `${req.method} ${req.path}`,
+  }, next);
+});
 
 app.use("/api", router);
 

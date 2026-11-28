@@ -234,6 +234,8 @@ export function serializeProject(
     notes: p.notes,
     pdfRequired: !!(p as { pdfRequired?: boolean }).pdfRequired,
     disabled: !!(p as { disabled?: boolean }).disabled,
+    allowDuplicateDates: !!(p as { allowDuplicateDates?: boolean })
+      .allowDuplicateDates,
     backdatedDays:
       (p as { backdatedDays?: number | null }).backdatedDays ?? null,
     futureDays: (p as { futureDays?: number | null }).futureDays ?? null,

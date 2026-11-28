@@ -1,0 +1,663 @@
+```text
+ENHANCE THE EXISTING MIS MODULE WITH THE FOLLOWING FEATURES ONLY.
+
+IMPORTANT:
+- Do NOT rebuild the MIS module.
+- Do NOT remove existing MIS functionality.
+- Do NOT affect or modify the existing COGS application.
+- Preserve all existing data, workflows, permissions, calculations, and security.
+- First inspect the current MIS implementation and integrate these enhancements into the existing architecture.
+- Keep the UI simple and familiar, similar to the existing COGS comparison experience.
+
+==================================================
+1. MULTI-PERIOD SELECTION FOR ALL REPORTS
+==================================================
+
+Enhance the Comparison Report and all relevant MIS reports to support comparison by PROJECT PERIOD.
+
+Add an option:
+
+[ Enable Period Comparison ]
+
+This should be a simple toggle/button.
+
+When disabled:
+- Keep the current single-period report behavior.
+
+When enabled:
+- Allow the user to select MULTIPLE PROJECT PERIODS in one report.
+- Minimum required selection: 3 periods.
+- Allow more than 3 periods.
+- Each selected period must have:
+  - From Date
+  - To Date
+  - Optional Period Name/Label
+
+Example:
+
+Period 1:
+01-Jan-2026 → 31-Jan-2026
+
+Period 2:
+01-Feb-2026 → 28-Feb-2026
+
+Period 3:
+01-Mar-2026 → 31-Mar-2026
+
+The report should compare the selected periods side-by-side.
+
+Example:
+
+                         Jan 2026    Feb 2026    Mar 2026
+Income                    500,000     550,000     600,000
+Cost                      250,000     270,000     300,000
+Expenses                  100,000     110,000     120,000
+Salaries                  100,000     105,000     110,000
+Net Profit                 50,000      65,000      70,000
+Profit Margin                 10%         12%         12%
+
+Make the period selector simple and easy to use, similar to the COGS comparison screen.
+
+==================================================
+2. MULTI-PERIOD COMPARISON
+==================================================
+
+The comparison screen must support:
+
+- Compare multiple periods
+- Compare multiple projects
+- Compare multiple services
+- Compare multiple types/categories
+
+The report should allow combinations such as:
+
+Project + 3 Periods
+
+Project + Service + 3 Periods
+
+Multiple Projects + 3 Periods
+
+Type + 3 Periods
+
+Service + Project + 3 Periods
+
+All selected filters must work together dynamically.
+
+==================================================
+3. PERIOD COMPARISON GRAPHS
+==================================================
+
+When multiple periods are selected, generate dynamic graphs.
+
+Required graphs:
+
+1. Income comparison by period
+2. Cost comparison by period
+3. Expense comparison by period
+4. Salary comparison by period
+5. Net Profit comparison by period
+6. Profit Margin comparison by period
+
+Example:
+
+Jan | █████
+Feb | ██████
+Mar | ███████
+
+Graphs must update automatically according to the selected periods, projects, services, and types.
+
+==================================================
+4. BULK ENTRY – PERCENTAGE AGAINST TOTAL INCOME
+==================================================
+
+Enhance the BULK ENTRY screen.
+
+For each service/group entered, calculate its percentage against the TOTAL INCOME for the selected project and period.
+
+Example:
+
+TOTAL INCOME = 1,000,000 SAR
+
+SALARIES:
+Project Salaries = 200,000
+Percentage of Income = 20%
+
+EXPENSES:
+Transport = 50,000
+Percentage of Income = 5%
+
+The percentage must be visible directly on the bulk-entry screen.
+
+==================================================
+5. CONFIGURABLE PERCENTAGE BY TYPE
+==================================================
+
+Do NOT automatically calculate percentage for every service/type.
+
+Add a configuration option in:
+
+Project / Type Configuration
+
+Field:
+
+"Calculate % Against Total Income"
+
+Options:
+
+YES
+NO
+
+This setting must be configurable by Type/Category and optionally by Project.
+
+Example:
+
+INCOME
+Calculate % = NO
+
+COST
+Calculate % = YES
+
+EXPENSE
+Calculate % = YES
+
+SALARY
+Calculate % = YES
+
+CUSTOM TYPE
+Calculate % = configurable
+
+The system must use this configuration dynamically.
+
+==================================================
+6. SALARY AND EXPENSE RATE BEHAVIOR
+==================================================
+
+IMPORTANT:
+
+Rates must NOT be used for:
+
+SALARY
+EXPENSE
+
+For Salary and Expense types:
+
+- Do NOT display a rate field.
+- Do NOT calculate Quantity × Rate.
+- Enter the actual amount directly.
+- Percentage should be calculated against Total Income when the configuration enables it.
+
+Example:
+
+Salary:
+Amount = 200,000 SAR
+% of Income = 20%
+
+Expense:
+Amount = 50,000 SAR
+% of Income = 5%
+
+For types configured as quantity-based services such as Cost or Income:
+
+Quantity
+×
+Rate
+=
+Amount
+
+Maintain the existing rate logic only for types where rate is enabled.
+
+==================================================
+7. TOTAL PERCENTAGE BY GROUP
+==================================================
+
+Show the total percentage for every group/type.
+
+Example:
+
+TOTAL INCOME
+1,000,000 SAR
+100%
+
+COST
+300,000 SAR
+30%
+
+EXPENSE
+100,000 SAR
+10%
+
+SALARY
+200,000 SAR
+20%
+
+The group total percentage must be calculated from the total income.
+
+Formula:
+
+Group Percentage =
+Group Total / Total Income × 100
+
+If Total Income = 0:
+- Do not produce an error.
+- Display 0% or N/A according to the existing UI convention.
+
+Also show the percentage for individual services when that Type is configured to calculate percentages.
+
+==================================================
+8. BULK ENTRY VISUAL STRUCTURE
+==================================================
+
+The bulk-entry page should show:
+
+INCOME
+    Service
+    Amount
+    %
+
+COST
+    Service
+    Amount
+    %
+
+EXPENSE
+    Service
+    Amount
+    %
+
+SALARY
+    Service
+    Amount
+    %
+
+For each group:
+
+TOTAL GROUP AMOUNT
+TOTAL GROUP %
+
+At the bottom:
+
+TOTAL INCOME
+TOTAL COST
+TOTAL EXPENSE
+TOTAL SALARY
+GROSS PROFIT
+NET PROFIT
+OVERALL MARGIN
+
+Keep the display simple and easy to read.
+
+==================================================
+9. REMOVE SERVICE SEQUENCE FIELD
+==================================================
+
+Remove the old manual numeric "Sequence" field from the service configuration.
+
+Do NOT ask administrators to enter:
+
+1
+2
+3
+4
+etc.
+
+Instead, service ordering must be controlled visually.
+
+==================================================
+10. DRAG & DROP SERVICE ORDER
+==================================================
+
+Add a drag-and-drop ordering interface.
+
+In the Service Management / Project Configuration screen:
+
+Show all services in their current order.
+
+Allow authorized users to drag a service up or down.
+
+Example:
+
+☰ Breakfast
+☰ Lunch
+☰ Dinner
+☰ Midnight Meal
+
+User drags:
+
+Dinner
+
+above:
+
+Lunch
+
+The system automatically saves the new order.
+
+The order should be reflected everywhere:
+
+- Bulk Entry
+- Entry screens
+- Reports
+- PDF
+- Excel
+- Dashboard where applicable
+
+No manual sequence number should be displayed to the user.
+
+Use a persistent sort/order value internally only if required by the database.
+
+==================================================
+11. EXCEL REPORT – MANAGEMENT FRIENDLY DESIGN
+==================================================
+
+Make Excel reports visually similar to the professional PDF reports.
+
+Do NOT export raw database data.
+
+The Excel report must contain:
+
+HEADER
+- QNC / MIS
+- Report Title
+- Project
+- Project Number
+- Selected Period(s)
+- Generated Date
+
+SUMMARY
+- Total Income
+- Total Cost
+- Total Expenses
+- Total Salaries
+- Gross Profit
+- Net Profit
+- Profit Margin
+
+DETAILS
+- Clean tables
+- Grouped sections
+- Subtotals
+- Grand totals
+- Percentages
+
+Formatting:
+
+- Proper column widths
+- Freeze header
+- Filters
+- Currency formatting
+- Percentage formatting
+- Thousands separators
+- Clear section headers
+- Professional spacing
+- Avoid unnecessary empty rows
+
+==================================================
+12. EXCEL – SHOW ONLY DATA INCLUDED IN REPORT
+==================================================
+
+IMPORTANT:
+
+When exporting Excel:
+
+Export ONLY the filtered/selected data that appears in the report.
+
+Do NOT include:
+
+- Hidden data
+- Unselected projects
+- Unselected periods
+- Unselected services
+- Unselected types
+- Unrelated records
+
+The Excel output must match the report exactly.
+
+The export must respect all:
+
+- Date filters
+- Project filters
+- Service filters
+- Type filters
+- Security restrictions
+
+==================================================
+13. EXCEL – GRAPHICAL REPORT
+==================================================
+
+Add graphs directly inside Excel.
+
+Required:
+
+1. Bar Chart
+   Income vs Cost vs Expenses vs Salaries
+
+2. Pie/Donut Chart
+   Cost / Expense / Salary percentage against Income
+
+3. Period Comparison Chart
+   When multiple periods are selected
+
+4. Project Comparison Chart
+   When multiple projects are selected
+
+Charts must be based only on the filtered report data.
+
+==================================================
+14. EXCEL – PERCENTAGE ANALYSIS
+==================================================
+
+Show percentages against Total Income.
+
+Example:
+
+Category        Amount       % of Income
+Cost            300,000          30%
+Expenses        100,000          10%
+Salaries        200,000          20%
+
+For each applicable service:
+
+Service         Amount       % of Income
+Food            150,000          15%
+Laundry          50,000           5%
+
+Use the configured "Calculate % Against Total Income" setting.
+
+==================================================
+15. PDF REPORT CONSISTENCY
+==================================================
+
+Ensure PDF and Excel reports use the same:
+
+- Filters
+- Data
+- Periods
+- Totals
+- Percentages
+- Grouping
+- Calculations
+
+The PDF and Excel should show the same report information.
+
+==================================================
+16. ALL FILTERS – SELECT ALL BY DEFAULT
+==================================================
+
+Update all MIS filters.
+
+Where a multi-select filter exists, "Select All" must be enabled/selected by default.
+
+This includes:
+
+- Projects
+- Periods
+- Services
+- Types
+- Status
+- Users where applicable
+
+Example:
+
+Project:
+☑ Select All
+
+All projects should be selected when the report first opens.
+
+The user can then unselect specific items.
+
+Do NOT force the user to manually select every item each time.
+
+==================================================
+17. FILTER UX
+==================================================
+
+Use a simple filter interface.
+
+For example:
+
+Project
+[ Select All ▼ ]
+
+Type
+[ Select All ▼ ]
+
+Service
+[ Select All ▼ ]
+
+Period
+[ Enable Period Comparison ]
+
+When Period Comparison is enabled:
+
+[ + Add Period ]
+
+Minimum 3 periods.
+
+Keep the experience simple and similar to the COGS comparison interface.
+
+==================================================
+18. REPORT CALCULATION RULES
+==================================================
+
+Maintain the existing MIS financial calculations.
+
+Total Income
+=
+sum of all applicable Income services
+
+Total Cost
+=
+sum of all applicable Cost services
+
+Total Expenses
+=
+sum of all applicable Expense services
+
+Total Salaries
+=
+sum of all applicable Salary services
+
+Gross Profit
+=
+Total Income - Total Cost
+
+Net Profit
+=
+Total Income - Total Cost - Total Expenses - Total Salaries
+
+Margin
+=
+Net Profit / Total Income × 100
+
+Percentage against Income:
+
+Service/Group %
+=
+Service/Group Amount / Total Income × 100
+
+Do not apply percentage calculations to Types where the configuration says:
+
+Calculate % Against Total Income = NO
+
+==================================================
+19. SECURITY
+==================================================
+
+All new report features must respect existing MIS security.
+
+Users must only see:
+
+- Projects they are authorized to access
+- Services they are authorized to access
+- Entries they are authorized to access
+- Rates according to their permissions
+
+The same restrictions must apply to:
+
+Dashboard
+Reports
+Excel
+PDF
+Comparison
+Bulk Entry
+
+==================================================
+20. TESTING
+==================================================
+
+Before completion test:
+
+1. Single-period report.
+2. Enable Period Comparison.
+3. Attempt to select only 1 period.
+4. Confirm system requires minimum 3 periods.
+5. Select 3 periods.
+6. Select 4+ periods.
+7. Compare 3 periods successfully.
+8. Compare multiple projects and 3 periods.
+9. Compare services across periods.
+10. Compare types across periods.
+11. Verify graphs update correctly.
+12. Configure Salary percentage = YES.
+13. Verify salary percentage against income.
+14. Configure Expense percentage = YES.
+15. Verify expense percentage.
+16. Configure a type = NO percentage.
+17. Confirm percentage is hidden/not calculated.
+18. Confirm Salary has no Rate field.
+19. Confirm Expense has no Rate field.
+20. Confirm Cost/Income rate logic still works.
+21. Verify total percentage per group.
+22. Remove service sequence field from UI.
+23. Drag services into a new order.
+24. Confirm new order appears in bulk entry.
+25. Confirm new order appears in reports.
+26. Export Excel.
+27. Confirm only filtered report data is exported.
+28. Confirm Excel graphs work.
+29. Generate PDF.
+30. Confirm PDF and Excel totals match.
+31. Confirm Select All is enabled by default.
+32. Confirm security restrictions remain functional.
+33. Confirm existing COGS functionality is unaffected.
+
+==================================================
+FINAL ACCEPTANCE CRITERIA
+==================================================
+
+The enhancement is complete only when:
+
+- Reports can compare a minimum of 3 project periods.
+- Period comparison can be enabled/disabled with a simple button.
+- Comparison works across projects, services, types, and dates.
+- Bulk entry shows service percentage against total income where configured.
+- Total percentage is shown for every applicable group.
+- Salary and Expense entries do not use rates.
+- Percentage calculation is configurable by project/type.
+- Service numeric sequences are removed from the UI.
+- Services can be reordered using drag-and-drop.
+- Excel reports are clean, professional, filtered, and include charts.
+- Excel contains only the data shown in the report.
+- PDF and Excel use consistent calculations and filters.
+- All multi-select filters use Select All by default.
+- Existing MIS and COGS functionality remains fully operational.
+```

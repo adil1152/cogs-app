@@ -1,0 +1,129 @@
+/* Optional MIS "Glass" appearance.
+   Activated only by html.mis-glass (set while MisLayout is mounted and Glass is chosen,
+   removed on unmount) so portals are themed and nothing leaks to COGS. */
+
+html.mis-glass {
+  --background: 34 28% 93%;
+  --foreground: 28 22% 14%;
+  --border: 32 18% 78%;
+  --card: 36 40% 97%;
+  --card-foreground: 28 22% 14%;
+  --card-border: 34 22% 80%;
+  --popover: 36 38% 97%;
+  --popover-foreground: 28 22% 14%;
+  --popover-border: 32 20% 76%;
+  --primary: 178 38% 30%;
+  --primary-foreground: 40 40% 98%;
+  --secondary: 34 26% 88%;
+  --secondary-foreground: 28 22% 16%;
+  --muted: 34 24% 89%;
+  --muted-foreground: 28 12% 36%;
+  --accent: 178 34% 34%;
+  --accent-foreground: 40 40% 98%;
+  --input: 32 16% 66%;
+  --ring: 178 45% 32%;
+  --sidebar: 36 34% 94%;
+  --sidebar-foreground: 28 22% 14%;
+  --sidebar-border: 34 20% 78%;
+  --sidebar-primary: 178 38% 30%;
+  --sidebar-accent: 176 26% 84%;
+  --sidebar-accent-foreground: 178 45% 18%;
+  --glass-alpha: 0.62;
+  --glass-blur: 18px;
+  --glass-highlight: hsl(40 60% 100% / 0.55);
+  --glass-shadow: 0 10px 30px -14px hsl(28 30% 25% / 0.28);
+  --mis-glass-backdrop:
+    radial-gradient(900px 600px at 78% 8%, hsl(40 70% 92% / 0.9), transparent 60%),
+    radial-gradient(700px 520px at 8% 92%, hsl(176 22% 72% / 0.45), transparent 62%),
+    radial-gradient(520px 420px at 30% 30%, hsl(24 30% 78% / 0.55), transparent 65%),
+    linear-gradient(160deg, hsl(34 26% 84%) 0%, hsl(30 20% 76%) 55%, hsl(26 16% 66%) 100%);
+}
+
+html.mis-glass.dark {
+  --background: 26 14% 10%;
+  --foreground: 36 30% 94%;
+  --border: 28 12% 26%;
+  --card: 28 14% 14%;
+  --card-foreground: 36 30% 94%;
+  --card-border: 28 12% 26%;
+  --popover: 28 14% 14%;
+  --popover-foreground: 36 30% 94%;
+  --popover-border: 28 12% 28%;
+  --primary: 176 42% 52%;
+  --primary-foreground: 26 20% 8%;
+  --secondary: 28 12% 20%;
+  --secondary-foreground: 36 30% 94%;
+  --muted: 28 12% 20%;
+  --muted-foreground: 34 14% 72%;
+  --accent: 176 40% 48%;
+  --accent-foreground: 26 20% 8%;
+  --input: 28 12% 34%;
+  --ring: 176 45% 52%;
+  --sidebar: 28 14% 12%;
+  --sidebar-foreground: 36 30% 94%;
+  --sidebar-border: 28 12% 24%;
+  --sidebar-primary: 176 42% 52%;
+  --sidebar-accent: 176 22% 22%;
+  --sidebar-accent-foreground: 176 50% 88%;
+  --glass-alpha: 0.6;
+  --glass-highlight: hsl(36 40% 90% / 0.08);
+  --glass-shadow: 0 12px 34px -14px hsl(0 0% 0% / 0.6);
+  --mis-glass-backdrop:
+    radial-gradient(900px 600px at 78% 8%, hsl(34 40% 30% / 0.55), transparent 60%),
+    radial-gradient(700px 520px at 8% 92%, hsl(176 30% 22% / 0.5), transparent 62%),
+    linear-gradient(160deg, hsl(28 16% 14%) 0%, hsl(24 14% 9%) 100%);
+}
+
+/* Shell backdrop: softened "interior" light */
+.mis-shell[data-appearance="glass"] {
+  background: var(--mis-glass-backdrop);
+  background-attachment: fixed;
+}
+
+/* Frosted surfaces: sidebar + cards (bg-card) only; tables/inputs stay solid */
+.mis-shell[data-appearance="glass"] > aside,
+.mis-shell[data-appearance="glass"] main .bg-card {
+  background-color: hsl(var(--card) / var(--glass-alpha));
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  border-color: hsl(var(--card-border) / 0.75);
+}
+.mis-shell[data-appearance="glass"] > aside {
+  background-color: hsl(var(--sidebar) / var(--glass-alpha));
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mis-shell[data-appearance="glass"] > aside,
+  .mis-shell[data-appearance="glass"] main .bg-card {
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  }
+}
+/* No backdrop-filter → near-opaque so text stays legible */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html.mis-glass { --glass-alpha: 0.94; }
+}
+
+/* High-contrast operational surfaces */
+.mis-shell[data-appearance="glass"] main table,
+.mis-shell[data-appearance="glass"] main input,
+.mis-shell[data-appearance="glass"] main textarea,
+.mis-shell[data-appearance="glass"] main select,
+.mis-shell[data-appearance="glass"] main [role="combobox"] {
+  background-color: hsl(var(--card) / 0.96);
+}
+
+/* Portals (menus, dialogs) – solid enough to read over the backdrop */
+html.mis-glass [data-radix-popper-content-wrapper] > *,
+html.mis-glass [role="dialog"] {
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+}
+
+.mis-appearance-swatch-glass {
+  background:
+    linear-gradient(135deg, hsl(40 50% 96% / 0.85), hsl(30 22% 80% / 0.7)),
+    linear-gradient(90deg, hsl(176 30% 60%), hsl(30 30% 70%));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mis-shell, .mis-shell * { transition: none !important; }
+}

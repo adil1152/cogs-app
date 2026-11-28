@@ -12,6 +12,7 @@ interface RegisterInput {
 }
 
 interface AuthState {
+  error?: string;
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -44,6 +45,7 @@ async function readJsonOrThrow(res: Response): Promise<any> {
 // immediately re-renders <Gate> in App.tsx (no page refresh needed).
 
 interface Snapshot {
+  error?: string;
   user: AuthUser | null;
   isLoading: boolean;
 }
@@ -74,11 +76,10 @@ function bootstrap(): Promise<void> {
   bootstrapPromise = (async () => {
     try {
       const res = await fetch("/api/auth/user", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { user: AuthUser | null };
+      const data = (await readJsonOrThrow(res)) as { user: AuthUser | null };
       setSnapshot({ user: data.user ?? null, isLoading: false });
-    } catch {
-      setSnapshot({ user: null, isLoading: false });
+    } catch (error) {
+      setSnapshot({ user: null, isLoading: false, error: error instanceof Error ? error.message : "Unable to load your account. Please retry." });
     }
   })();
   return bootstrapPromise;
@@ -87,11 +88,10 @@ function bootstrap(): Promise<void> {
 async function refreshImpl(): Promise<void> {
   try {
     const res = await fetch("/api/auth/user", { credentials: "include" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as { user: AuthUser | null };
+    const data = (await readJsonOrThrow(res)) as { user: AuthUser | null };
     setSnapshot({ user: data.user ?? null, isLoading: false });
-  } catch {
-    setSnapshot({ user: null, isLoading: false });
+  } catch (error) {
+    setSnapshot({ user: null, isLoading: false, error: error instanceof Error ? error.message : "Unable to load your account. Please retry." });
   }
 }
 
@@ -149,6 +149,7 @@ export function useAuth(): AuthState {
   const setUser = useCallback(setUserImpl, []);
 
   return {
+    error: s.error,
     user: s.user,
     isLoading: s.isLoading,
     isAuthenticated: !!s.user,

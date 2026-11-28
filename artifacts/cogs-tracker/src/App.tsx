@@ -19,6 +19,8 @@ import ProjectComparisonReport from "@/pages/ProjectComparisonReport";
 import AdminUsers from "@/pages/AdminUsers";
 import AdminSecurityGroups from "@/pages/AdminSecurityGroups";
 import AdminSettings from "@/pages/AdminSettings";
+import AdminAuditLog from "@/pages/AdminAuditLog";
+import MisRoutes from "@/modules/mis/MisRoutes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,7 +33,7 @@ const queryClient = new QueryClient({
 });
 
 function Gate() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, error, refresh, logout } = useAuth();
   const [location, setLocation] = useLocation();
 
   // When the user logs out and lands on a private page, bounce them to /login.
@@ -54,10 +56,21 @@ function Gate() {
   }
   if (!isAuthenticated) {
     return (
+      <>
+        {error && (
+          <div role="alert" className="mx-auto my-4 max-w-xl rounded-lg border border-destructive/30 bg-background p-4 text-sm">
+            <p>{error}</p>
+            <div className="mt-3 flex gap-4">
+              <button className="underline" onClick={() => void refresh()}>Retry</button>
+              <button className="underline" onClick={() => void logout()}>Sign out</button>
+            </div>
+          </div>
+        )}
       <Switch>
         <Route path="/register" component={Register} />
         <Route component={Login} />
       </Switch>
+      </>
     );
   }
   return (
@@ -75,6 +88,10 @@ function Gate() {
       <Route path="/admin/users" component={AdminUsers} />
       <Route path="/admin/security-groups" component={AdminSecurityGroups} />
       <Route path="/admin/settings" component={AdminSettings} />
+      <Route path="/admin/audit-log" component={AdminAuditLog} />
+      <Route path="/mis" nest>
+        <MisRoutes />
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

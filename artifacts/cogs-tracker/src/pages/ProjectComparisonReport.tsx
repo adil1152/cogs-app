@@ -57,6 +57,54 @@ function safeAvg(cost: number, mandays: number): number | null {
   return mandays > 0 ? cost / mandays : null;
 }
 
+type CompMetric = "qty" | "cost" | "mandays" | "avg";
+
+/** A component (meal type or sub-service) merged by name across projects. */
+interface CompCell {
+  key: string;
+  name: string;
+  kind: "meal" | "sub";
+  qty: number;
+  cost: number;
+  mandays: number;
+}
+
+/** One rendered column inside a service group. */
+interface SvcCol {
+  type: "metric" | "comp";
+  metric?: Metric;
+  compKey?: string;
+  compMetric?: CompMetric;
+  label: string;
+  sortKey: string;
+}
+
+function compColValue(
+  cell: { totalCost: number; totalMandays: number; components: Map<string, CompCell> } | undefined,
+  col: SvcCol,
+): number | null {
+  if (!cell) return null;
+  if (col.type === "metric") {
+    if (col.metric === "cost") return cell.totalCost;
+    if (col.metric === "mandays") return cell.totalMandays;
+    return safeAvg(cell.totalCost, cell.totalMandays);
+  }
+  const comp = cell.components.get(col.compKey!);
+  if (!comp) return null;
+  if (col.compMetric === "qty") return comp.qty;
+  if (col.compMetric === "cost") return comp.cost;
+  if (col.compMetric === "mandays") return comp.mandays;
+  return comp.kind === "sub" ? safeAvg(comp.cost, comp.mandays) : null;
+}
+
+function compColFormat(v: number | null, col: SvcCol): string {
+  if (v == null) return "—";
+  const metric = col.type === "metric" ? col.metric : col.compMetric;
+  if (metric === "qty") return formatNumber(v, 0);
+  if (metric === "mandays") return formatNumber(v, 2);
+  return formatCurrency(v);
+}
+
 export default function ProjectComparisonReport() {
   // Filters hydrate from URL on mount so the page is bookmarkable / shareable.
   const [from, setFrom] = useState<string>(
@@ -88,6 +136,7 @@ export default function ProjectComparisonReport() {
   const [metrics, setMetrics] = useState<Set<Metric>>(
     new Set(["cost", "mandays", "avg"]),
   );
+  const [fullBreakdown, setFullBreakdown] = useState(false);
 
   const { data: projects } = useListProjects({
     query: { queryKey: getListProjectsQueryKey() },
@@ -207,7 +256,42 @@ export default function ProjectComparisonReport() {
     );
   }, [agg]);
 
-  type Cell = { totalCost: number; totalMandays: number };
+  type Cell = {
+    totalCost: number;
+    totalMandays: number;
+    components: Map<string, CompCell>;
+  };
+
+  // Components merge by (kind, name) so the same meal type or sub-service
+  // name collapses into one column across projects.
+  function compKeyOf(kind: string, name: string) {
+    return `${kind}:${name.trim().toLowerCase()}`;
+  }
+
+  function mergeComp(
+    target: Map<string, CompCell>,
+    comp: {
+      name: string;
+      kind: "meal" | "sub";
+      qty?: number | null;
+      cost?: number | null;
+      mandays: number;
+    },
+  ) {
+    const key = compKeyOf(comp.kind, comp.name);
+    const prev = target.get(key) ?? {
+      key,
+      name: comp.name,
+      kind: comp.kind,
+      qty: 0,
+      cost: 0,
+      mandays: 0,
+    };
+    prev.qty += comp.qty ?? 0;
+    prev.cost += comp.cost ?? 0;
+    prev.mandays += comp.mandays;
+    target.set(key, prev);
+  }
 
   // Pivot: projectId -> serviceKey -> Cell
   const pivot = useMemo(() => {
@@ -220,9 +304,16 @@ export default function ProjectComparisonReport() {
         pmap = new Map();
         m.set(row.projectId, pmap);
       }
-      const prev = pmap.get(key) ?? { totalCost: 0, totalMandays: 0 };
+      const prev = pmap.get(key) ?? {
+        totalCost: 0,
+        totalMandays: 0,
+        components: new Map<string, CompCell>(),
+      };
       prev.totalCost += row.totalCost;
       prev.totalMandays += row.totalMandayContribution;
+      for (const comp of row.components ?? []) {
+        mergeComp(prev.components, comp);
+      }
       pmap.set(key, prev);
     }
     return m;
@@ -247,6 +338,22 @@ export default function ProjectComparisonReport() {
           if (metric === "cost") return cell.totalCost;
           if (metric === "mandays") return cell.totalMandays;
           return safeAvg(cell.totalCost, cell.totalMandays);
+        }
+        if (key.startsWith("cmp|")) {
+          // Service key is URI-encoded in the sort key because raw group
+          // keys contain "|" themselves.
+          const parts = key.split("|");
+          const serviceKey = decodeURIComponent(parts[1]);
+          const compMetric = parts[2] as CompMetric;
+          const compKey = parts.slice(3).join("|");
+          const cell = pivot.get(proj.projectId)?.get(serviceKey);
+          return compColValue(cell, {
+            type: "comp",
+            compKey,
+            compMetric,
+            label: "",
+            sortKey: key,
+          });
         }
         return null;
       }),
@@ -274,17 +381,69 @@ export default function ProjectComparisonReport() {
     for (const col of serviceColumns) {
       let cost = 0;
       let mandays = 0;
+      const components = new Map<string, CompCell>();
       for (const proj of projectRows) {
         const c = pivot.get(proj.projectId)?.get(col.key);
         if (c) {
           cost += c.totalCost;
           mandays += c.totalMandays;
+          for (const comp of c.components.values()) mergeComp(components, comp);
         }
       }
-      t.set(col.key, { totalCost: cost, totalMandays: mandays });
+      t.set(col.key, { totalCost: cost, totalMandays: mandays, components });
     }
     return t;
   }, [serviceColumns, projectRows, pivot]);
+
+  // Per-service column list: the service metrics plus — when "Full
+  // breakdown" is on — the component columns (union across projects, taken
+  // from the cross-project service totals).
+  const colsByService = useMemo(() => {
+    const map = new Map<string, SvcCol[]>();
+    for (const col of serviceColumns) {
+      const cols: SvcCol[] = visibleMetrics.map((m) => ({
+        type: "metric" as const,
+        metric: m,
+        label: METRIC_LABEL[m],
+        sortKey: `svc|${col.key}|${m}`,
+      }));
+      if (fullBreakdown) {
+        const comps = Array.from(
+          serviceTotals.get(col.key)?.components.values() ?? [],
+        ).sort(
+          (a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name),
+        );
+        for (const comp of comps) {
+          const push = (cm: CompMetric, label: string) =>
+            cols.push({
+              type: "comp",
+              compKey: comp.key,
+              compMetric: cm,
+              label,
+              sortKey: `cmp|${encodeURIComponent(col.key)}|${cm}|${comp.key}`,
+            });
+          if (comp.kind === "meal") {
+            push("qty", `${comp.name} · Qty`);
+            if (metrics.has("mandays"))
+              push("mandays", `${comp.name} · Mandays`);
+          } else {
+            if (metrics.has("cost")) push("cost", `${comp.name} · Cost`);
+            if (metrics.has("mandays"))
+              push("mandays", `${comp.name} · Mandays`);
+            if (metrics.has("avg")) push("avg", `${comp.name} · Avg`);
+          }
+        }
+      }
+      map.set(col.key, cols);
+    }
+    return map;
+  }, [serviceColumns, visibleMetrics, fullBreakdown, serviceTotals, metrics]);
+
+  const hasComponents = useMemo(
+    () =>
+      Array.from(serviceTotals.values()).some((t) => t.components.size > 0),
+    [serviceTotals],
+  );
 
   const grandTotalCost = useMemo(
     () => projectRows.reduce((sum, p) => sum + p.totalCost, 0),
@@ -303,7 +462,13 @@ export default function ProjectComparisonReport() {
     wb.created = new Date();
     const ws = wb.addWorksheet("Project comparison");
 
-    const totalCols = 2 + serviceColumns.length * visibleMetrics.length + 1;
+    const serviceColStarts: number[] = [];
+    let nextCol = 3;
+    serviceColumns.forEach((col) => {
+      serviceColStarts.push(nextCol);
+      nextCol += (colsByService.get(col.key) ?? []).length;
+    });
+    const totalCols = nextCol;
 
     // Title block
     ws.mergeCells(1, 1, 1, totalCols);
@@ -326,16 +491,17 @@ export default function ProjectComparisonReport() {
     ws.mergeCells(headerRow1Idx, 2, headerRow2Idx, 2);
 
     serviceColumns.forEach((col, i) => {
-      const startCol = 3 + i * visibleMetrics.length;
-      const endCol = startCol + visibleMetrics.length - 1;
-      if (visibleMetrics.length > 1) {
+      const cols = colsByService.get(col.key) ?? [];
+      const startCol = serviceColStarts[i];
+      const endCol = startCol + cols.length - 1;
+      if (cols.length > 1) {
         ws.mergeCells(headerRow1Idx, startCol, headerRow1Idx, endCol);
       }
       const groupCell = ws.getCell(headerRow1Idx, startCol);
       groupCell.value = col.label;
       groupCell.alignment = { horizontal: "center" };
-      visibleMetrics.forEach((m, j) => {
-        ws.getCell(headerRow2Idx, startCol + j).value = METRIC_LABEL[m];
+      cols.forEach((c2, j) => {
+        ws.getCell(headerRow2Idx, startCol + j).value = c2.label;
       });
     });
 
@@ -372,20 +538,16 @@ export default function ProjectComparisonReport() {
       ws.getCell(rowIdx, 1).value = proj.projectName;
       ws.getCell(rowIdx, 2).value = proj.location;
       serviceColumns.forEach((col, i) => {
-        const startCol = 3 + i * visibleMetrics.length;
+        const cols = colsByService.get(col.key) ?? [];
+        const startCol = serviceColStarts[i];
         const cell = pivot.get(proj.projectId)?.get(col.key);
-        visibleMetrics.forEach((m, j) => {
+        cols.forEach((c2, j) => {
           const c = ws.getCell(rowIdx, startCol + j);
-          if (!cell) {
-            c.value = null;
-          } else if (m === "cost") {
-            c.value = cell.totalCost;
-          } else if (m === "mandays") {
-            c.value = cell.totalMandays;
-          } else {
-            c.value = safeAvg(cell.totalCost, cell.totalMandays);
-          }
-          c.numFmt = "#,##0.00";
+          c.value = compColValue(cell, c2);
+          c.numFmt =
+            (c2.type === "comp" ? c2.compMetric : c2.metric) === "qty"
+              ? "#,##0"
+              : "#,##0.00";
         });
       });
       const totalCell = ws.getCell(rowIdx, totalColIdx);
@@ -400,20 +562,16 @@ export default function ProjectComparisonReport() {
     ws.getCell(totalsRow, 1).value = "Totals";
     ws.mergeCells(totalsRow, 1, totalsRow, 2);
     serviceColumns.forEach((col, i) => {
-      const startCol = 3 + i * visibleMetrics.length;
+      const cols = colsByService.get(col.key) ?? [];
+      const startCol = serviceColStarts[i];
       const t = serviceTotals.get(col.key);
-      visibleMetrics.forEach((m, j) => {
+      cols.forEach((c2, j) => {
         const c = ws.getCell(totalsRow, startCol + j);
-        if (!t) {
-          c.value = 0;
-        } else if (m === "cost") {
-          c.value = t.totalCost;
-        } else if (m === "mandays") {
-          c.value = t.totalMandays;
-        } else {
-          c.value = safeAvg(t.totalCost, t.totalMandays);
-        }
-        c.numFmt = "#,##0.00";
+        c.value = compColValue(t, c2);
+        c.numFmt =
+          (c2.type === "comp" ? c2.compMetric : c2.metric) === "qty"
+            ? "#,##0"
+            : "#,##0.00";
       });
     });
     const grand = ws.getCell(totalsRow, totalColIdx);
@@ -561,6 +719,15 @@ export default function ProjectComparisonReport() {
                   </PopoverContent>
                 </Popover>
                 <Button
+                  variant={fullBreakdown ? "default" : "outline"}
+                  onClick={() => setFullBreakdown((v) => !v)}
+                  disabled={!agg || !hasComponents}
+                  title="Expand food services into meal types and group services into sub-services"
+                  data-testid="cmp-breakdown"
+                >
+                  Full breakdown
+                </Button>
+                <Button
                   onClick={exportXlsx}
                   disabled={
                     !agg ||
@@ -645,7 +812,7 @@ export default function ProjectComparisonReport() {
                       {serviceColumns.map((col) => (
                         <TableHead
                           key={col.key}
-                          colSpan={visibleMetrics.length}
+                          colSpan={(colsByService.get(col.key) ?? []).length}
                           className="text-center border-l border-border whitespace-nowrap"
                           style={tintBgStyle(col.color, 0.18)}
                         >
@@ -671,19 +838,22 @@ export default function ProjectComparisonReport() {
                     </TableRow>
                     <TableRow>
                       {serviceColumns.map((col) =>
-                        visibleMetrics.map((m, idx) => (
+                        (colsByService.get(col.key) ?? []).map((c2, idx) => (
                           <SortableHead
-                            key={`${col.key}-${m}`}
-                            sortKey={`svc|${col.key}|${m}`}
+                            key={`${col.key}-${c2.sortKey}`}
+                            sortKey={c2.sortKey}
                             sort={sorter.sort}
                             onSort={sorter.toggleSort}
                             align="right"
                             className={
                               "text-right text-[11px] whitespace-nowrap " +
-                              (idx === 0 ? "border-l border-border" : "")
+                              (idx === 0 ? "border-l border-border " : "") +
+                              (c2.type === "comp"
+                                ? "text-muted-foreground font-normal"
+                                : "")
                             }
                           >
-                            {METRIC_LABEL[m]}
+                            {c2.label}
                           </SortableHead>
                         )),
                       )}
@@ -709,32 +879,26 @@ export default function ProjectComparisonReport() {
                         </TableCell>
                         {serviceColumns.map((col) => {
                           const cell = pivot.get(proj.projectId)?.get(col.key);
-                          return visibleMetrics.map((m, idx) => {
-                            const value = !cell
-                              ? "—"
-                              : m === "cost"
-                                ? formatCurrency(cell.totalCost)
-                                : m === "mandays"
-                                  ? formatNumber(cell.totalMandays, 2)
-                                  : cell.totalMandays > 0
-                                    ? formatCurrency(
-                                        cell.totalCost / cell.totalMandays,
-                                      )
-                                    : "—";
-                            return (
+                          return (colsByService.get(col.key) ?? []).map(
+                            (c2, idx) => (
                               <TableCell
-                                key={`${proj.projectId}-${col.key}-${m}`}
+                                key={`${proj.projectId}-${col.key}-${c2.sortKey}`}
                                 className={
                                   "text-right tabular-nums whitespace-nowrap " +
                                   (idx === 0 ? "border-l border-border " : "") +
-                                  (cell ? "" : "text-muted-foreground")
+                                  (c2.type === "comp" || !cell
+                                    ? "text-muted-foreground"
+                                    : "")
                                 }
-                                style={tintBgStyle(col.color, 0.06)}
+                                style={tintBgStyle(
+                                  col.color,
+                                  c2.type === "comp" ? 0.03 : 0.06,
+                                )}
                               >
-                                {value}
+                                {compColFormat(compColValue(cell, c2), c2)}
                               </TableCell>
-                            );
-                          });
+                            ),
+                          );
                         })}
                         <TableCell className="text-right tabular-nums font-semibold whitespace-nowrap border-l-2 border-border bg-muted/30">
                           {formatCurrency(proj.totalCost)}
@@ -752,29 +916,26 @@ export default function ProjectComparisonReport() {
                       </TableCell>
                       {serviceColumns.map((col) => {
                         const t = serviceTotals.get(col.key);
-                        return visibleMetrics.map((m, idx) => {
-                          const value = !t
-                            ? "—"
-                            : m === "cost"
-                              ? formatCurrency(t.totalCost)
-                              : m === "mandays"
-                                ? formatNumber(t.totalMandays, 2)
-                                : t.totalMandays > 0
-                                  ? formatCurrency(t.totalCost / t.totalMandays)
-                                  : "—";
-                          return (
+                        return (colsByService.get(col.key) ?? []).map(
+                          (c2, idx) => (
                             <TableCell
-                              key={`tot-${col.key}-${m}`}
+                              key={`tot-${col.key}-${c2.sortKey}`}
                               className={
-                                "text-right tabular-nums font-semibold whitespace-nowrap " +
-                                (idx === 0 ? "border-l border-border" : "")
+                                "text-right tabular-nums whitespace-nowrap " +
+                                (idx === 0 ? "border-l border-border " : "") +
+                                (c2.type === "comp"
+                                  ? "text-muted-foreground"
+                                  : "font-semibold")
                               }
-                              style={tintBgStyle(col.color, 0.12)}
+                              style={tintBgStyle(
+                                col.color,
+                                c2.type === "comp" ? 0.06 : 0.12,
+                              )}
                             >
-                              {value}
+                              {compColFormat(compColValue(t, c2), c2)}
                             </TableCell>
-                          );
-                        });
+                          ),
+                        );
                       })}
                       <TableCell className="text-right tabular-nums font-bold whitespace-nowrap border-l-2 border-border bg-muted/50">
                         {formatCurrency(grandTotalCost)}
@@ -789,9 +950,11 @@ export default function ProjectComparisonReport() {
                           Aggregate SAR / manday
                         </TableCell>
                         <TableCell
-                          colSpan={
-                            serviceColumns.length * visibleMetrics.length
-                          }
+                          colSpan={serviceColumns.reduce(
+                            (n, col) =>
+                              n + (colsByService.get(col.key) ?? []).length,
+                            0,
+                          )}
                           className="text-right text-xs text-muted-foreground"
                         >
                           {grandTotalMandays > 0

@@ -2156,6 +2156,9 @@ function SettingsPanel({ project }: { project: any }) {
     },
   });
   const [pdfRequired, setPdfRequired] = useState<boolean>(!!project.pdfRequired);
+  const [allowDuplicateDates, setAllowDuplicateDates] = useState<boolean>(
+    !!(project as any).allowDuplicateDates,
+  );
   const [projectDisabled, setProjectDisabled] = useState<boolean>(
     !!(project as any).disabled,
   );
@@ -2201,6 +2204,7 @@ function SettingsPanel({ project }: { project: any }) {
                 data: {
                   ...data,
                   pdfRequired,
+                  allowDuplicateDates,
                   disabled: projectDisabled,
                   backdatedDays:
                     backdatedDays.trim() === ""
@@ -2276,6 +2280,21 @@ function SettingsPanel({ project }: { project: any }) {
                 checked={pdfRequired}
                 onCheckedChange={setPdfRequired}
                 data-testid="switch-pdf-required"
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-muted/30 px-3 py-2">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Allow duplicate dates</Label>
+                <p className="text-xs text-muted-foreground">
+                  When on, several entries may share the same date on this
+                  project (e.g. different locations). When off, creating a
+                  second entry for a date is blocked for everyone.
+                </p>
+              </div>
+              <Switch
+                checked={allowDuplicateDates}
+                onCheckedChange={setAllowDuplicateDates}
+                data-testid="switch-allow-duplicate-dates"
               />
             </div>
             <div className="flex items-start justify-between gap-4 rounded-md border border-border bg-muted/30 px-3 py-2">

@@ -21,6 +21,7 @@ export interface UpdateProjectBody {
   notes?: string;
   pdfRequired?: boolean;
   disabled?: boolean;
+  allowDuplicateDates?: boolean;
   /**
    * @minimum 0
    * @nullable

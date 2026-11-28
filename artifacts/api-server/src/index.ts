@@ -1,6 +1,8 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedGlobalGroups } from "./lib/seedGlobalGroups";
+import { seedMisAdmins } from "./lib/mis/seedMisAdmins";
+import { initializeSystemAudit } from "./lib/systemAudit";
 
 const rawPort = process.env["PORT"];
 
@@ -16,6 +18,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+await initializeSystemAudit();
 app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
@@ -24,4 +27,5 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   void seedGlobalGroups();
+  void seedMisAdmins();
 });

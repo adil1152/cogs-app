@@ -50,6 +50,8 @@ async function buildAll() {
       "oracledb",
       "mongodb-client-encryption",
       "nodemailer",
+      // MIS PDFs load font assets and transitive helpers from their package.
+      "pdfkit",
       "handlebars",
       "knex",
       "typeorm",

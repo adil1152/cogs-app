@@ -48,3 +48,8 @@ Thumbs.db
 .cache/
 .local/
 openspec
+
+# Environment
+.env
+.env.*
+!.env.example
